@@ -80,6 +80,12 @@ class PaymentInitSerializer(serializers.Serializer):
         choices=Payment.PAYMENT_METHOD_CHOICES,
         help_text="Payment method to use"
     )
+    discount_code = serializers.CharField(
+        max_length=50,
+        required=False,
+        allow_blank=True,
+        help_text="Optional discount code to apply"
+    )
 
 
 class CreditCardPaymentCreateSerializer(serializers.Serializer):

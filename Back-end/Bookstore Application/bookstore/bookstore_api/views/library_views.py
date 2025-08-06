@@ -5,7 +5,7 @@ from django.shortcuts import get_object_or_404
 from django.core.exceptions import PermissionDenied
 import logging
 
-from ..models import Library, Book, BookImage, Category, Author
+from ..models import Library, Book, BookImage, Category, Author, BookEvaluation, Favorite
 from ..serializers import (
     LibraryCreateSerializer,
     LibraryUpdateSerializer,
@@ -34,10 +34,22 @@ from ..serializers import (
     AuthorStatsSerializer,
     AuthorChoiceSerializer,
     AuthorWithBooksSerializer,
+    # Evaluation serializers
+    EvaluationCreateSerializer,
+    EvaluationUpdateSerializer,
+    EvaluationDetailSerializer,
+    EvaluationListSerializer,
+    BookEvaluationsSerializer,
+    UserEvaluationSerializer,
+    # Favorites serializers
+    FavoriteAddSerializer,
+    FavoriteDetailSerializer,
+    FavoriteListSerializer,
+    BookIsFavoritedSerializer,
 )
-from ..services import LibraryManagementService, LibraryAccessService, BookManagementService, BookAccessService
+from ..services import LibraryManagementService, LibraryAccessService, BookManagementService, BookAccessService, EvaluationManagementService, EvaluationAccessService, FavoriteManagementService, FavoriteAccessService
 from ..utils import format_error_message
-from ..permissions import IsSystemAdmin
+from ..permissions import IsSystemAdmin, IsCustomer
 
 logger = logging.getLogger(__name__)
 
@@ -664,8 +676,35 @@ class BookListView(generics.ListAPIView):
                 'author_desc': '-author',
                 'price_asc': 'price',
                 'price_desc': '-price',
+                'rating_desc': 'rating_desc',  # Special handling below
+                'rating_asc': 'rating_asc',    # Special handling below
+                'most_reviewed': 'most_reviewed',  # Special handling below
             }
-            if ordering in valid_orderings:
+            
+            if ordering in ['rating_desc', 'rating_asc', 'most_reviewed']:
+                # Handle rating-based ordering
+                from django.db.models import Avg, Count, Case, When, FloatField
+                if ordering == 'rating_desc':
+                    queryset = queryset.annotate(
+                        avg_rating=Case(
+                            When(evaluations__isnull=False, then=Avg('evaluations__rating')),
+                            default=0.0,
+                            output_field=FloatField()
+                        )
+                    ).order_by('-avg_rating', 'name')
+                elif ordering == 'rating_asc':
+                    queryset = queryset.annotate(
+                        avg_rating=Case(
+                            When(evaluations__isnull=False, then=Avg('evaluations__rating')),
+                            default=0.0,
+                            output_field=FloatField()
+                        )
+                    ).order_by('avg_rating', 'name')
+                elif ordering == 'most_reviewed':
+                    queryset = queryset.annotate(
+                        review_count=Count('evaluations')
+                    ).order_by('-review_count', 'name')
+            elif ordering in valid_orderings:
                 queryset = queryset.order_by(valid_orderings[ordering])
             else:
                 queryset = queryset.order_by('-created_at')  # default newest first
@@ -1346,6 +1385,228 @@ class BooksByPriceRangeView(generics.ListAPIView):
             return Response({
                 'success': False,
                 'message': 'Failed to retrieve books by price range',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class BooksByRatingView(generics.ListAPIView):
+    """
+    Get books sorted by customer ratings/evaluations.
+    Available to all authenticated users.
+    Supports filtering by minimum rating and ordering by rating (high to low or low to high).
+    """
+    serializer_class = BookListSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        """Get books sorted by rating with optional filters."""
+        try:
+            # Get current library
+            library = Library.get_current_library()
+            if not library:
+                return Book.objects.none()
+            
+            # Start with available books in current library
+            queryset = Book.objects.filter(
+                library=library,
+                is_available=True
+            ).select_related(
+                'author', 'category', 'library'
+            ).prefetch_related('images', 'evaluations')
+            
+            # Filter by minimum rating if specified
+            min_rating = self.request.query_params.get('min_rating')
+            if min_rating:
+                try:
+                    min_rating = float(min_rating)
+                    if 1.0 <= min_rating <= 5.0:
+                        # Use Django's aggregation to filter by average rating
+                        from django.db.models import Avg
+                        queryset = queryset.annotate(
+                            avg_rating=Avg('evaluations__rating')
+                        ).filter(avg_rating__gte=min_rating)
+                except (ValueError, TypeError):
+                    pass  # Ignore invalid rating values
+            
+            # Apply ordering
+            ordering = self.request.query_params.get('ordering', 'rating_desc')
+            if ordering == 'rating_asc':
+                # Books with lowest ratings first, then no ratings
+                from django.db.models import Avg, Case, When, FloatField
+                queryset = queryset.annotate(
+                    avg_rating=Case(
+                        When(evaluations__isnull=False, then=Avg('evaluations__rating')),
+                        default=0.0,
+                        output_field=FloatField()
+                    )
+                ).order_by('avg_rating', 'name')
+            elif ordering == 'rating_desc':
+                # Books with highest ratings first, no ratings at the end
+                from django.db.models import Avg, Case, When, FloatField
+                queryset = queryset.annotate(
+                    avg_rating=Case(
+                        When(evaluations__isnull=False, then=Avg('evaluations__rating')),
+                        default=0.0,
+                        output_field=FloatField()
+                    )
+                ).order_by('-avg_rating', 'name')
+            elif ordering == 'most_reviewed':
+                # Books with most reviews first
+                from django.db.models import Count
+                queryset = queryset.annotate(
+                    review_count=Count('evaluations')
+                ).order_by('-review_count', 'name')
+            elif ordering == 'least_reviewed':
+                # Books with least reviews first
+                from django.db.models import Count
+                queryset = queryset.annotate(
+                    review_count=Count('evaluations')
+                ).order_by('review_count', 'name')
+            else:
+                # Default: highest rated first
+                from django.db.models import Avg, Case, When, FloatField
+                queryset = queryset.annotate(
+                    avg_rating=Case(
+                        When(evaluations__isnull=False, then=Avg('evaluations__rating')),
+                        default=0.0,
+                        output_field=FloatField()
+                    )
+                ).order_by('-avg_rating', 'name')
+            
+            return queryset
+            
+        except Exception as e:
+            logger.error(f"Error getting books by rating: {str(e)}")
+            return Book.objects.none()
+    
+    def list(self, request, *args, **kwargs):
+        """List books sorted by rating with additional context."""
+        try:
+            queryset = self.get_queryset()
+            
+            # Apply pagination
+            page = self.paginate_queryset(queryset)
+            if page is not None:
+                serializer = self.get_serializer(page, many=True)
+                result = self.get_paginated_response(serializer.data)
+                
+                # Add additional metadata
+                result.data['filters_applied'] = {
+                    'min_rating': request.query_params.get('min_rating'),
+                    'ordering': request.query_params.get('ordering', 'rating_desc')
+                }
+                
+                return result
+            
+            serializer = self.get_serializer(queryset, many=True)
+            return Response({
+                'success': True,
+                'books': serializer.data,
+                'count': queryset.count(),
+                'filters_applied': {
+                    'min_rating': request.query_params.get('min_rating'),
+                    'ordering': request.query_params.get('ordering', 'rating_desc')
+                }
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error listing books by rating: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to retrieve books sorted by rating',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class TopRatedBooksView(generics.ListAPIView):
+    """
+    Get top-rated books with minimum number of reviews.
+    Available to all authenticated users.
+    Only includes books with at least the specified minimum number of reviews.
+    """
+    serializer_class = BookListSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        """Get top-rated books with minimum review threshold."""
+        try:
+            # Get current library
+            library = Library.get_current_library()
+            if not library:
+                return Book.objects.none()
+            
+            # Get minimum review count (default: 1)
+            min_reviews = self.request.query_params.get('min_reviews', '1')
+            try:
+                min_reviews = int(min_reviews)
+                if min_reviews < 1:
+                    min_reviews = 1
+            except (ValueError, TypeError):
+                min_reviews = 1
+            
+            # Get minimum rating (default: 4.0)
+            min_rating = self.request.query_params.get('min_rating', '4.0')
+            try:
+                min_rating = float(min_rating)
+                if not (1.0 <= min_rating <= 5.0):
+                    min_rating = 4.0
+            except (ValueError, TypeError):
+                min_rating = 4.0
+            
+            # Get limit (default: 10, max: 50)
+            limit = self.request.query_params.get('limit', '10')
+            try:
+                limit = int(limit)
+                if limit < 1:
+                    limit = 10
+                elif limit > 50:
+                    limit = 50
+            except (ValueError, TypeError):
+                limit = 10
+            
+            # Query books with rating criteria
+            from django.db.models import Avg, Count, Case, When, FloatField
+            queryset = Book.objects.filter(
+                library=library,
+                is_available=True
+            ).select_related(
+                'author', 'category', 'library'
+            ).prefetch_related('images', 'evaluations').annotate(
+                avg_rating=Avg('evaluations__rating'),
+                review_count=Count('evaluations')
+            ).filter(
+                review_count__gte=min_reviews,
+                avg_rating__gte=min_rating
+            ).order_by('-avg_rating', '-review_count', 'name')[:limit]
+            
+            return queryset
+            
+        except Exception as e:
+            logger.error(f"Error getting top-rated books: {str(e)}")
+            return Book.objects.none()
+    
+    def list(self, request, *args, **kwargs):
+        """List top-rated books with criteria information."""
+        try:
+            queryset = self.get_queryset()
+            serializer = self.get_serializer(queryset, many=True)
+            
+            return Response({
+                'success': True,
+                'books': serializer.data,
+                'count': len(serializer.data),
+                'criteria': {
+                    'min_reviews': request.query_params.get('min_reviews', '1'),
+                    'min_rating': request.query_params.get('min_rating', '4.0'),
+                    'limit': request.query_params.get('limit', '10')
+                }
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error listing top-rated books: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to retrieve top-rated books',
                 'errors': format_error_message(str(e))
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -2042,4 +2303,666 @@ class AuthorChoicesView(generics.ListAPIView):
                 'success': False,
                 'message': 'Failed to retrieve author choices',
                 'errors': format_error_message(str(e))
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR) 
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# =====================================
+# EVALUATION MANAGEMENT VIEWS
+# =====================================
+
+class EvaluationCreateView(generics.CreateAPIView):
+    """
+    Create a new book evaluation.
+    Only customers can create evaluations.
+    """
+    serializer_class = EvaluationCreateSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def create(self, request, *args, **kwargs):
+        """Create a new evaluation."""
+        try:
+            # Check if user is a customer
+            if not request.user.is_customer():
+                return Response({
+                    'success': False,
+                    'message': 'Only customers can create evaluations',
+                    'error_code': 'PERMISSION_DENIED'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            evaluation = serializer.save()
+            
+            # Get detailed evaluation data
+            detail_serializer = EvaluationDetailSerializer(evaluation)
+            
+            logger.info(f"Evaluation created for book {evaluation.book.name} by {request.user.email}")
+            
+            return Response({
+                'success': True,
+                'message': 'Evaluation created successfully',
+                'data': detail_serializer.data
+            }, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            logger.error(f"Error creating evaluation: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to create evaluation',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class EvaluationListView(generics.ListAPIView):
+    """
+    List evaluations.
+    Library administrators can see all evaluations.
+    Customers can see all evaluations for books.
+    """
+    serializer_class = EvaluationListSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        """Get evaluations based on user permissions and filters."""
+        queryset = BookEvaluation.objects.select_related(
+            'book', 'user', 'book__author'
+        ).order_by('-created_at')
+        
+        # Filter by book if specified
+        book_id = self.request.query_params.get('book_id')
+        if book_id:
+            queryset = queryset.filter(book_id=book_id)
+        
+        # Library admins can see all evaluations
+        # Customers can see all evaluations (public viewing)
+        return queryset
+    
+    def list(self, request, *args, **kwargs):
+        """List evaluations with additional context."""
+        try:
+            queryset = self.get_queryset()
+            
+            # Apply pagination
+            page = self.paginate_queryset(queryset)
+            if page is not None:
+                serializer = self.get_serializer(page, many=True)
+                paginated_response = self.get_paginated_response(serializer.data)
+                
+                # Add success wrapper to paginated response
+                paginated_response.data = {
+                    'success': True,
+                    'message': 'Evaluations retrieved successfully',
+                    'pagination': paginated_response.data
+                }
+                return paginated_response
+            
+            serializer = self.get_serializer(queryset, many=True)
+            
+            return Response({
+                'success': True,
+                'message': 'Evaluations retrieved successfully',
+                'data': serializer.data,
+                'count': queryset.count()
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error retrieving evaluations: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to retrieve evaluations',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class EvaluationDetailView(generics.RetrieveAPIView):
+    """
+    Retrieve detailed information about a specific evaluation.
+    Available to all authenticated users.
+    """
+    serializer_class = EvaluationDetailSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_object(self):
+        """Get evaluation by ID."""
+        evaluation_id = self.kwargs.get('pk')
+        evaluation = get_object_or_404(BookEvaluation, pk=evaluation_id)
+        return evaluation
+    
+    def retrieve(self, request, *args, **kwargs):
+        """Retrieve evaluation details."""
+        try:
+            evaluation = self.get_object()
+            serializer = self.get_serializer(evaluation)
+            
+            return Response({
+                'success': True,
+                'message': 'Evaluation details retrieved successfully',
+                'data': serializer.data,
+                'permissions': {
+                    'can_edit': evaluation.user == request.user or request.user.is_library_admin(),
+                    'can_delete': evaluation.user == request.user or request.user.is_library_admin()
+                }
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error retrieving evaluation detail: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to retrieve evaluation details',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class EvaluationUpdateView(generics.UpdateAPIView):
+    """
+    Update evaluation information.
+    Only customers can update their own evaluations.
+    """
+    serializer_class = EvaluationUpdateSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_object(self):
+        """Get evaluation by ID with permission checking."""
+        evaluation_id = self.kwargs.get('pk')
+        evaluation = get_object_or_404(BookEvaluation, pk=evaluation_id)
+        
+        # Check permissions - only the review owner can update
+        if evaluation.user != self.request.user:
+            raise PermissionDenied("You can only update your own evaluations")
+        
+        return evaluation
+    
+    def update(self, request, *args, **kwargs):
+        """Update evaluation."""
+        try:
+            partial = kwargs.pop('partial', False)
+            instance = self.get_object()
+            serializer = self.get_serializer(instance, data=request.data, partial=partial)
+            serializer.is_valid(raise_exception=True)
+            evaluation = serializer.save()
+            
+            # Get detailed evaluation data
+            detail_serializer = EvaluationDetailSerializer(evaluation)
+            
+            logger.info(f"Evaluation {evaluation.id} updated by {request.user.email}")
+            
+            return Response({
+                'success': True,
+                'message': 'Evaluation updated successfully',
+                'data': detail_serializer.data
+            }, status=status.HTTP_200_OK)
+            
+        except PermissionDenied as e:
+            return Response({
+                'success': False,
+                'message': str(e),
+                'error_code': 'PERMISSION_DENIED'
+            }, status=status.HTTP_403_FORBIDDEN)
+        except Exception as e:
+            logger.error(f"Error updating evaluation: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to update evaluation',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class EvaluationDeleteView(generics.DestroyAPIView):
+    """
+    Delete an evaluation.
+    Only customers can delete their own evaluations.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_object(self):
+        """Get evaluation by ID with permission checking."""
+        evaluation_id = self.kwargs.get('pk')
+        evaluation = get_object_or_404(BookEvaluation, pk=evaluation_id)
+        
+        # Check permissions - only the review owner can delete
+        if evaluation.user != self.request.user:
+            raise PermissionDenied("You can only delete your own evaluations")
+        
+        return evaluation
+    
+    def delete(self, request, *args, **kwargs):
+        """Delete evaluation."""
+        try:
+            evaluation = self.get_object()
+            book_name = evaluation.book.name
+            evaluation_id = evaluation.id
+            
+            # Use service to delete
+            result = EvaluationManagementService.delete_evaluation(request.user, evaluation_id)
+            
+            if result.get('success', False):
+                logger.info(f"Evaluation {evaluation_id} for book '{book_name}' deleted by {request.user.email}")
+                return Response({
+                    'success': True,
+                    'message': result.get('message', 'Evaluation deleted successfully')
+                }, status=status.HTTP_200_OK)
+            else:
+                return Response({
+                    'success': False,
+                    'message': result.get('message', 'Failed to delete evaluation'),
+                    'error_code': result.get('error_code', 'DELETION_ERROR')
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+        except PermissionDenied as e:
+            return Response({
+                'success': False,
+                'message': str(e),
+                'error_code': 'PERMISSION_DENIED'
+            }, status=status.HTTP_403_FORBIDDEN)
+        except Exception as e:
+            logger.error(f"Error deleting evaluation: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to delete evaluation',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class BookEvaluationsView(generics.ListAPIView):
+    """
+    Get all evaluations for a specific book.
+    Available to all authenticated users.
+    """
+    serializer_class = EvaluationListSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        """Get evaluations for the specified book."""
+        book_id = self.kwargs.get('book_id')
+        return BookEvaluation.objects.filter(
+            book_id=book_id
+        ).select_related('user', 'book', 'book__author').order_by('-created_at')
+    
+    def list(self, request, *args, **kwargs):
+        """List book evaluations with statistics."""
+        try:
+            book_id = self.kwargs.get('book_id')
+            
+            # Use service to get book evaluations with statistics
+            result = EvaluationAccessService.get_book_evaluations(book_id)
+            
+            if result.get('success', False):
+                # Serialize the evaluations
+                evaluations = result['evaluations']
+                serializer = self.get_serializer(evaluations, many=True)
+                
+                return Response({
+                    'success': True,
+                    'message': 'Book evaluations retrieved successfully',
+                    'data': {
+                        'book': result['book'],
+                        'evaluations': serializer.data,
+                        'count': result['count'],
+                        'average_rating': result['average_rating'],
+                        'statistics': result['statistics']
+                    }
+                }, status=status.HTTP_200_OK)
+            else:
+                return Response({
+                    'success': False,
+                    'message': result.get('message', 'Failed to retrieve book evaluations'),
+                    'error_code': result.get('error_code', 'RETRIEVAL_ERROR')
+                }, status=status.HTTP_404_NOT_FOUND if result.get('error_code') == 'BOOK_NOT_FOUND' else status.HTTP_500_INTERNAL_SERVER_ERROR)
+                
+        except Exception as e:
+            logger.error(f"Error retrieving book evaluations: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to retrieve book evaluations',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class UserEvaluationsView(generics.ListAPIView):
+    """
+    Get all evaluations created by the current user.
+    Available to authenticated users for their own evaluations.
+    """
+    serializer_class = UserEvaluationSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        """Get evaluations for the current user."""
+        return BookEvaluation.objects.filter(
+            user=self.request.user
+        ).select_related('book', 'book__author').order_by('-created_at')
+    
+    def list(self, request, *args, **kwargs):
+        """List user's evaluations."""
+        try:
+            queryset = self.get_queryset()
+            
+            # Apply pagination
+            page = self.paginate_queryset(queryset)
+            if page is not None:
+                serializer = self.get_serializer(page, many=True)
+                paginated_response = self.get_paginated_response(serializer.data)
+                
+                # Add success wrapper to paginated response
+                paginated_response.data = {
+                    'success': True,
+                    'message': 'User evaluations retrieved successfully',
+                    'pagination': paginated_response.data
+                }
+                return paginated_response
+            
+            serializer = self.get_serializer(queryset, many=True)
+            
+            return Response({
+                'success': True,
+                'message': 'User evaluations retrieved successfully',
+                'data': serializer.data,
+                'count': queryset.count()
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error retrieving user evaluations: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to retrieve user evaluations',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class EvaluationManagementView(APIView):
+    """
+    Evaluation management dashboard for library administrators.
+    Provides comprehensive evaluation management operations and statistics.
+    """
+    permission_classes = [permissions.IsAuthenticated, IsSystemAdmin]
+    
+    def get(self, request):
+        """Get evaluation management dashboard data."""
+        try:
+            # Use service to get all evaluations
+            result = EvaluationManagementService.get_all_evaluations(request.user)
+            
+            if result.get('success', False):
+                evaluations = result['evaluations']
+                
+                # Serialize evaluations
+                serializer = EvaluationListSerializer(evaluations, many=True)
+                
+                # Calculate additional statistics
+                total_evaluations = result['count']
+                if total_evaluations > 0:
+                    # Rating distribution
+                    rating_dist = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
+                    total_rating = 0
+                    for evaluation in evaluations:
+                        rating_dist[evaluation.rating] += 1
+                        total_rating += evaluation.rating
+                    
+                    average_rating = round(total_rating / total_evaluations, 2)
+                else:
+                    rating_dist = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
+                    average_rating = 0
+                
+                return Response({
+                    'success': True,
+                    'message': 'Evaluation management data retrieved successfully',
+                    'data': {
+                        'evaluations': serializer.data,
+                        'statistics': {
+                            'total_evaluations': total_evaluations,
+                            'average_rating': average_rating,
+                            'rating_distribution': rating_dist
+                        }
+                    }
+                }, status=status.HTTP_200_OK)
+            else:
+                return Response({
+                    'success': False,
+                    'message': result.get('message', 'Failed to retrieve evaluations'),
+                    'error_code': result.get('error_code', 'RETRIEVAL_ERROR')
+                }, status=status.HTTP_403_FORBIDDEN if result.get('error_code') == 'PERMISSION_DENIED' else status.HTTP_500_INTERNAL_SERVER_ERROR)
+                
+        except Exception as e:
+            logger.error(f"Error retrieving evaluation management data: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to retrieve evaluation management data',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# =====================================
+# FAVORITES VIEWS
+# =====================================
+
+class FavoriteAddView(generics.CreateAPIView):
+    """
+    Add a book to favorites.
+    Only customers can add books to their favorites.
+    """
+    serializer_class = FavoriteAddSerializer
+    permission_classes = [permissions.IsAuthenticated, IsCustomer]
+    
+    def create(self, request, *args, **kwargs):
+        """Add a book to user's favorites."""
+        try:
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            
+            # Use service to add to favorites
+            result = FavoriteManagementService.add_to_favorites(
+                user=request.user,
+                book_id=serializer.validated_data['book_id']
+            )
+            
+            if result['success']:
+                # Serialize the created favorite
+                favorite_serializer = FavoriteDetailSerializer(
+                    result['favorite'], 
+                    context={'request': request}
+                )
+                
+                return Response({
+                    'success': True,
+                    'message': result['message'],
+                    'data': favorite_serializer.data
+                }, status=status.HTTP_201_CREATED)
+            else:
+                return Response({
+                    'success': False,
+                    'message': result['message'],
+                    'error_code': result.get('error_code')
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+        except Exception as e:
+            logger.error(f"Error adding book to favorites: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to add book to favorites',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class FavoriteListView(generics.ListAPIView):
+    """
+    List all favorites for the authenticated customer.
+    Shows the customer's favorite books with pagination and filtering.
+    """
+    serializer_class = FavoriteListSerializer
+    permission_classes = [permissions.IsAuthenticated, IsCustomer]
+    
+    def get_queryset(self):
+        """Get favorites for the current user."""
+        return Favorite.objects.filter(user=self.request.user).select_related(
+            'book', 'book__author', 'book__category'
+        ).prefetch_related('book__images').order_by('-created_at')
+    
+    def list(self, request, *args, **kwargs):
+        """List user's favorites."""
+        try:
+            # Get favorites using service
+            result = FavoriteManagementService.get_user_favorites(request.user)
+            
+            if result['success']:
+                # Paginate and serialize
+                queryset = self.get_queryset()
+                page = self.paginate_queryset(queryset)
+                
+                if page is not None:
+                    serializer = self.get_serializer(page, many=True)
+                    return self.get_paginated_response(serializer.data)
+                
+                serializer = self.get_serializer(queryset, many=True)
+                
+                response_data = {
+                    'success': True,
+                    'message': 'Favorites retrieved successfully',
+                    'data': serializer.data,
+                    'count': result['count']
+                }
+                
+                return Response(response_data, status=status.HTTP_200_OK)
+            else:
+                return Response({
+                    'success': False,
+                    'message': result['message'],
+                    'error_code': result.get('error_code')
+                }, status=status.HTTP_403_FORBIDDEN if result.get('error_code') == 'PERMISSION_DENIED' else status.HTTP_500_INTERNAL_SERVER_ERROR)
+                
+        except Exception as e:
+            logger.error(f"Error retrieving favorites: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to retrieve favorites',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class FavoriteDetailView(generics.RetrieveAPIView):
+    """
+    Retrieve detailed information about a specific favorite.
+    Only customers can view their own favorites.
+    """
+    serializer_class = FavoriteDetailSerializer
+    permission_classes = [permissions.IsAuthenticated, IsCustomer]
+    
+    def get_object(self):
+        """Get favorite ensuring user ownership."""
+        favorite_id = self.kwargs['pk']
+        try:
+            return Favorite.objects.select_related(
+                'book', 'book__author', 'book__category', 'book__library'
+            ).prefetch_related('book__images').get(id=favorite_id, user=self.request.user)
+        except Favorite.DoesNotExist:
+            raise get_object_or_404(Favorite, id=favorite_id)
+    
+    def retrieve(self, request, *args, **kwargs):
+        """Retrieve favorite details."""
+        try:
+            favorite_id = kwargs['pk']
+            result = FavoriteAccessService.get_favorite_detail(request.user, favorite_id)
+            
+            if result['success']:
+                serializer = self.get_serializer(result['favorite'])
+                return Response({
+                    'success': True,
+                    'message': 'Favorite details retrieved successfully',
+                    'data': serializer.data
+                }, status=status.HTTP_200_OK)
+            else:
+                return Response({
+                    'success': False,
+                    'message': result['message'],
+                    'error_code': result.get('error_code')
+                }, status=status.HTTP_404_NOT_FOUND if result.get('error_code') == 'FAVORITE_NOT_FOUND' else status.HTTP_403_FORBIDDEN)
+                
+        except Exception as e:
+            logger.error(f"Error retrieving favorite detail: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to retrieve favorite details',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class FavoriteDeleteView(generics.DestroyAPIView):
+    """
+    Remove a book from favorites.
+    Only customers can remove their own favorites.
+    """
+    permission_classes = [permissions.IsAuthenticated, IsCustomer]
+    
+    def get_object(self):
+        """Get favorite ensuring user ownership."""
+        favorite_id = self.kwargs['pk']
+        try:
+            return Favorite.objects.get(id=favorite_id, user=self.request.user)
+        except Favorite.DoesNotExist:
+            raise get_object_or_404(Favorite, id=favorite_id)
+    
+    def delete(self, request, *args, **kwargs):
+        """Remove favorite."""
+        try:
+            favorite_id = kwargs['pk']
+            result = FavoriteManagementService.remove_from_favorites(request.user, favorite_id)
+            
+            if result['success']:
+                return Response({
+                    'success': True,
+                    'message': result['message']
+                }, status=status.HTTP_200_OK)
+            else:
+                return Response({
+                    'success': False,
+                    'message': result['message'],
+                    'error_code': result.get('error_code')
+                }, status=status.HTTP_404_NOT_FOUND if result.get('error_code') == 'FAVORITE_NOT_FOUND' else status.HTTP_403_FORBIDDEN)
+                
+        except Exception as e:
+            logger.error(f"Error removing favorite: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to remove favorite',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+class BookFavoriteStatusView(APIView):
+    """
+    Check if a book is favorited by the current user.
+    Available to all authenticated users.
+    Used to determine heart icon state in frontend.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request, book_id):
+        """Get favorite status for a specific book."""
+        try:
+            result = FavoriteAccessService.is_book_favorited(request.user, book_id)
+            
+            if result['success']:
+                serializer = BookIsFavoritedSerializer(data=result)
+                serializer.is_valid()
+                
+                return Response({
+                    'success': True,
+                    'message': 'Favorite status retrieved successfully',
+                    'data': serializer.data
+                }, status=status.HTTP_200_OK)
+            else:
+                return Response({
+                    'success': False,
+                    'message': result['message'],
+                    'error_code': result.get('error_code')
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+        except Exception as e:
+            logger.error(f"Error getting favorite status: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to get favorite status',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+

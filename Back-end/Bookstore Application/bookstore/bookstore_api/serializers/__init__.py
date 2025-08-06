@@ -41,7 +41,21 @@ from .library_serializers import (
     AuthorStatsSerializer,
     AuthorChoiceSerializer,
     AuthorWithBooksSerializer,
+    # Evaluation serializers
+    EvaluationCreateSerializer,
+    EvaluationUpdateSerializer,
+    EvaluationDetailSerializer,
+    EvaluationListSerializer,
+    BookEvaluationsSerializer,
+    UserEvaluationSerializer,
+    # Favorites serializers
+    FavoriteAddSerializer,
+    FavoriteDetailSerializer,
+    FavoriteListSerializer,
+    BookIsFavoritedSerializer,
 )
+
+
 
 from .cart_serializers import (
     CartSerializer, CartItemSerializer,
@@ -56,6 +70,42 @@ from .payment_serializers import (
     PaymentInitSerializer,
     CreditCardPaymentCreateSerializer,
     CashOnDeliveryPaymentCreateSerializer,
+)
+
+from .notification_serializers import (
+    NotificationSerializer,
+    NotificationCreateSerializer,
+    NotificationUpdateSerializer,
+)
+
+from .borrowing_serializers import (
+    BorrowRequestCreateSerializer,
+    BorrowRequestListSerializer,
+    BorrowRequestDetailSerializer,
+    BorrowApprovalSerializer,
+    BorrowExtensionCreateSerializer,
+    BorrowExtensionSerializer,
+    BorrowFineSerializer,
+    BorrowRatingSerializer,
+    EarlyReturnSerializer,
+    DeliveryUpdateSerializer,
+    BorrowStatisticsSerializer,
+    MostBorrowedBookSerializer,
+    BorrowingReportSerializer,
+    PendingRequestsSerializer,
+    DeliveryReadySerializer,
+)
+
+from .discount_serializers import (
+    DiscountCodeSerializer,
+    DiscountCodeCreateSerializer,
+    DiscountCodeUpdateSerializer,
+    DiscountCodeListSerializer,
+    DiscountCodeValidationSerializer,
+    DiscountApplicationSerializer,
+    DiscountUsageSerializer,
+    DiscountUsageCreateSerializer,
+    CustomerDiscountUsageSerializer,
 )
 
 __all__ = [
@@ -99,6 +149,7 @@ __all__ = [
     'AuthorStatsSerializer',
     'AuthorChoiceSerializer',
     'AuthorWithBooksSerializer',
+
     # Cart serializers
     'CartSerializer',
     'CartItemSerializer',
@@ -122,5 +173,47 @@ __all__ = [
     'OrderStatusUpdateSerializer', 'OrderCreateFromPaymentSerializer',
     'DeliveryAssignmentBasicSerializer', 'DeliveryAssignmentDetailSerializer',
     'DeliveryAssignmentCreateSerializer', 'DeliveryAssignmentStatusUpdateSerializer',
-    'DeliveryStatusHistorySerializer', 'DeliveryManagerStatsSerializer'
+    'DeliveryStatusHistorySerializer', 'DeliveryManagerStatsSerializer',
+    # Notification serializers
+    'NotificationSerializer',
+    'NotificationCreateSerializer',
+    'NotificationUpdateSerializer',
+    # Evaluation serializers
+    'EvaluationCreateSerializer',
+    'EvaluationUpdateSerializer',
+    'EvaluationDetailSerializer',
+    'EvaluationListSerializer',
+    'BookEvaluationsSerializer',
+    'UserEvaluationSerializer',
+    # Favorites serializers
+    'FavoriteAddSerializer',
+    'FavoriteDetailSerializer',
+    'FavoriteListSerializer',
+    'BookIsFavoritedSerializer',
+    # Borrowing serializers
+    'BorrowRequestCreateSerializer',
+    'BorrowRequestListSerializer',
+    'BorrowRequestDetailSerializer',
+    'BorrowApprovalSerializer',
+    'BorrowExtensionCreateSerializer',
+    'BorrowExtensionSerializer',
+    'BorrowFineSerializer',
+    'BorrowRatingSerializer',
+    'EarlyReturnSerializer',
+    'DeliveryUpdateSerializer',
+    'BorrowStatisticsSerializer',
+    'MostBorrowedBookSerializer',
+    'BorrowingReportSerializer',
+    'PendingRequestsSerializer',
+    'DeliveryReadySerializer',
+    # Discount serializers
+    'DiscountCodeSerializer',
+    'DiscountCodeCreateSerializer',
+    'DiscountCodeUpdateSerializer',
+    'DiscountCodeListSerializer',
+    'DiscountCodeValidationSerializer',
+    'DiscountApplicationSerializer',
+    'DiscountUsageSerializer',
+    'DiscountUsageCreateSerializer',
+    'CustomerDiscountUsageSerializer',
 ] 

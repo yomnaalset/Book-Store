@@ -5,7 +5,11 @@ from typing import Dict, Any, List, Optional
 import logging
 from datetime import datetime, timedelta
 
-from ..models import Order, OrderItem, DeliveryAssignment, DeliveryStatusHistory, User, Payment, Cart, CartItem, Book
+from ..models import (
+    Order, OrderItem, DeliveryAssignment, DeliveryStatusHistory, 
+    User, Payment, Cart, CartItem, Book, BorrowRequest
+)
+
 
 logger = logging.getLogger(__name__)
 
@@ -189,52 +193,6 @@ class OrderService:
                 'error_code': 'UPDATE_ORDER_STATUS_ERROR'
             }
     
-    @staticmethod
-    def get_order_statistics() -> Dict[str, Any]:
-        """
-        Get order statistics for dashboard.
-        """
-        try:
-            total_orders = Order.objects.count()
-            pending_orders = Order.objects.filter(status='pending').count()
-            confirmed_orders = Order.objects.filter(status='confirmed').count()
-            delivered_orders = Order.objects.filter(status='delivered').count()
-            
-            # Today's orders
-            today = timezone.now().date()
-            today_orders = Order.objects.filter(created_at__date=today).count()
-            
-            # Revenue stats
-            total_revenue = Order.objects.filter(status='delivered').aggregate(
-                total=models.Sum('total_amount')
-            )['total'] or 0
-            
-            today_revenue = Order.objects.filter(
-                created_at__date=today,
-                status='delivered'
-            ).aggregate(total=models.Sum('total_amount'))['total'] or 0
-            
-            return {
-                'success': True,
-                'statistics': {
-                    'total_orders': total_orders,
-                    'pending_orders': pending_orders,
-                    'confirmed_orders': confirmed_orders,
-                    'delivered_orders': delivered_orders,
-                    'today_orders': today_orders,
-                    'total_revenue': float(total_revenue),
-                    'today_revenue': float(today_revenue)
-                }
-            }
-            
-        except Exception as e:
-            logger.error(f"Error getting order statistics: {str(e)}")
-            return {
-                'success': False,
-                'message': f"Failed to get order statistics: {str(e)}",
-                'error_code': 'GET_ORDER_STATS_ERROR'
-            }
-
 
 class DeliveryService:
     """
@@ -279,12 +237,21 @@ class DeliveryService:
                     'error_code': 'INACTIVE_DELIVERY_MANAGER'
                 }
             
+            # Get delivery manager's phone number from profile
+            contact_phone = None
+            try:
+                if hasattr(delivery_manager, 'profile') and delivery_manager.profile.phone_number:
+                    contact_phone = delivery_manager.profile.phone_number
+            except Exception as e:
+                logger.error(f"Failed to get delivery manager's phone number: {str(e)}")
+            
             # Create delivery assignment
             assignment = DeliveryAssignment.objects.create(
                 order=order,
                 delivery_manager=delivery_manager,
                 estimated_delivery_time=estimated_delivery_time,
-                delivery_notes=notes or ''
+                delivery_notes=notes or '',
+                contact_phone=contact_phone
             )
             
             # Update order status
@@ -480,54 +447,17 @@ class DeliveryService:
                     'error_code': 'INVALID_DELIVERY_MANAGER'
                 }
             
-            # Date range
-            end_date = timezone.now()
-            start_date = end_date - timedelta(days=days)
-            
-            # Get assignments in date range
-            assignments = DeliveryAssignment.objects.filter(
-                delivery_manager=delivery_manager,
-                assigned_at__gte=start_date
-            )
-            
-            total_assignments = assignments.count()
-            completed_deliveries = assignments.filter(status='delivered').count()
-            failed_deliveries = assignments.filter(status='failed').count()
-            pending_assignments = assignments.filter(
-                status__in=['assigned', 'accepted', 'picked_up', 'in_transit']
-            ).count()
-            
-            # Calculate success rate
-            success_rate = 0
-            if total_assignments > 0:
-                success_rate = (completed_deliveries / total_assignments) * 100
-            
-            # Calculate average delivery time
-            completed_assignments = assignments.filter(
-                status='delivered',
-                picked_up_at__isnull=False,
-                delivered_at__isnull=False
-            )
-            
-            average_delivery_time = 0
-            if completed_assignments.exists():
-                delivery_times = []
-                for assignment in completed_assignments:
-                    duration = assignment.delivered_at - assignment.picked_up_at
-                    delivery_times.append(duration.total_seconds() / 60)  # Convert to minutes
-                
-                if delivery_times:
-                    average_delivery_time = sum(delivery_times) / len(delivery_times)
-            
+            # Stats functionality removed
             return {
                 'success': True,
                 'statistics': {
-                    'total_assignments': total_assignments,
-                    'completed_deliveries': completed_deliveries,
-                    'pending_assignments': pending_assignments,
-                    'failed_deliveries': failed_deliveries,
-                    'success_rate': round(success_rate, 2),
-                    'average_delivery_time': round(average_delivery_time, 2),  # in minutes
+                    'message': 'Delivery manager statistics functionality has been removed',
+                    'total_assignments': 0,
+                    'completed_deliveries': 0,
+                    'pending_assignments': 0,
+                    'failed_deliveries': 0,
+                    'success_rate': 0,
+                    'average_delivery_time': 0,
                     'period_days': days
                 }
             }
@@ -546,41 +476,19 @@ class DeliveryService:
         Get delivery dashboard statistics.
         """
         try:
-            # Assignment counts by status
-            total_assignments = DeliveryAssignment.objects.count()
-            assigned_count = DeliveryAssignment.objects.filter(status='assigned').count()
-            in_progress_count = DeliveryAssignment.objects.filter(
-                status__in=['accepted', 'picked_up', 'in_transit']
-            ).count()
-            delivered_count = DeliveryAssignment.objects.filter(status='delivered').count()
-            failed_count = DeliveryAssignment.objects.filter(status='failed').count()
-            
-            # Today's deliveries
-            today = timezone.now().date()
-            today_deliveries = DeliveryAssignment.objects.filter(
-                delivered_at__date=today
-            ).count()
-            
-            # Orders ready for delivery
-            orders_ready = Order.objects.filter(status='ready_for_delivery').count()
-            
-            # Active delivery managers
-            active_managers = User.objects.filter(
-                user_type='delivery_admin',
-                is_active=True
-            ).count()
-            
+            # Stats functionality removed
             return {
                 'success': True,
                 'statistics': {
-                    'total_assignments': total_assignments,
-                    'assigned_count': assigned_count,
-                    'in_progress_count': in_progress_count,
-                    'delivered_count': delivered_count,
-                    'failed_count': failed_count,
-                    'today_deliveries': today_deliveries,
-                    'orders_ready': orders_ready,
-                    'active_managers': active_managers
+                    'message': 'Delivery dashboard statistics functionality has been removed',
+                    'total_assignments': 0,
+                    'assigned_count': 0,
+                    'in_progress_count': 0,
+                    'delivered_count': 0,
+                    'failed_count': 0,
+                    'today_deliveries': 0,
+                    'orders_ready': 0,
+                    'active_managers': 0
                 }
             }
             
@@ -590,4 +498,216 @@ class DeliveryService:
                 'success': False,
                 'message': f"Failed to get delivery dashboard stats: {str(e)}",
                 'error_code': 'GET_DELIVERY_DASHBOARD_STATS_ERROR'
-            } 
+            }
+
+
+class BorrowingDeliveryService:
+    """
+    Service for managing borrowing-related deliveries and returns
+    """
+    
+    @staticmethod
+    @transaction.atomic
+    def create_borrowing_delivery_order(borrow_request: BorrowRequest, payment: Payment) -> Dict[str, Any]:
+        """
+        Create a delivery order for a borrowing request
+        """
+        try:
+            # Generate order number
+            order_number = f"BR{borrow_request.id:06d}"
+            
+            # Create delivery order
+            order = Order.objects.create(
+                order_number=order_number,
+                customer=borrow_request.customer,
+                payment=payment,
+                total_amount=payment.amount,
+                order_type='borrowing',
+                borrow_request=borrow_request,
+                delivery_address=borrow_request.customer.profile.address if hasattr(borrow_request.customer, 'profile') else '',
+                contact_phone=borrow_request.customer.profile.phone_number if hasattr(borrow_request.customer, 'profile') else ''
+            )
+            
+            # Create order item for the borrowed book
+            OrderItem.objects.create(
+                order=order,
+                book=borrow_request.book,
+                quantity=1,
+                price=borrow_request.book.borrow_price,
+                total_price=borrow_request.book.borrow_price
+            )
+            
+            return {
+                'success': True,
+                'message': 'Borrowing delivery order created successfully',
+                'order': order
+            }
+            
+        except Exception as e:
+            logger.error(f"Error creating borrowing delivery order: {str(e)}")
+            return {
+                'success': False,
+                'message': f"Failed to create borrowing delivery order: {str(e)}",
+                'error_code': 'CREATE_BORROWING_ORDER_ERROR'
+            }
+    
+    @staticmethod
+    @transaction.atomic
+    def create_return_collection_order(borrow_request: BorrowRequest) -> Dict[str, Any]:
+        """
+        Create a collection order for book return
+        """
+        try:
+            # Generate order number
+            order_number = f"RC{borrow_request.id:06d}"
+            
+            # Create collection order
+            order = Order.objects.create(
+                order_number=order_number,
+                customer=borrow_request.customer,
+                payment=None,  # No payment for collection
+                total_amount=0.00,
+                order_type='return_collection',
+                borrow_request=borrow_request,
+                is_return_collection=True,
+                delivery_address=borrow_request.customer.profile.address if hasattr(borrow_request.customer, 'profile') else '',
+                contact_phone=borrow_request.customer.profile.phone_number if hasattr(borrow_request.customer, 'profile') else ''
+            )
+            
+            # Create order item for the book to be collected
+            OrderItem.objects.create(
+                order=order,
+                book=borrow_request.book,
+                quantity=1,
+                price=0.00,
+                total_price=0.00
+            )
+            
+            return {
+                'success': True,
+                'message': 'Return collection order created successfully',
+                'order': order
+            }
+            
+        except Exception as e:
+            logger.error(f"Error creating return collection order: {str(e)}")
+            return {
+                'success': False,
+                'message': f"Failed to create return collection order: {str(e)}",
+                'error_code': 'CREATE_COLLECTION_ORDER_ERROR'
+            }
+    
+    @staticmethod
+    def get_borrowing_deliveries(delivery_manager: User = None) -> Dict[str, Any]:
+        """
+        Get pending borrowing deliveries
+        """
+        try:
+            queryset = Order.objects.filter(
+                order_type='borrowing',
+                status='pending'
+            ).select_related('customer', 'borrow_request', 'borrow_request__book')
+            
+            if delivery_manager:
+                # Filter by assigned delivery manager
+                queryset = queryset.filter(
+                    delivery_assignment__delivery_manager=delivery_manager
+                )
+            
+            orders = []
+            for order in queryset:
+                orders.append({
+                    'order_id': order.id,
+                    'order_number': order.order_number,
+                    'customer_name': order.customer.get_full_name(),
+                    'customer_phone': order.contact_phone,
+                    'book_title': order.borrow_request.book.title,
+                    'delivery_address': order.delivery_address,
+                    'created_at': order.created_at,
+                    'borrow_request_id': order.borrow_request.id
+                })
+            
+            return {
+                'success': True,
+                'deliveries': orders
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting borrowing deliveries: {str(e)}")
+            return {
+                'success': False,
+                'message': f"Failed to get borrowing deliveries: {str(e)}",
+                'error_code': 'GET_BORROWING_DELIVERIES_ERROR'
+            }
+    
+    @staticmethod
+    def get_return_collections(delivery_manager: User = None) -> Dict[str, Any]:
+        """
+        Get pending return collections
+        """
+        try:
+            queryset = Order.objects.filter(
+                order_type='return_collection',
+                status='pending'
+            ).select_related('customer', 'borrow_request', 'borrow_request__book')
+            
+            if delivery_manager:
+                # Filter by assigned delivery manager
+                queryset = queryset.filter(
+                    delivery_assignment__delivery_manager=delivery_manager
+                )
+            
+            orders = []
+            for order in queryset:
+                orders.append({
+                    'order_id': order.id,
+                    'order_number': order.order_number,
+                    'customer_name': order.customer.get_full_name(),
+                    'customer_phone': order.contact_phone,
+                    'book_title': order.borrow_request.book.title,
+                    'collection_address': order.delivery_address,
+                    'created_at': order.created_at,
+                    'borrow_request_id': order.borrow_request.id
+                })
+            
+            return {
+                'success': True,
+                'collections': orders
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting return collections: {str(e)}")
+            return {
+                'success': False,
+                'message': f"Failed to get return collections: {str(e)}",
+                'error_code': 'GET_RETURN_COLLECTIONS_ERROR'
+            }
+    
+    @staticmethod
+    @transaction.atomic
+    def assign_borrowing_delivery(order: Order, delivery_manager: User) -> Dict[str, Any]:
+        """
+        Assign a borrowing delivery to a delivery manager
+        """
+        try:
+            # Create delivery assignment
+            assignment = DeliveryAssignment.objects.create(
+                order=order,
+                delivery_manager=delivery_manager,
+                status='assigned'
+            )
+            
+            return {
+                'success': True,
+                'message': 'Borrowing delivery assigned successfully',
+                'assignment': assignment
+            }
+            
+        except Exception as e:
+            logger.error(f"Error assigning borrowing delivery: {str(e)}")
+            return {
+                'success': False,
+                'message': f"Failed to assign borrowing delivery: {str(e)}",
+                'error_code': 'ASSIGN_BORROWING_DELIVERY_ERROR'
+            }
+ 

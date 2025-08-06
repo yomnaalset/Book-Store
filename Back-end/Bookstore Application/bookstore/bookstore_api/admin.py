@@ -3,7 +3,7 @@ from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import Group
 from django.utils.translation import gettext_lazy as _
 
-from .models import User, UserProfile, Library
+from .models import User, UserProfile, Library, Notification, DiscountCode, DiscountUsage
 from .models.library_model import Book, BookImage, Category, Author
 
 
@@ -233,6 +233,205 @@ class AuthorAdmin(admin.ModelAdmin):
     """Custom admin for Author model."""
     list_display = ('name', 'nationality', 'birth_date', 'get_books_count')
     search_fields = ('name', 'bio', 'nationality')
+
+
+@admin.register(Notification)
+class NotificationAdmin(admin.ModelAdmin):
+    """Custom admin for Notification model."""
+    list_display = ('user', 'title', 'notification_type', 'is_read', 'created_at')
+    list_filter = ('notification_type', 'is_read', 'created_at')
+    search_fields = ('user__email', 'title', 'message')
+    readonly_fields = ('created_at',)
+    
+    actions = ['mark_as_read', 'mark_as_unread']
+    
+    def mark_as_read(self, request, queryset):
+        """Action to mark selected notifications as read."""
+        queryset.update(is_read=True)
+        self.message_user(request, f'{queryset.count()} notifications were marked as read.')
+    mark_as_read.short_description = "Mark selected notifications as read"
+    
+    def mark_as_unread(self, request, queryset):
+        """Action to mark selected notifications as unread."""
+        queryset.update(is_read=False)
+        self.message_user(request, f'{queryset.count()} notifications were marked as unread.')
+    mark_as_unread.short_description = "Mark selected notifications as unread"
+
+
+class DiscountUsageInline(admin.TabularInline):
+    """
+    Inline admin for DiscountUsage to show usage history in DiscountCode admin.
+    """
+    model = DiscountUsage
+    extra = 0
+    readonly_fields = ('user', 'order_amount', 'discount_amount', 'final_amount', 'used_at', 'payment_reference')
+    fields = ('user', 'order_amount', 'discount_amount', 'used_at', 'payment_reference')
+    
+    def has_add_permission(self, request, obj=None):
+        """Prevent manual addition of usage records."""
+        return False
+
+
+@admin.register(DiscountCode)
+class DiscountCodeAdmin(admin.ModelAdmin):
+    """
+    Custom admin for DiscountCode model.
+    Provides comprehensive management interface for library administrators.
+    """
+    
+    # Fields to display in the discount code list
+    list_display = (
+        'code', 'discount_percentage', 'usage_limit_per_customer',
+        'expiration_date', 'is_active', 'is_expired', 'usage_count',
+        'created_at'
+    )
+    
+    # Fields that can be used to filter the discount code list
+    list_filter = (
+        'is_active', 'discount_percentage', 'created_at', 'expiration_date'
+    )
+    
+    # Fields that can be searched
+    search_fields = ('code', 'discount_percentage')
+    
+    # Default ordering
+    ordering = ('-created_at',)
+    
+    # Fields for the discount code form
+    fieldsets = (
+        ('Discount Code Information', {
+            'fields': ('code', 'discount_percentage', 'usage_limit_per_customer', 'expiration_date')
+        }),
+        ('Status', {
+            'fields': ('is_active',)
+        }),
+        ('Metadata', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    # Read-only fields
+    readonly_fields = ('created_at', 'updated_at')
+    
+    # Include usage history inline
+    inlines = [DiscountUsageInline]
+    
+    # Custom actions
+    actions = ['activate_codes', 'deactivate_codes', 'cleanup_expired']
+    
+    def activate_codes(self, request, queryset):
+        """Action to activate selected discount codes."""
+        queryset.update(is_active=True)
+        self.message_user(request, f'{queryset.count()} discount codes were activated.')
+    activate_codes.short_description = "Activate selected discount codes"
+    
+    def deactivate_codes(self, request, queryset):
+        """Action to deactivate selected discount codes."""
+        queryset.update(is_active=False)
+        self.message_user(request, f'{queryset.count()} discount codes were deactivated.')
+    deactivate_codes.short_description = "Deactivate selected discount codes"
+    
+    def cleanup_expired(self, request, queryset):
+        """Action to clean up expired, unused discount codes."""
+        from django.utils import timezone
+        expired_unused = queryset.filter(
+            expiration_date__lte=timezone.now(),
+            usage_records__isnull=True
+        )
+        count = expired_unused.count()
+        expired_unused.delete()
+        self.message_user(request, f'{count} expired unused discount codes were deleted.')
+    cleanup_expired.short_description = "Delete expired unused codes"
+    
+    # Custom methods for display
+    def is_expired(self, obj):
+        """Check if the discount code is expired."""
+        from django.utils import timezone
+        return obj.expiration_date <= timezone.now()
+    is_expired.boolean = True
+    is_expired.short_description = 'Expired'
+    
+    def usage_count(self, obj):
+        """Get the total usage count for this discount code."""
+        return obj.usage_records.count()
+    usage_count.short_description = 'Total Uses'
+    
+    # Limit queryset to ensure proper permissions
+    def get_queryset(self, request):
+        """
+        Override to ensure only library admins can manage discount codes.
+        """
+        qs = super().get_queryset(request)
+        # Additional permission checks can be added here if needed
+        return qs
+
+
+@admin.register(DiscountUsage)
+class DiscountUsageAdmin(admin.ModelAdmin):
+    """
+    Custom admin for DiscountUsage model.
+    Primarily for viewing usage history and statistics.
+    """
+    
+    # Fields to display in the usage list
+    list_display = (
+        'discount_code', 'user', 'discount_amount', 'order_amount', 
+        'final_amount', 'used_at', 'payment_reference'
+    )
+    
+    # Fields that can be used to filter the usage list
+    list_filter = (
+        'discount_code', 'used_at', 'user__user_type'
+    )
+    
+    # Fields that can be searched
+    search_fields = (
+        'discount_code__code', 'user__email', 'user__first_name', 
+        'user__last_name', 'payment_reference'
+    )
+    
+    # Default ordering
+    ordering = ('-used_at',)
+    
+    # Fields for the usage form
+    fieldsets = (
+        ('Usage Information', {
+            'fields': (
+                'discount_code', 'user', 'order_amount', 
+                'discount_amount', 'final_amount'
+            )
+        }),
+        ('Reference', {
+            'fields': ('payment_reference',)
+        }),
+        ('Metadata', {
+            'fields': ('used_at',),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    # Read-only fields (usage records should not be manually edited)
+    readonly_fields = ('used_at',)
+    
+    # Limit permissions
+    def has_add_permission(self, request):
+        """Prevent manual addition of usage records."""
+        return False
+    
+    def has_change_permission(self, request, obj=None):
+        """Prevent editing of usage records."""
+        return False
+    
+    def has_delete_permission(self, request, obj=None):
+        """Allow deletion only for superusers or specific cases."""
+        return request.user.is_superuser
+    
+    # Custom methods for display
+    def get_discount_percentage(self, obj):
+        """Get the discount percentage from the related discount code."""
+        return f"{obj.discount_code.discount_percentage}%"
+    get_discount_percentage.short_description = 'Discount %'
 
 
 # Unregister the default Group admin (optional)

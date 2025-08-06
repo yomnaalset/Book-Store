@@ -26,13 +26,15 @@ class PaymentInitView(APIView):
             serializer = PaymentInitSerializer(data=request.data)
             serializer.is_valid(raise_exception=True)
             
-            # Get payment method
+            # Get payment method and optional discount code
             payment_method = serializer.validated_data['payment_method']
+            discount_code = serializer.validated_data.get('discount_code')
             
             # Initialize payment
             result = PaymentService.initialize_payment(
                 user=request.user,
-                payment_method=payment_method
+                payment_method=payment_method,
+                discount_code=discount_code
             )
             
             if result['success']:

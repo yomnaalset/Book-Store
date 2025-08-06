@@ -3,7 +3,7 @@ from typing import Dict, Any, Optional, List
 import logging
 import uuid
 
-from ..models import Payment, CreditCardPayment, CashOnDeliveryPayment, Cart, User
+from ..models import Payment, CreditCardPayment, CashOnDeliveryPayment, Cart, User, DiscountCode, DiscountUsage
 
 logger = logging.getLogger(__name__)
 
@@ -48,9 +48,9 @@ class PaymentService:
     
     @staticmethod
     @transaction.atomic
-    def initialize_payment(user: User, payment_method: str) -> Dict[str, Any]:
+    def initialize_payment(user: User, payment_method: str, discount_code: str = None) -> Dict[str, Any]:
         """
-        Initialize a payment based on the user's cart total.
+        Initialize a payment based on the user's cart total with optional discount code.
         """
         try:
             # Get cart total
@@ -58,7 +58,7 @@ class PaymentService:
             if not cart_result['success']:
                 return cart_result
             
-            total_amount = cart_result['total_amount']
+            original_amount = cart_result['total_amount']
             cart = cart_result['cart']
             
             # Check if cart is empty
@@ -69,19 +69,57 @@ class PaymentService:
                     'error_code': 'EMPTY_CART'
                 }
             
+            # Initialize payment data
+            payment_data = {
+                'original_amount': original_amount,
+                'final_amount': original_amount,
+                'discount_applied': False,
+                'discount_code_used': None,
+                'discount_amount': 0,
+                'discount_percentage': 0
+            }
+            
+            # Apply discount code if provided
+            if discount_code:
+                from .discount_services import DiscountValidationService
+                
+                is_valid, discount_result = DiscountValidationService.validate_discount_code(
+                    discount_code, user, original_amount
+                )
+                
+                if is_valid:
+                    payment_data.update({
+                        'final_amount': discount_result['final_amount'],
+                        'discount_applied': True,
+                        'discount_code_used': discount_code,
+                        'discount_amount': discount_result['discount_amount'],
+                        'discount_percentage': discount_result['discount_percentage']
+                    })
+                else:
+                    return {
+                        'success': False,
+                        'message': discount_result.get('message', 'Invalid discount code'),
+                        'error_code': discount_result.get('error', 'INVALID_DISCOUNT_CODE')
+                    }
+            
             # Create payment
             payment = Payment.objects.create(
                 user=user,
-                amount=total_amount,
+                amount=payment_data['final_amount'],
                 payment_method=payment_method,
                 status='pending'
             )
             
+            result_message = f'Payment initialized successfully with {payment.get_payment_method_display()}'
+            if payment_data['discount_applied']:
+                result_message += f" (Discount: {payment_data['discount_code_used']} - ${payment_data['discount_amount']:.2f} off)"
+            
             return {
                 'success': True,
-                'message': f'Payment initialized successfully with {payment.get_payment_method_display()}',
+                'message': result_message,
                 'payment': payment,
-                'cart': cart
+                'cart': cart,
+                'payment_summary': payment_data
             }
             
         except Exception as e:
@@ -90,6 +128,55 @@ class PaymentService:
                 'success': False,
                 'message': f"Failed to initialize payment: {str(e)}",
                 'error_code': 'INITIALIZE_PAYMENT_ERROR'
+            }
+    
+    @staticmethod
+    @transaction.atomic
+    def complete_payment_with_discount(payment: Payment, payment_summary: Dict[str, Any] = None) -> Dict[str, Any]:
+        """
+        Complete a payment and record discount usage if applicable.
+        """
+        try:
+            # Update payment status
+            payment.status = 'completed'
+            payment.save()
+            
+            # Record discount usage if discount was applied
+            if payment_summary and payment_summary.get('discount_applied'):
+                from .discount_services import DiscountValidationService
+                
+                discount_code = payment_summary['discount_code_used']
+                original_amount = payment_summary['original_amount']
+                payment_reference = f"payment_{payment.id}"
+                
+                success, usage_result = DiscountValidationService.apply_discount_code(
+                    discount_code, payment.user, original_amount, payment_reference
+                )
+                
+                if not success:
+                    logger.warning(f"Failed to record discount usage for payment {payment.id}: {usage_result}")
+                    # Don't fail the payment completion, just log the warning
+                
+                return {
+                    'success': True,
+                    'message': 'Payment completed successfully with discount applied',
+                    'payment': payment,
+                    'discount_recorded': success
+                }
+            else:
+                return {
+                    'success': True,
+                    'message': 'Payment completed successfully',
+                    'payment': payment,
+                    'discount_recorded': False
+                }
+                
+        except Exception as e:
+            logger.error(f"Error completing payment: {str(e)}")
+            return {
+                'success': False,
+                'message': f"Failed to complete payment: {str(e)}",
+                'error_code': 'COMPLETE_PAYMENT_ERROR'
             }
     
     @staticmethod

@@ -8,8 +8,10 @@ from django.core.exceptions import PermissionDenied
 from django.db.models import Q
 from django.core.paginator import Paginator
 import logging
+from datetime import datetime
 
 from ..models import User, DeliveryRequest, Order, DeliveryAssignment, DeliveryStatusHistory
+from ..services import NotificationService
 from ..serializers.delivery_serializers import (
     OrderListSerializer, OrderDetailSerializer, OrderStatusUpdateSerializer,
     DeliveryRequestCreateSerializer,
@@ -19,9 +21,11 @@ from ..serializers.delivery_serializers import (
     DeliveryRequestStatusUpdateSerializer,
     DeliveryAssignmentBasicSerializer,
     OrderCreateFromPaymentSerializer,
+    DeliveryRequestWithAvailableManagersSerializer,
+
 )   
 
-from ..permissions import IsLibraryAdminReadOnly, IsDeliveryAdmin, IsDeliveryAdminOrLibraryAdmin    
+from ..permissions import IsLibraryAdminReadOnly, IsDeliveryAdmin, IsDeliveryAdminOrLibraryAdmin, IsLibraryAdmin
 
 logger = logging.getLogger(__name__)
 
@@ -126,9 +130,16 @@ class DeliveryRequestStatusUpdateView(APIView):
         user = request.user
         
         # Check permissions
-        if not user.is_delivery_admin() or delivery_request.delivery_manager != user:
+        if not (user.is_delivery_admin() and delivery_request.delivery_manager == user):
             return Response({
-                'error': "Only the assigned delivery manager can update this request's status."
+                'error': "Only the assigned delivery manager can update this request's status.",
+                'debug': {
+                    'user_id': user.id,
+                    'user_type': user.user_type,
+                    'is_delivery_admin': user.is_delivery_admin(),
+                    'request_delivery_manager_id': delivery_request.delivery_manager.id if delivery_request.delivery_manager else None,
+                    'request_status': delivery_request.status
+                }
             }, status=status.HTTP_403_FORBIDDEN)
         
         serializer = DeliveryRequestStatusUpdateSerializer(data=request.data)
@@ -156,6 +167,10 @@ class DeliveryRequestStatusUpdateView(APIView):
             # Set delivered_at timestamp if delivered
             if new_status == 'delivered':
                 delivery_request.delivered_at = timezone.now()
+                # Update delivery manager status back to online
+                if delivery_request.delivery_manager:
+                    delivery_request.delivery_manager.delivery_status = 'online'
+                    delivery_request.delivery_manager.save()
             
             delivery_request.save()
             
@@ -193,25 +208,88 @@ class DeliveryManagerAssignedRequestsView(generics.ListAPIView):
 
 class LibraryAdminRequestListView(generics.ListAPIView):
     """
-    List all delivery requests for library admins (read-only).
+    List all delivery requests for library admins with available delivery managers.
+    Library admins can see which delivery managers are available to deliver each request.
     """
-    serializer_class = DeliveryRequestListSerializer
-    permission_classes = [permissions.IsAuthenticated, IsLibraryAdminReadOnly]
+    serializer_class = DeliveryRequestWithAvailableManagersSerializer
+    permission_classes = [permissions.IsAuthenticated, IsLibraryAdmin]
     
     def get_queryset(self):
-        queryset = DeliveryRequest.objects.all()
-        
-        # Filter by status
-        status_filter = self.request.query_params.get('status')
-        if status_filter:
-            queryset = queryset.filter(status=status_filter)
+        queryset = DeliveryRequest.objects.filter(status='pending')
         
         # Filter by customer
         customer_id = self.request.query_params.get('customer_id')
         if customer_id:
             queryset = queryset.filter(customer_id=customer_id)
         
-        return queryset.order_by('-created_at') 
+        return queryset.order_by('-created_at')
+
+
+class LibraryAdminAssignManagerView(APIView):
+    """
+    Assign a delivery manager to a delivery request.
+    Accessible by library admins only.
+    """
+    permission_classes = [permissions.IsAuthenticated, IsLibraryAdmin]
+    
+    def post(self, request, pk):
+        try:
+            # Get the delivery request
+            delivery_request = get_object_or_404(DeliveryRequest, pk=pk, status='pending')
+            
+            # Validate request data
+            serializer = DeliveryRequestAssignSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            
+            delivery_manager_id = serializer.validated_data['delivery_manager_id']
+            notes = serializer.validated_data.get('notes', '')
+            
+            # Get delivery manager
+            try:
+                delivery_manager = User.objects.get(id=delivery_manager_id, user_type='delivery_admin', is_active=True)
+            except User.DoesNotExist:
+                return Response({
+                    'error': 'Delivery manager not found or is not active'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            # Check if delivery manager is available (simplified check)
+            # Basic availability: active delivery admin not currently delivering
+            if delivery_manager.delivery_status == 'busy':
+                active_requests_count = delivery_manager.assigned_requests.filter(status='in_operation').count()
+                if active_requests_count > 0:
+                    return Response({
+                        'error': 'Selected delivery manager is currently busy with another delivery'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Update request
+            delivery_request.delivery_manager = delivery_manager
+            delivery_request.status = 'in_operation'
+            delivery_request.assigned_at = timezone.now()
+            delivery_request.assigned_by = request.user  # Record who assigned the manager
+            if notes:
+                delivery_request.delivery_notes = notes
+                
+            # Save the delivery request
+            delivery_request.save()
+            
+            # Update delivery manager status to busy
+            delivery_manager.delivery_status = 'busy'
+            delivery_manager.save()
+            
+            # Return updated request
+            response_serializer = DeliveryRequestDetailSerializer(delivery_request)
+            return Response({
+                'success': True,
+                'message': f'Request assigned to {delivery_manager.get_full_name()}',
+                'data': response_serializer.data
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error assigning delivery manager: {str(e)}")
+            return Response({
+                'error': 'An error occurred while processing your request'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class OrderListView(generics.ListAPIView):
@@ -323,6 +401,14 @@ class OrderStatusUpdateView(APIView):
             
             order.save()
             
+            # Create notifications for status changes
+            if new_status == 'confirmed':
+                # Create notification for order accepted
+                NotificationService.notify_order_accepted(order.id)
+            elif new_status == 'delivered':
+                # Create notification for order delivered
+                NotificationService.notify_order_delivered(order.id)
+            
             # Log status change
             logger.info(f"Order #{order.order_number} status changed from {old_status} to {new_status} by {user.email}")
             
@@ -344,9 +430,10 @@ class OrdersReadyForDeliveryView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated, IsDeliveryAdminOrLibraryAdmin]
     
     def get_queryset(self):
-        # Get orders in 'ready_for_delivery' status without delivery assignments
+        # Get orders in 'ready_for_delivery' or 'pending' status without delivery assignments
+        # Including 'pending' for testing purposes
         queryset = Order.objects.filter(
-            status='ready_for_delivery'
+            status__in=['pending']
         ).select_related('customer', 'payment').prefetch_related('items__book')
         
         # Exclude orders that already have delivery assignments
@@ -427,7 +514,7 @@ class DeliveryAssignmentCreateView(generics.CreateAPIView):
     Accessible by system admins only.
     """
     serializer_class = DeliveryAssignmentBasicSerializer
-    permission_classes = [permissions.IsAuthenticated, permissions.IsAdminUser]
+    permission_classes = [permissions.IsAuthenticated, IsDeliveryAdminOrLibraryAdmin]
     
     def get_serializer_class(self):
         from ..serializers.delivery_serializers import DeliveryAssignmentCreateSerializer
@@ -435,7 +522,19 @@ class DeliveryAssignmentCreateView(generics.CreateAPIView):
     
     def perform_create(self, serializer):
         # The serializer already handles order status update
-        return serializer.save()
+        assignment = serializer.save()
+        
+        # Create notification for delivery representative assignment
+        try:
+            NotificationService.notify_delivery_assigned(
+                order_id=assignment.order.id,
+                delivery_rep_name=f"{assignment.delivery_manager.first_name} {assignment.delivery_manager.last_name}",
+                delivery_rep_phone=assignment.contact_phone
+            )
+        except Exception as e:
+            logger.error(f"Failed to create notification for delivery assignment: {str(e)}")
+            
+        return assignment
 
 
 class DeliveryAssignmentStatusUpdateView(APIView):
@@ -443,7 +542,7 @@ class DeliveryAssignmentStatusUpdateView(APIView):
     Update delivery assignment status.
     Accessible by the assigned delivery manager and system admins.
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsDeliveryAdminOrLibraryAdmin]
     
     def patch(self, request, pk):
         assignment = get_object_or_404(DeliveryAssignment, pk=pk)
@@ -462,10 +561,26 @@ class DeliveryAssignmentStatusUpdateView(APIView):
             new_status = serializer.validated_data['status']
             notes = serializer.validated_data.get('notes', '')
             failure_reason = serializer.validated_data.get('failure_reason', '')
+            estimated_delivery_time = serializer.validated_data.get('estimated_delivery_time')
             
             # Update assignment status
             old_status = assignment.status
             assignment.status = new_status
+            
+            # Check if estimated delivery time was updated
+            delivery_time_updated = False
+            if estimated_delivery_time and (not assignment.estimated_delivery_time or 
+                                           estimated_delivery_time != assignment.estimated_delivery_time):
+                assignment.estimated_delivery_time = estimated_delivery_time
+                delivery_time_updated = True
+                
+            # If contact_phone is not set, automatically use the delivery manager's phone from profile
+            if not assignment.contact_phone and assignment.delivery_manager:
+                try:
+                    if hasattr(assignment.delivery_manager, 'profile') and assignment.delivery_manager.profile.phone_number:
+                        assignment.contact_phone = assignment.delivery_manager.profile.phone_number
+                except Exception as e:
+                    logger.error(f"Failed to get delivery manager's phone number: {str(e)}")
             
             # Set timestamps based on status
             if new_status == 'accepted' and not assignment.accepted_at:
@@ -494,12 +609,28 @@ class DeliveryAssignmentStatusUpdateView(APIView):
                 notes=notes
             )
             
+            # Send notification if delivery time was updated
+            if delivery_time_updated:
+                try:
+                    NotificationService.notify_delivery_time_updated(
+                        order_id=assignment.order.id,
+                        estimated_delivery_time=assignment.estimated_delivery_time
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to create notification for delivery time update: {str(e)}")
+            
             # Update order status if delivered
             if new_status == 'delivered':
                 order = assignment.order
                 order.status = 'delivered'
                 order.delivered_at = timezone.now()
                 order.save()
+                
+                # Create notification for order delivered
+                try:
+                    NotificationService.notify_order_delivered(order.id)
+                except Exception as e:
+                    logger.error(f"Failed to create notification for order delivery: {str(e)}")
             
             # Log status change
             logger.info(f"Delivery assignment #{assignment.id} status changed from {old_status} to {new_status} by {user.email}")
@@ -520,7 +651,7 @@ class MyDeliveryAssignmentsView(generics.ListAPIView):
     Accessible by delivery admins only.
     """
     serializer_class = DeliveryAssignmentBasicSerializer
-    permission_classes = [permissions.IsAuthenticated, IsDeliveryAdmin]
+    permission_classes = [permissions.IsAuthenticated, IsDeliveryAdminOrLibraryAdmin]   
     
     def get_queryset(self):
         user = self.request.user
@@ -541,144 +672,42 @@ class MyDeliveryAssignmentsView(generics.ListAPIView):
 
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated, IsDeliveryAdmin])
+@permission_classes([permissions.IsAuthenticated, IsDeliveryAdminOrLibraryAdmin])
 def available_delivery_managers_view(request):
     """
     Get a list of available delivery managers.
-    Accessible by delivery admins and system admins.
+    Accessible by delivery admins, library admins, and system admins.
     """
-    # Get all active delivery managers
-    delivery_managers = User.objects.filter(
-        is_active=True,
-        role='delivery_admin'
-    ).order_by('first_name', 'last_name')
-    
-    # Get delivery managers with their current assignment count
-    from django.db.models import Count
-    managers_with_counts = delivery_managers.annotate(
-        active_assignments=Count(
-            'delivery_assignments',
-            filter=Q(
-                delivery_assignments__status__in=[
-                    'assigned', 'accepted', 'picked_up', 'in_transit'
-                ]
-            )
-        )
-    )
-    
-    # Serialize the data
-    from ..serializers.user_serializers import UserBasicInfoSerializer
-    serializer = UserBasicInfoSerializer(managers_with_counts, many=True)
-    
-    # Add assignment counts to response
-    response_data = []
-    for idx, manager in enumerate(serializer.data):
-        manager_data = dict(manager)
-        manager_data['active_assignments'] = managers_with_counts[idx].active_assignments
-        response_data.append(manager_data)
-    
-    return Response({
-        'delivery_managers': response_data
-    }, status=status.HTTP_200_OK)
-
-
-@api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated, IsDeliveryAdmin])
-def delivery_manager_statistics_view(request, manager_id=None):
-    """
-    Get delivery statistics for a specific manager or all managers.
-    Accessible by delivery admins and system admins.
-    """
-    from django.db.models import Count, Avg, F, ExpressionWrapper, FloatField, Q
-    from datetime import timedelta
-    
-    # If manager_id is provided, get statistics for that manager
-    # Otherwise, get statistics for the current user (if delivery admin)
-    if manager_id:
-        try:
-            manager = User.objects.get(id=manager_id, role='delivery_admin')
-        except User.DoesNotExist:
-            return Response({
-                'error': 'Delivery manager not found'
-            }, status=status.HTTP_404_NOT_FOUND)
-    else:
-        manager = request.user
-        if not manager.is_delivery_admin():
-            return Response({
-                'error': 'You must be a delivery administrator to view statistics'
-            }, status=status.HTTP_403_FORBIDDEN)
-    
-    # Get all assignments for this manager
-    assignments = DeliveryAssignment.objects.filter(delivery_manager=manager)
-    
-    # Filter by date range if provided
-    start_date = request.query_params.get('start_date')
-    end_date = request.query_params.get('end_date')
-    if start_date:
-        assignments = assignments.filter(assigned_at__date__gte=start_date)
-    if end_date:
-        assignments = assignments.filter(assigned_at__date__lte=end_date)
-    
-    # Calculate statistics
-    total_assignments = assignments.count()
-    completed_deliveries = assignments.filter(status='delivered').count()
-    pending_assignments = assignments.filter(
-        status__in=['assigned', 'accepted', 'picked_up', 'in_transit']
-    ).count()
-    failed_deliveries = assignments.filter(status='failed').count()
-    
-    # Calculate average delivery time (in minutes) for completed deliveries
-    completed_assignments = assignments.filter(
-        status='delivered',
-        delivered_at__isnull=False,
-        picked_up_at__isnull=False
-    )
-    
-    avg_delivery_time = 0
-    if completed_assignments.exists():
-        # Calculate average time between pickup and delivery
-        delivery_times = []
-        for assignment in completed_assignments:
-            if assignment.delivered_at and assignment.picked_up_at:
-                delivery_time = (assignment.delivered_at - assignment.picked_up_at).total_seconds() / 60
-                delivery_times.append(delivery_time)
+    # Stats functionality removed
+    try:
+        # Get all active delivery managers (basic info only)
+        delivery_managers = User.objects.filter(
+            is_active=True,
+            user_type='delivery_admin'
+        ).order_by('first_name', 'last_name')
         
-        if delivery_times:
-            avg_delivery_time = sum(delivery_times) / len(delivery_times)
+        # Serialize the data with minimal information
+        from ..serializers.user_serializers import UserBasicInfoSerializer
+        serializer = UserBasicInfoSerializer(delivery_managers, many=True)
+        
+        # Add placeholder assignment counts
+        response_data = []
+        for manager_data in serializer.data:
+            manager_data_dict = dict(manager_data)
+            manager_data_dict['active_assignments'] = 0
+            manager_data_dict['message'] = 'Statistics functionality has been removed'
+            response_data.append(manager_data_dict)
+        
+        return Response({
+            'delivery_managers': response_data
+        }, status=status.HTTP_200_OK)
     
-    # Calculate success rate
-    success_rate = 0
-    if total_assignments > 0:
-        success_rate = (completed_deliveries / total_assignments) * 100
-    
-    # Prepare response
-    from ..serializers.delivery_serializers import DeliveryManagerStatsSerializer
-    stats_data = {
-        'total_assignments': total_assignments,
-        'completed_deliveries': completed_deliveries,
-        'pending_assignments': pending_assignments,
-        'failed_deliveries': failed_deliveries,
-        'average_delivery_time': round(avg_delivery_time, 2),
-        'success_rate': round(success_rate, 2)
-    }
-    
-    serializer = DeliveryManagerStatsSerializer(data=stats_data)
-    serializer.is_valid()  # This will always be valid as we're constructing the data
-    
-    # Get recent assignments
-    recent_assignments = assignments.order_by('-assigned_at')[:5]
-    from ..serializers.delivery_serializers import DeliveryAssignmentBasicSerializer
-    recent_serializer = DeliveryAssignmentBasicSerializer(recent_assignments, many=True)
-    
-    return Response({
-        'manager': {
-            'id': manager.id,
-            'name': manager.get_full_name(),
-            'email': manager.email
-        },
-        'statistics': serializer.data,
-        'recent_assignments': recent_serializer.data
-    }, status=status.HTTP_200_OK)
+    except Exception as e:
+        logger.error(f"Error in available_delivery_managers_view: {str(e)}")
+        return Response({
+            'error': 'An error occurred while processing your request'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 @api_view(['GET'])
@@ -688,196 +717,29 @@ def delivery_dashboard_view(request):
     Get delivery dashboard statistics.
     Accessible by delivery admins, library admins, and system admins.
     """
-    from django.db.models import Count, Sum, Avg, F, ExpressionWrapper, FloatField, Q
-    from django.utils.timezone import now
-    from datetime import timedelta
-    
-    # Get date range filters
-    start_date = request.query_params.get('start_date')
-    end_date = request.query_params.get('end_date')
-    
-    # Default to last 30 days if not provided
-    if not start_date:
-        start_date = (now() - timedelta(days=30)).date().isoformat()
-    if not end_date:
-        end_date = now().date().isoformat()
-    
-    # Get all orders in the date range
-    orders = Order.objects.filter(
-        created_at__date__gte=start_date,
-        created_at__date__lte=end_date
-    )
-    
-    # Get all delivery assignments in the date range
-    assignments = DeliveryAssignment.objects.filter(
-        assigned_at__date__gte=start_date,
-        assigned_at__date__lte=end_date
-    )
-    
-    # Get all delivery requests in the date range
-    requests = DeliveryRequest.objects.filter(
-        created_at__date__gte=start_date,
-        created_at__date__lte=end_date
-    )
-    
-    # Calculate order statistics
-    total_orders = orders.count()
-    orders_by_status = orders.values('status').annotate(count=Count('id'))
-    order_status_counts = {item['status']: item['count'] for item in orders_by_status}
-    
-    # Calculate delivery assignment statistics
-    total_assignments = assignments.count()
-    assignments_by_status = assignments.values('status').annotate(count=Count('id'))
-    assignment_status_counts = {item['status']: item['count'] for item in assignments_by_status}
-    
-    # Calculate delivery request statistics
-    total_requests = requests.count()
-    requests_by_status = requests.values('status').annotate(count=Count('id'))
-    request_status_counts = {item['status']: item['count'] for item in requests_by_status}
-    
-    # Calculate average delivery times
-    avg_delivery_time = 0
-    completed_assignments = assignments.filter(
-        status='delivered',
-        delivered_at__isnull=False,
-        picked_up_at__isnull=False
-    )
-    
-    if completed_assignments.exists():
-        # Calculate average time between pickup and delivery
-        delivery_times = []
-        for assignment in completed_assignments:
-            if assignment.delivered_at and assignment.picked_up_at:
-                delivery_time = (assignment.delivered_at - assignment.picked_up_at).total_seconds() / 60
-                delivery_times.append(delivery_time)
-        
-        if delivery_times:
-            avg_delivery_time = sum(delivery_times) / len(delivery_times)
-    
-    # Get top delivery managers
-    top_managers = User.objects.filter(
-        delivery_assignments__status='delivered',
-        delivery_assignments__assigned_at__date__gte=start_date,
-        delivery_assignments__assigned_at__date__lte=end_date
-    ).annotate(
-        completed_count=Count('delivery_assignments', filter=Q(delivery_assignments__status='delivered'))
-    ).order_by('-completed_count')[:5]
-    
-    top_managers_data = []
-    for manager in top_managers:
-        top_managers_data.append({
-            'id': manager.id,
-            'name': manager.get_full_name(),
-            'completed_deliveries': manager.completed_count
-        })
-    
-    # Prepare response
+    # Stats functionality removed
     return Response({
         'date_range': {
-            'start_date': start_date,
-            'end_date': end_date
+            'start_date': request.query_params.get('start_date', ''),
+            'end_date': request.query_params.get('end_date', '')
         },
+        'message': 'Delivery dashboard statistics functionality has been removed',
         'orders': {
-            'total': total_orders,
-            'by_status': order_status_counts
+            'total': 0,
+            'by_status': {}
         },
         'delivery_assignments': {
-            'total': total_assignments,
-            'by_status': assignment_status_counts,
-            'avg_delivery_time_minutes': round(avg_delivery_time, 2)
+            'total': 0,
+            'by_status': {},
+            'avg_delivery_time_minutes': 0
         },
         'delivery_requests': {
-            'total': total_requests,
-            'by_status': request_status_counts
+            'total': 0,
+            'by_status': {}
         },
-        'top_delivery_managers': top_managers_data
+        'top_delivery_managers': []
     }, status=status.HTTP_200_OK)
 
-
-@api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated, IsDeliveryAdminOrLibraryAdmin])
-def order_statistics_view(request):
-    """
-    Get order statistics.
-    Accessible by delivery admins, library admins, and system admins.
-    """
-    from django.db.models import Count, Sum, Avg, F, ExpressionWrapper, FloatField, Q
-    from django.utils.timezone import now
-    from datetime import timedelta
-    
-    # Get date range filters
-    start_date = request.query_params.get('start_date')
-    end_date = request.query_params.get('end_date')
-    
-    # Default to last 30 days if not provided
-    if not start_date:
-        start_date = (now() - timedelta(days=30)).date().isoformat()
-    if not end_date:
-        end_date = now().date().isoformat()
-    
-    # Get all orders in the date range
-    orders = Order.objects.filter(
-        created_at__date__gte=start_date,
-        created_at__date__lte=end_date
-    )
-    
-    # Calculate order statistics
-    total_orders = orders.count()
-    total_amount = orders.aggregate(total=Sum('total_amount'))['total'] or 0
-    
-    # Orders by status
-    orders_by_status = orders.values('status').annotate(count=Count('id'))
-    order_status_counts = {item['status']: item['count'] for item in orders_by_status}
-    
-    # Orders by day
-    from django.db.models.functions import TruncDate
-    orders_by_day = orders.annotate(
-        day=TruncDate('created_at')
-    ).values('day').annotate(
-        count=Count('id'),
-        total_amount=Sum('total_amount')
-    ).order_by('day')
-    
-    daily_orders = []
-    for item in orders_by_day:
-        daily_orders.append({
-            'date': item['day'].isoformat(),
-            'order_count': item['count'],
-            'total_amount': float(item['total_amount'])
-        })
-    
-    # Average processing time (from creation to delivery)
-    avg_processing_time = 0
-    delivered_orders = orders.filter(
-        status='delivered',
-        delivered_at__isnull=False
-    )
-    
-    if delivered_orders.exists():
-        processing_times = []
-        for order in delivered_orders:
-            if order.delivered_at:
-                processing_time = (order.delivered_at - order.created_at).total_seconds() / 3600  # Hours
-                processing_times.append(processing_time)
-        
-        if processing_times:
-            avg_processing_time = sum(processing_times) / len(processing_times)
-    
-    # Prepare response
-    return Response({
-        'date_range': {
-            'start_date': start_date,
-            'end_date': end_date
-        },
-        'summary': {
-            'total_orders': total_orders,
-            'total_amount': float(total_amount),
-            'avg_order_value': float(total_amount / total_orders) if total_orders > 0 else 0,
-            'avg_processing_time_hours': round(avg_processing_time, 2)
-        },
-        'orders_by_status': order_status_counts,
-        'daily_orders': daily_orders
-    }, status=status.HTTP_200_OK)
 
 
 @api_view(['POST'])
@@ -938,11 +800,20 @@ def bulk_assign_orders_view(request):
     created_assignments = []
     with transaction.atomic():
         for order in orders:
+            # Get delivery manager's phone number from profile
+            contact_phone = None
+            try:
+                if hasattr(delivery_manager, 'profile') and delivery_manager.profile.phone_number:
+                    contact_phone = delivery_manager.profile.phone_number
+            except Exception as e:
+                logger.error(f"Failed to get delivery manager's phone number: {str(e)}")
+                
             assignment = DeliveryAssignment.objects.create(
                 order=order,
                 delivery_manager=delivery_manager,
                 delivery_notes=delivery_notes,
-                estimated_delivery_time=estimated_delivery_time
+                estimated_delivery_time=estimated_delivery_time,
+                contact_phone=contact_phone
             )
             created_assignments.append(assignment)
             
@@ -1027,3 +898,106 @@ def order_tracking_view(request, order_number):
     
     serializer = OrderDetailSerializer(order)
     return Response(serializer.data, status=status.HTTP_200_OK) 
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def order_delivery_contact_view(request, order_id):
+    """
+    Get delivery representative contact information for an order.
+    Accessible only by the customer who placed the order.
+    """
+    try:
+        # Get the order with its delivery assignment
+        order = Order.objects.get(id=order_id)
+        
+        # Check if user is the order owner
+        if order.customer != request.user:
+            return Response({
+                'error': "You don't have permission to access this order's delivery information"
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        # Check if order has a delivery assignment
+        if not hasattr(order, 'delivery_assignment'):
+            return Response({
+                'error': "This order doesn't have a delivery assignment yet"
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        assignment = order.delivery_assignment
+        
+        # Return delivery representative contact information
+        return Response({
+            'success': True,
+            'delivery_rep': {
+                'name': f"{assignment.delivery_manager.first_name} {assignment.delivery_manager.last_name}",
+                'contact_phone': assignment.contact_phone or "Not provided",
+                'estimated_delivery_time': assignment.estimated_delivery_time,
+                'status': assignment.get_status_display()
+            }
+        }, status=status.HTTP_200_OK)
+        
+    except Order.DoesNotExist:
+        return Response({
+            'error': 'Order not found'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        logger.error(f"Error getting delivery contact: {str(e)}")
+        return Response({
+            'error': 'An error occurred while processing your request'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class DeliveryManagerStatusUpdateView(APIView):
+    """
+    Update delivery manager's status (online/offline).
+    Accessible by delivery managers only.
+    """
+    permission_classes = [permissions.IsAuthenticated, IsDeliveryAdmin]
+    
+    def post(self, request):
+        try:
+            # Validate that the user is a delivery manager
+            user = request.user
+            if not user.is_delivery_admin():
+                return Response({
+                    'error': 'Only delivery managers can update their status'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Get the new status from request data
+            new_status = request.data.get('status')
+            if new_status not in ['online', 'offline']:
+                return Response({
+                    'error': 'Invalid status. Must be "online" or "offline".'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Check if the delivery manager is currently busy
+            if user.delivery_status == 'busy' and new_status == 'offline':
+                # Check if they have any active deliveries
+                active_requests = DeliveryRequest.objects.filter(
+                    delivery_manager=user, 
+                    status='in_operation'
+                ).exists()
+                
+                if active_requests:
+                    return Response({
+                        'error': 'Cannot go offline while you have active deliveries'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Update the status
+            user.delivery_status = new_status
+            user.save()
+            
+            return Response({
+                'success': True,
+                'message': f'Status updated to {new_status}',
+                'current_status': new_status
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error updating delivery manager status: {str(e)}")
+            return Response({
+                'error': 'An error occurred while processing your request'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+ 

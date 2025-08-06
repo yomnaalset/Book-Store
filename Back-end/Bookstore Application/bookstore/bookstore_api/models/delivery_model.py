@@ -16,6 +16,13 @@ class Order(models.Model):
         ('pending', 'Pending'),
         ('confirmed', 'Confirmed'),
         ('delivered', 'Delivered'),
+        ('returned', 'Returned'),  # For borrowing returns
+    ]
+    
+    ORDER_TYPE_CHOICES = [
+        ('purchase', 'Purchase'),
+        ('borrowing', 'Borrowing'),
+        ('return_collection', 'Return Collection'),
     ]
     
     # Order identification
@@ -49,11 +56,33 @@ class Order(models.Model):
         help_text="Total order amount"
     )
     
+    order_type = models.CharField(
+        max_length=20,
+        choices=ORDER_TYPE_CHOICES,
+        default='purchase',
+        help_text="Type of order (purchase, borrowing, or return collection)"
+    )
+    
     status = models.CharField(
         max_length=25,
         choices=ORDER_STATUS_CHOICES,
         default='pending',
         help_text="Current order status"
+    )
+    
+    # Borrowing-related fields
+    borrow_request = models.ForeignKey(
+        'BorrowRequest',
+        on_delete=models.CASCADE,
+        related_name='delivery_orders',
+        null=True,
+        blank=True,
+        help_text="Associated borrow request (for borrowing orders)"
+    )
+    
+    is_return_collection = models.BooleanField(
+        default=False,
+        help_text="Whether this order is for collecting a returned book"
     )
     
     # Delivery information (for cash on delivery)
@@ -208,12 +237,9 @@ class DeliveryAssignment(models.Model):
     """
     ASSIGNMENT_STATUS_CHOICES = [
         ('assigned', 'Assigned'),
-        ('accepted', 'Accepted'),
         ('picked_up', 'Picked Up'),
-        ('in_transit', 'In Transit'),
         ('delivered', 'Delivered'),
-        ('failed', 'Delivery Failed'),
-        ('returned', 'Returned'),
+        ('collected', 'Collected'),  # For return collections
     ]
     
     # Assignment details
@@ -264,6 +290,12 @@ class DeliveryAssignment(models.Model):
         help_text="When the order was delivered"
     )
     
+    collected_at = models.DateTimeField(
+        blank=True,
+        null=True,
+        help_text="When the book was collected for return"
+    )
+    
     # Delivery notes and updates
     delivery_notes = models.TextField(
         blank=True,
@@ -275,6 +307,14 @@ class DeliveryAssignment(models.Model):
         blank=True,
         null=True,
         help_text="Estimated delivery time"
+    )
+    
+    # Contact information for customer communication
+    contact_phone = models.CharField(
+        max_length=20,
+        blank=True,
+        null=True,
+        help_text="Contact phone for delivery representative"
     )
     
     actual_delivery_time = models.DateTimeField(
@@ -454,6 +494,16 @@ class DeliveryRequest(models.Model):
         help_text="Delivery manager assigned to this request"
     )
     
+    assigned_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        related_name='manager_assignments',
+        limit_choices_to={'user_type': 'library_admin'},
+        null=True,
+        blank=True,
+        help_text="Library manager who assigned this request"
+    )
+    
     # Timestamps
     created_at = models.DateTimeField(
         auto_now_add=True,
@@ -499,4 +549,26 @@ class DeliveryRequest(models.Model):
         import uuid
         timestamp = str(int(time.time()))[-8:]  # Last 8 digits of timestamp
         random_part = str(uuid.uuid4().hex)[:4].upper()
-        return f"REQ{timestamp}{random_part}" 
+        return f"REQ{timestamp}{random_part}"
+    
+    @staticmethod
+    def get_available_delivery_managers():
+        """
+        Get a list of delivery managers who are available to deliver requests.
+        A delivery manager is available if:
+        1. They are active
+        2. They are online (delivery_status = 'online')
+        3. They are not currently delivering any requests (no in_operation assignments)
+        """
+        from django.db.models import Q
+        return User.objects.filter(
+            user_type='delivery_admin',
+            is_active=True,
+            delivery_status='online'
+        ).exclude(
+            Q(delivery_assignments__status__in=['assigned', 'accepted', 'picked_up', 'in_transit']) |
+            Q(assigned_requests__status='in_operation')
+        ).distinct()
+
+
+ 

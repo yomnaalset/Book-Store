@@ -10,6 +10,27 @@ from .library_services import (
     # Book services
     BookManagementService,
     BookAccessService,
+    # Evaluation services
+    EvaluationManagementService,
+    EvaluationAccessService,
+    # Favorites services
+    FavoriteManagementService,
+    FavoriteAccessService,
+)
+
+from .notification_services import NotificationService
+
+from .borrowing_services import (
+    BorrowingService,
+    BorrowingNotificationService,
+    BorrowingReportService,
+    BorrowingPaymentService
+)
+
+from .discount_services import (
+    DiscountCodeService,
+    DiscountValidationService,
+    DiscountReportingService,
 )
 
 
@@ -22,5 +43,21 @@ __all__ = [
     # Book services
     'BookManagementService',
     'BookAccessService',
-    
+    # Evaluation services
+    'EvaluationManagementService',
+    'EvaluationAccessService',
+    # Favorites services
+    'FavoriteManagementService',
+    'FavoriteAccessService',
+    # Notification services
+    'NotificationService',
+    # Borrowing services
+    'BorrowingService',
+    'BorrowingNotificationService',
+    'BorrowingReportService',
+    'BorrowingPaymentService',
+    # Discount services
+    'DiscountCodeService',
+    'DiscountValidationService',
+    'DiscountReportingService',
 ] 

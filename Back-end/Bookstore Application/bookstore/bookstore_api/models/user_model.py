@@ -50,6 +50,12 @@ class User(AbstractUser):
         ('delivery_admin', 'Delivery Administrator'),
     ]
     
+    DELIVERY_STATUS_CHOICES = [
+        ('online', 'Online - Available'),
+        ('offline', 'Offline - Unavailable'),
+        ('busy', 'Busy - Currently Delivering'),
+    ]
+    
     # Basic user information (required during registration)
     email = models.EmailField(unique=True, help_text="User's email address")
     first_name = models.CharField(max_length=30, help_text="User's first name")
@@ -59,6 +65,14 @@ class User(AbstractUser):
         choices=USER_TYPE_CHOICES,
         default='customer',
         help_text="Type of user account"
+    )
+    
+    # Delivery manager status (only relevant for delivery_admin users)
+    delivery_status = models.CharField(
+        max_length=20,
+        choices=DELIVERY_STATUS_CHOICES,
+        default='offline',
+        help_text="Current status of delivery manager (online/offline/busy)"
     )
     
     # Note: Contact information (phone_number, address, city) moved to UserProfile model

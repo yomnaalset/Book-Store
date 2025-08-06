@@ -14,11 +14,9 @@ from ..views.delivery_views import  (
     DeliveryAssignmentStatusUpdateView,
     MyDeliveryAssignmentsView,
     
-    # Statistics and dashboard views
-    order_statistics_view,
-    delivery_dashboard_view,
-    delivery_manager_statistics_view,
+    # Delivery manager views
     available_delivery_managers_view,
+    DeliveryManagerStatusUpdateView,
     
     # Bulk operations
     bulk_assign_orders_view,
@@ -26,6 +24,7 @@ from ..views.delivery_views import  (
     # Customer views
     customer_orders_view,
     order_tracking_view,
+    order_delivery_contact_view,
     
     # Delivery request views
     CustomerDeliveryRequestCreateView,
@@ -35,6 +34,9 @@ from ..views.delivery_views import  (
     DeliveryRequestStatusUpdateView,
     DeliveryManagerAssignedRequestsView,
     LibraryAdminRequestListView,
+    LibraryAdminAssignManagerView,
+    
+
 )
 
 app_name = 'delivery'
@@ -46,7 +48,6 @@ urlpatterns = [
     path('orders/create-from-payment/', OrderCreateFromPaymentView.as_view(), name='order-create-from-payment'),
     path('orders/<int:pk>/update-status/', OrderStatusUpdateView.as_view(), name='order-update-status'),
     path('orders/ready-for-delivery/', OrdersReadyForDeliveryView.as_view(), name='orders-ready-for-delivery'),
-    path('orders/statistics/', order_statistics_view, name='order-statistics'),
     
     # Delivery assignment endpoints
     path('assignments/', DeliveryAssignmentListView.as_view(), name='assignment-list'),
@@ -58,15 +59,12 @@ urlpatterns = [
     
     # Delivery manager management
     path('managers/available/', available_delivery_managers_view, name='available-delivery-managers'),
-    path('managers/statistics/', delivery_manager_statistics_view, name='delivery-manager-statistics'),
-    path('managers/<int:manager_id>/statistics/', delivery_manager_statistics_view, name='delivery-manager-statistics-by-id'),
-    
-    # Dashboard and analytics
-    path('dashboard/statistics/', delivery_dashboard_view, name='delivery-dashboard'),
+    path('managers/update-status/', DeliveryManagerStatusUpdateView.as_view(), name='update-manager-status'),
     
     # Customer endpoints
     path('customer/orders/', customer_orders_view, name='customer-orders'),
     path('customer/orders/track/<str:order_number>/', order_tracking_view, name='order-tracking'),
+    path('customer/orders/<int:order_id>/delivery-contact/', order_delivery_contact_view, name='order-delivery-contact'),
     
     # Customer delivery request endpoints
     path('requests/create/', CustomerDeliveryRequestCreateView.as_view(), name='request-create'),
@@ -79,6 +77,9 @@ urlpatterns = [
     path('requests/<int:pk>/update-status/', DeliveryRequestStatusUpdateView.as_view(), name='request-update-status'),
     path('managers/assigned-requests/', DeliveryManagerAssignedRequestsView.as_view(), name='manager-assigned-requests'),
     
-    # Library admin endpoints (read-only)
+    # Library admin endpoints
     path('requests/', LibraryAdminRequestListView.as_view(), name='request-list'),
+    path('requests/<int:pk>/assign-manager/', LibraryAdminAssignManagerView.as_view(), name='assign-manager'),
+    
+
 ]

@@ -12,7 +12,13 @@ class Payment(models.Model):
         ('completed', 'Completed'),
         ('failed', 'Failed'),
         ('refunded', 'Refunded'),
+        ('partially_refunded', 'Partially Refunded'),
         ('cancelled', 'Cancelled'),
+    ]
+    
+    PAYMENT_TYPE_CHOICES = [
+        ('purchase', 'Purchase'),
+        ('borrowing', 'Borrowing'),
     ]
     
     PAYMENT_METHOD_CHOICES = [
@@ -33,6 +39,13 @@ class Payment(models.Model):
         help_text="Payment amount"
     )
     
+    payment_type = models.CharField(
+        max_length=20,
+        choices=PAYMENT_TYPE_CHOICES,
+        default='purchase',
+        help_text="Type of payment (purchase or borrowing)"
+    )
+    
     payment_method = models.CharField(
         max_length=20,
         choices=PAYMENT_METHOD_CHOICES,
@@ -44,6 +57,34 @@ class Payment(models.Model):
         choices=PAYMENT_STATUS_CHOICES,
         default='pending',
         help_text="Current status of the payment"
+    )
+    
+    # Borrowing-related fields
+    borrow_request = models.ForeignKey(
+        'BorrowRequest',
+        on_delete=models.CASCADE,
+        related_name='payments',
+        null=True,
+        blank=True,
+        help_text="Associated borrow request (for borrowing payments)"
+    )
+    
+    is_borrow_payment = models.BooleanField(
+        default=False,
+        help_text="Whether this is a borrowing payment"
+    )
+    
+    refund_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0.00,
+        help_text="Amount refunded (for borrowing returns)"
+    )
+    
+    refund_date = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Date when refund was processed"
     )
     
     transaction_id = models.CharField(
@@ -71,6 +112,40 @@ class Payment(models.Model):
     
     def __str__(self):
         return f"Payment {self.id} - {self.get_payment_method_display()} - {self.get_status_display()}"
+    
+    def process_refund(self, refund_amount):
+        """Process a refund for borrowing payment"""
+        from django.utils import timezone
+        
+        if not self.is_borrow_payment:
+            raise ValueError("Cannot refund non-borrowing payment")
+        
+        if refund_amount > self.amount:
+            raise ValueError("Refund amount cannot exceed payment amount")
+        
+        self.refund_amount = refund_amount
+        self.refund_date = timezone.now()
+        
+        if refund_amount == self.amount:
+            self.status = 'refunded'
+        else:
+            self.status = 'partially_refunded'
+        
+        self.save()
+        return self
+    
+    def can_refund(self):
+        """Check if payment can be refunded"""
+        return (
+            self.is_borrow_payment and 
+            self.status == 'completed' and 
+            self.refund_amount == 0
+        )
+    
+    @property
+    def remaining_amount(self):
+        """Get remaining amount after refund"""
+        return self.amount - self.refund_amount
 
 
 class CreditCardPayment(models.Model):

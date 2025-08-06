@@ -7,12 +7,19 @@ from bookstore_api.views.library_views import (
     BookManagementView,
     # Advanced book filtering views
     NewBooksView, BooksByCategoryView, BooksByAuthorView, BooksByPriceRangeView,
+    BooksByRatingView, TopRatedBooksView,
     # Category views
     CategoryCreateView, CategoryListView, CategoryDetailView, CategoryUpdateView, 
     CategoryDeleteView, CategoryManagementView, CategoryChoicesView,
     # Author views
     AuthorCreateView, AuthorListView, AuthorDetailView, AuthorWithBooksView,
-    AuthorUpdateView, AuthorDeleteView, AuthorManagementView, AuthorChoicesView
+    AuthorUpdateView, AuthorDeleteView, AuthorManagementView, AuthorChoicesView,
+    # Evaluation views
+    EvaluationCreateView, EvaluationListView, EvaluationDetailView, EvaluationUpdateView,
+    EvaluationDeleteView, BookEvaluationsView, UserEvaluationsView, EvaluationManagementView,
+    # Favorites views
+    FavoriteAddView, FavoriteListView, FavoriteDetailView, FavoriteDeleteView,
+    BookFavoriteStatusView
 )
 
 # Library URLs configuration
@@ -24,7 +31,6 @@ library_urls = [
     path('delete/', LibraryDeleteView.as_view(), name='library_delete'),
     # Public library endpoints (All users)
     path('info/', LibraryPublicView.as_view(), name='library_public_info'),
-    
     # =====================================
     # BOOK MANAGEMENT ENDPOINTS
     # =====================================
@@ -36,7 +42,6 @@ library_urls = [
     # Book access endpoints (All authenticated users)
     path('books/', BookListView.as_view(), name='book_list'),
     path('books/<int:pk>/', BookDetailView.as_view(), name='book_detail'),
-    
     # =====================================
     # ADVANCED BOOK FILTERING ENDPOINTS
     # =====================================
@@ -48,7 +53,10 @@ library_urls = [
     path('books/author/', BooksByAuthorView.as_view(), name='books_by_author'),
     # Books by price range
     path('books/price-range/', BooksByPriceRangeView.as_view(), name='books_by_price_range'),
-    
+    # Books by rating/evaluation
+    path('books/by-rating/', BooksByRatingView.as_view(), name='books_by_rating'),
+    # Top-rated books
+    path('books/top-rated/', TopRatedBooksView.as_view(), name='top_rated_books'),
     # =====================================
     # CATEGORY MANAGEMENT ENDPOINTS
     # =====================================
@@ -61,7 +69,6 @@ library_urls = [
     path('categories/', CategoryListView.as_view(), name='category_list'),
     path('categories/<int:pk>/', CategoryDetailView.as_view(), name='category_detail'),
     path('categories/choices/', CategoryChoicesView.as_view(), name='category_choices'),
-    
     # =====================================
     # AUTHOR MANAGEMENT ENDPOINTS
     # =====================================
@@ -75,4 +82,29 @@ library_urls = [
     path('authors/<int:pk>/', AuthorDetailView.as_view(), name='author_detail'),
     path('authors/<int:pk>/books/', AuthorWithBooksView.as_view(), name='author_with_books'),
     path('authors/choices/', AuthorChoicesView.as_view(), name='author_choices'),
-] 
+    # =====================================
+    # BOOK REVIEW MANAGEMENT ENDPOINTS
+    # =====================================
+    # Book review management endpoints (Library Admin - VIEW ONLY)
+    path('book-reviews/manage/', EvaluationManagementView.as_view(), name='book_review_management'),
+    # Book review CRUD endpoints (Customers only)
+    path('book-reviews/create/', EvaluationCreateView.as_view(), name='book_review_create'),
+    path('book-reviews/', EvaluationListView.as_view(), name='book_review_list'),
+    path('book-reviews/<int:pk>/', EvaluationDetailView.as_view(), name='book_review_detail'),
+    path('book-reviews/<int:pk>/update/', EvaluationUpdateView.as_view(), name='book_review_update'),
+    path('book-reviews/<int:pk>/delete/', EvaluationDeleteView.as_view(), name='book_review_delete'),
+    # Book-specific review endpoints (All authenticated users)
+    path('books/<int:book_id>/reviews/', BookEvaluationsView.as_view(), name='book_reviews_for_book'),
+    # User-specific review endpoints (Authenticated users)
+    path('my-book-reviews/', UserEvaluationsView.as_view(), name='user_book_reviews'),
+    # =====================================
+    # FAVORITES ENDPOINTS
+    # =====================================
+    # Favorites management endpoints (Customers only)
+    path('favorites/add/', FavoriteAddView.as_view(), name='favorite_add'),
+    path('favorites/', FavoriteListView.as_view(), name='favorite_list'),
+    path('favorites/<int:pk>/', FavoriteDetailView.as_view(), name='favorite_detail'),
+    path('favorites/<int:pk>/delete/', FavoriteDeleteView.as_view(), name='favorite_delete'),
+    # Heart icon status check
+    path('books/<int:book_id>/favorite/status/', BookFavoriteStatusView.as_view(), name='book_favorite_status'),
+]

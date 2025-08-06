@@ -23,8 +23,32 @@ from .library_views import (
     BookUpdateView,
     BookDeleteView,
     BookManagementView,
+    # Evaluation views
+    EvaluationManagementView,
+    EvaluationCreateView,
+    EvaluationListView,
+    EvaluationDetailView,
+    EvaluationUpdateView,
+    EvaluationDeleteView,
+    BookEvaluationsView,
+    UserEvaluationsView,
 )
 
+
+
+from .notification_views import NotificationViewSet
+
+from .discount_views import (
+    DiscountCodeListCreateView,
+    DiscountCodeDetailView,
+    DiscountCodeValidationView,
+    DiscountCodeApplicationView,
+    CustomerDiscountUsageHistoryView,
+    DiscountUsageReportView,
+    DiscountCodeCleanupView,
+    get_user_available_codes,
+    quick_code_check,
+)
 
 __all__ = [
     'RegisterView',
@@ -69,5 +93,29 @@ __all__ = [
     'MyDeliveryAssignmentsView', 'order_statistics_view',
     'delivery_dashboard_view', 'delivery_manager_statistics_view',
     'available_delivery_managers_view', 'bulk_assign_orders_view',
-    'customer_orders_view', 'order_tracking_view'
+    'customer_orders_view', 'order_tracking_view',
+    # Delivery views
+
+
+    # Notification views
+    'NotificationViewSet',
+    # Evaluation views
+    'EvaluationManagementView',
+    'EvaluationCreateView',
+    'EvaluationListView',
+    'EvaluationDetailView',
+    'EvaluationUpdateView',
+    'EvaluationDeleteView',
+    'BookEvaluationsView',
+    'UserEvaluationsView',
+    # Discount views
+    'DiscountCodeListCreateView',
+    'DiscountCodeDetailView',
+    'DiscountCodeValidationView',
+    'DiscountCodeApplicationView',
+    'CustomerDiscountUsageHistoryView',
+    'DiscountUsageReportView',
+    'DiscountCodeCleanupView',
+    'get_user_available_codes',
+    'quick_code_check',
 ] 
