@@ -382,6 +382,36 @@ class UserAccountService:
             return False
     
     @staticmethod
+    def change_email(user: User, new_email: str) -> Dict[str, Any]:
+        """
+        Change user's email address.
+        """
+        try:
+            old_email = user.email
+            
+            # Update email and username (since username is set to email)
+            user.email = new_email.lower()
+            user.username = new_email.lower()
+            user.save(update_fields=['email', 'username'])
+            
+            logger.info(f"Email changed for user from {old_email} to {new_email}")
+            
+            return {
+                'success': True,
+                'message': 'Email changed successfully',
+                'old_email': old_email,
+                'new_email': new_email
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to change email for user {user.email}: {str(e)}")
+            return {
+                'success': False,
+                'message': 'Failed to change email',
+                'errors': format_error_message(str(e))
+            }
+    
+    @staticmethod
     def get_user_statistics() -> Dict[str, Any]:
         """
         Get user registration statistics.

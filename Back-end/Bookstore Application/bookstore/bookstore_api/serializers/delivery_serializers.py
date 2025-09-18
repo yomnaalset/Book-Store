@@ -39,7 +39,7 @@ class OrderListSerializer(serializers.ModelSerializer):
     """
     customer_name = serializers.CharField(source='customer.get_full_name', read_only=True)
     customer_email = serializers.CharField(source='customer.email', read_only=True)
-    payment_method = serializers.CharField(source='payment.get_payment_method_display', read_only=True)
+    payment_type = serializers.CharField(source='payment.get_payment_type_display', read_only=True)
     payment_status = serializers.CharField(source='payment.get_status_display', read_only=True)
     total_items = serializers.IntegerField(source='get_total_items', read_only=True)
     total_quantity = serializers.IntegerField(source='get_total_quantity', read_only=True)
@@ -49,7 +49,7 @@ class OrderListSerializer(serializers.ModelSerializer):
         model = Order
         fields = [
             'id', 'order_number', 'customer_name', 'customer_email',
-            'total_amount', 'status', 'payment_method', 'payment_status',
+            'total_amount', 'status', 'payment_type', 'payment_status',
             'total_items', 'total_quantity', 'has_delivery_assignment',
             'created_at', 'updated_at'
         ]
@@ -274,7 +274,7 @@ class DeliveryAssignmentStatusUpdateSerializer(serializers.Serializer):
     """
     Serializer for updating delivery assignment status.
     """
-    STATUS_CHOICES = DeliveryAssignment.ASSIGNMENT_STATUS_CHOICES
+    STATUS_CHOICES = DeliveryStatusHistory.STATUS_CHOICES
     
     status = serializers.ChoiceField(choices=STATUS_CHOICES)
     notes = serializers.CharField(max_length=1000, required=False, allow_blank=True)
@@ -325,11 +325,11 @@ class DeliveryStatusHistorySerializer(serializers.ModelSerializer):
     
     def get_previous_status_display(self, obj):
         """Get display name for previous status."""
-        return dict(DeliveryAssignment.ASSIGNMENT_STATUS_CHOICES).get(obj.previous_status, obj.previous_status)
+        return dict(DeliveryStatusHistory.STATUS_CHOICES).get(obj.previous_status, obj.previous_status)
     
     def get_new_status_display(self, obj):
         """Get display name for new status."""
-        return dict(DeliveryAssignment.ASSIGNMENT_STATUS_CHOICES).get(obj.new_status, obj.new_status)
+        return dict(DeliveryStatusHistory.STATUS_CHOICES).get(obj.new_status, obj.new_status)
 
 
 class OrderCreateFromPaymentSerializer(serializers.ModelSerializer):
@@ -384,9 +384,10 @@ class OrderCreateFromPaymentSerializer(serializers.ModelSerializer):
             **delivery_info
         )
         
-        # Create order items from cart
+        # Create order items from cart and update book quantities
         cart = payment.user.cart
         for cart_item in cart.items.all():
+            # Create order item
             OrderItem.objects.create(
                 order=order,
                 book=cart_item.book,
@@ -394,6 +395,14 @@ class OrderCreateFromPaymentSerializer(serializers.ModelSerializer):
                 book_price=cart_item.book.price,
                 quantity=cart_item.quantity
             )
+            
+            # Update book quantities
+            book = cart_item.book
+            if book.availableCopies is not None:
+                book.availableCopies = max(0, book.availableCopies - cart_item.quantity)
+            if book.quantity is not None:
+                book.quantity = max(0, book.quantity - cart_item.quantity)
+            book.save(update_fields=['availableCopies', 'quantity'])
         
         # Clear cart after order creation
         cart.clear()
@@ -483,7 +492,7 @@ class DeliveryRequestStatusUpdateSerializer(serializers.Serializer):
     """
     Serializer for updating delivery request status.
     """
-    STATUS_CHOICES = DeliveryRequest.REQUEST_STATUS_CHOICES
+    STATUS_CHOICES = DeliveryRequest.STATUS_CHOICES
     
     status = serializers.ChoiceField(choices=STATUS_CHOICES)
     notes = serializers.CharField(required=False, allow_blank=True) 

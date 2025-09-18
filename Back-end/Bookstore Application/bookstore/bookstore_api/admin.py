@@ -1,8 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import Group
-from django.utils.translation import gettext_lazy as _
-
 from .models import User, UserProfile, Library, Notification, DiscountCode, DiscountUsage
 from .models.library_model import Book, BookImage, Category, Author
 
@@ -63,17 +61,17 @@ class UserAdmin(BaseUserAdmin):
         (None, {
             'fields': ('email', 'username', 'password')
         }),
-        (_('Personal info'), {
+        ('Personal info', {
             'fields': ('first_name', 'last_name', 'user_type', 'phone_number')
         }),
-        (_('Address'), {
+        ('Address', {
             'fields': ('address', 'city'),
             'classes': ('collapse',)
         }),
-        (_('Permissions'), {
+        ('Permissions', {
             'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions'),
         }),
-        (_('Important dates'), {
+        ('Important dates', {
             'fields': ('last_login', 'date_joined', 'last_updated'),
             'classes': ('collapse',)
         }),
@@ -238,22 +236,22 @@ class AuthorAdmin(admin.ModelAdmin):
 @admin.register(Notification)
 class NotificationAdmin(admin.ModelAdmin):
     """Custom admin for Notification model."""
-    list_display = ('user', 'title', 'notification_type', 'is_read', 'created_at')
-    list_filter = ('notification_type', 'is_read', 'created_at')
-    search_fields = ('user__email', 'title', 'message')
+    list_display = ('recipient', 'title', 'notification_type', 'status', 'created_at')
+    list_filter = ('notification_type', 'status', 'created_at')
+    search_fields = ('recipient__email', 'title', 'message')
     readonly_fields = ('created_at',)
     
     actions = ['mark_as_read', 'mark_as_unread']
     
     def mark_as_read(self, request, queryset):
         """Action to mark selected notifications as read."""
-        queryset.update(is_read=True)
+        queryset.update(status='read')
         self.message_user(request, f'{queryset.count()} notifications were marked as read.')
     mark_as_read.short_description = "Mark selected notifications as read"
     
     def mark_as_unread(self, request, queryset):
         """Action to mark selected notifications as unread."""
-        queryset.update(is_read=False)
+        queryset.update(status='unread')
         self.message_user(request, f'{queryset.count()} notifications were marked as unread.')
     mark_as_unread.short_description = "Mark selected notifications as unread"
 
@@ -264,8 +262,8 @@ class DiscountUsageInline(admin.TabularInline):
     """
     model = DiscountUsage
     extra = 0
-    readonly_fields = ('user', 'order_amount', 'discount_amount', 'final_amount', 'used_at', 'payment_reference')
-    fields = ('user', 'order_amount', 'discount_amount', 'used_at', 'payment_reference')
+    readonly_fields = ('customer', 'order', 'discount_amount', 'used_at')
+    fields = ('customer', 'order', 'discount_amount', 'used_at')
     
     def has_add_permission(self, request, obj=None):
         """Prevent manual addition of usage records."""
@@ -337,7 +335,7 @@ class DiscountCodeAdmin(admin.ModelAdmin):
         from django.utils import timezone
         expired_unused = queryset.filter(
             expiration_date__lte=timezone.now(),
-            usage_records__isnull=True
+            usages__isnull=True
         )
         count = expired_unused.count()
         expired_unused.delete()
@@ -354,7 +352,7 @@ class DiscountCodeAdmin(admin.ModelAdmin):
     
     def usage_count(self, obj):
         """Get the total usage count for this discount code."""
-        return obj.usage_records.count()
+        return obj.usages.count()
     usage_count.short_description = 'Total Uses'
     
     # Limit queryset to ensure proper permissions
@@ -376,19 +374,18 @@ class DiscountUsageAdmin(admin.ModelAdmin):
     
     # Fields to display in the usage list
     list_display = (
-        'discount_code', 'user', 'discount_amount', 'order_amount', 
-        'final_amount', 'used_at', 'payment_reference'
+        'discount_code', 'customer', 'order', 'discount_amount', 'used_at'
     )
     
     # Fields that can be used to filter the usage list
     list_filter = (
-        'discount_code', 'used_at', 'user__user_type'
+        'discount_code', 'used_at', 'customer__user_type'
     )
     
     # Fields that can be searched
     search_fields = (
-        'discount_code__code', 'user__email', 'user__first_name', 
-        'user__last_name', 'payment_reference'
+        'discount_code__code', 'customer__email', 'customer__first_name', 
+        'customer__last_name'
     )
     
     # Default ordering
@@ -398,12 +395,8 @@ class DiscountUsageAdmin(admin.ModelAdmin):
     fieldsets = (
         ('Usage Information', {
             'fields': (
-                'discount_code', 'user', 'order_amount', 
-                'discount_amount', 'final_amount'
+                'discount_code', 'customer', 'order', 'discount_amount'
             )
-        }),
-        ('Reference', {
-            'fields': ('payment_reference',)
         }),
         ('Metadata', {
             'fields': ('used_at',),

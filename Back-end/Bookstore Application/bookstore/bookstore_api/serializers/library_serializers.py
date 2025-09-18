@@ -57,9 +57,10 @@ class LibraryCreateSerializer(serializers.ModelSerializer):
         """
         if not Library.can_create_library():
             existing_library = Library.get_current_library()
+            library_name = existing_library.name if existing_library else "Unknown"
             raise serializers.ValidationError(
                 f"Only one library can exist at a time. "
-                f"Please delete the existing library '{existing_library.name}' first."
+                f"Please delete the existing library '{library_name}' first."
             )
         return attrs
     
@@ -67,23 +68,36 @@ class LibraryCreateSerializer(serializers.ModelSerializer):
         """
         Create a new library with the current user as creator.
         """
-        # Get the current user from the context
-        user = self.context['request'].user
-        
-        # Ensure user is a library administrator
-        if not user.is_library_admin():
-            raise serializers.ValidationError(
-                "Only library administrators can create libraries."
+        try:
+            # Get the current user from the context
+            if 'request' not in self.context:
+                raise serializers.ValidationError("Request context not available")
+            
+            user = self.context['request'].user
+            
+            if not user or not user.is_authenticated:
+                raise serializers.ValidationError("User not authenticated")
+            
+            # Ensure user is a library administrator
+            if not user.is_library_admin():
+                raise serializers.ValidationError(
+                    f"Only library administrators can create libraries. User type: {user.user_type}"
+                )
+            
+            # Create the library with all validated data including logo
+            library = Library.objects.create(
+                created_by=user,
+                last_updated_by=user,
+                **validated_data
             )
-        
-        # Create the library
-        library = Library.objects.create(
-            created_by=user,
-            last_updated_by=user,
-            **validated_data
-        )
-        
-        return library
+            
+            return library
+        except Exception as e:
+            # Log the error for debugging
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error in LibraryCreateSerializer.create: {str(e)}")
+            raise serializers.ValidationError(f"Error creating library: {str(e)}")
 
 
 class LibraryUpdateSerializer(serializers.ModelSerializer):
@@ -123,9 +137,9 @@ class LibraryUpdateSerializer(serializers.ModelSerializer):
         
         # Handle logo deletion
         logo = validated_data.get('logo', 'not_provided')
-        if logo == 'not_provided':
-            # Logo field was not included in the request
-            pass
+        if logo == 'not_provided' or logo == 'KEEP_EXISTING':
+            # Logo field was not included in the request or user wants to keep existing
+            validated_data.pop('logo', None)  # Remove logo from update data
         elif logo is None:
             # User wants to delete the current logo
             if instance.logo:
@@ -267,7 +281,7 @@ class BookCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Book
         fields = [
-            'name', 'title', 'description', 'author', 'price', 'borrow_price',
+            'name', 'description', 'author', 'price', 'borrow_price',
             'is_available', 'is_available_for_borrow', 'is_new', 'quantity', 'available_copies',
             'category', 'images'
         ]
@@ -275,10 +289,6 @@ class BookCreateSerializer(serializers.ModelSerializer):
             'name': {
                 'required': True,
                 'help_text': 'Name of the book'
-            },
-            'title': {
-                'required': False,
-                'help_text': 'Title of the book (defaults to name if not provided)'
             },
 
             'description': {
@@ -318,8 +328,8 @@ class BookCreateSerializer(serializers.ModelSerializer):
                 'help_text': 'Number of copies currently available (defaults to quantity)'
             },
             'category': {
-                'required': False,
-                'help_text': 'Category ID for the book (optional, must be active category)'
+                'required': True,
+                'help_text': 'Category ID for the book (required, must be active category)'
             },
         }
     
@@ -399,6 +409,45 @@ class BookCreateSerializer(serializers.ModelSerializer):
                 'available_copies': 'Available copies cannot exceed total quantity'
             })
         
+        # Validate category is provided and active
+        category = data.get('category')
+        if not category:
+            raise serializers.ValidationError({
+                'category': 'Category is required for creating a book.'
+            })
+        
+        if not category.is_active:
+            raise serializers.ValidationError({
+                'category': 'Cannot assign book to an inactive category. Please choose an active category.'
+            })
+        
+        # Validate author is provided and active
+        author = data.get('author')
+        if not author:
+            raise serializers.ValidationError({
+                'author': 'Author is required for creating a book.'
+            })
+        
+        if not author.is_active:
+            raise serializers.ValidationError({
+                'author': 'Cannot assign book to an inactive author. Please choose an active author.'
+            })
+        
+        # Check for duplicate book (unique constraint: library + name + author)
+        from ..models import Library
+        library = Library.get_current_library()
+        if library:
+            existing_book = Book.objects.filter(
+                library=library,
+                name=data.get('name'),
+                author=data.get('author')
+            ).first()
+            
+            if existing_book:
+                raise serializers.ValidationError({
+                    'name': f'A book with the name "{data.get("name")}" by {author.name} already exists in this library. Please choose a different name or author.'
+                })
+        
         return data
     
     def create(self, validated_data):
@@ -471,7 +520,8 @@ class BookUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Book
         fields = [
-            'name', 'description', 'author', 'price', 'is_available', 'is_new', 'category',
+            'name', 'description', 'author', 'price', 'borrow_price', 'available_copies', 
+            'quantity', 'is_available', 'is_available_for_borrow', 'is_new', 'category',
             'new_images', 'remove_images'
         ]
         extra_kwargs = {
@@ -479,7 +529,11 @@ class BookUpdateSerializer(serializers.ModelSerializer):
             'description': {'required': False},
             'author': {'required': False, 'help_text': 'Author ID (must be an existing active author)'},
             'price': {'required': False, 'help_text': 'Price of the book'},
+            'borrow_price': {'required': False, 'help_text': 'Borrow price of the book'},
+            'available_copies': {'required': False, 'help_text': 'Number of available copies'},
+            'quantity': {'required': False, 'help_text': 'Total quantity of the book'},
             'is_available': {'required': False},
+            'is_available_for_borrow': {'required': False, 'help_text': 'Whether the book is available for borrowing'},
             'is_new': {'required': False, 'help_text': 'Whether the book is marked as new'},
             'category': {'required': False, 'help_text': 'Category ID for the book (optional, must be active category)'},
         }
@@ -599,14 +653,14 @@ class BookDetailSerializer(serializers.ModelSerializer):
     evaluations_count = serializers.IntegerField(source='get_evaluations_count', read_only=True)
     
     # Borrowing-related fields
-    can_borrow = serializers.BooleanField( read_only=True)
-    can_purchase = serializers.BooleanField( read_only=True)
+    can_borrow = serializers.BooleanField(read_only=True)
+    can_purchase = serializers.BooleanField(read_only=True)
     borrowing_options = serializers.DictField(source='get_borrowing_options', read_only=True)
     
     class Meta:
         model = Book
         fields = [
-            'id', 'name', 'title', 'description', 'author', 'author_id', 'author_name', 
+            'id', 'name', 'description', 'author', 'author_id', 'author_name', 
             'price', 'borrow_price', 'is_available', 'is_available_for_borrow', 'is_new',
             'quantity', 'available_copies', 'borrow_count',
             'library', 'library_name', 'category', 'category_id', 'category_name',
@@ -635,13 +689,13 @@ class BookListSerializer(serializers.ModelSerializer):
     author_id = serializers.IntegerField(source='author.id', read_only=True)
     primary_image_url = serializers.CharField(source='get_primary_image_url', read_only=True)
     image_count = serializers.IntegerField(source='get_image_count', read_only=True)
-    can_borrow = serializers.BooleanField(source='can_borrow', read_only=True)
-    can_purchase = serializers.BooleanField(source='can_purchase', read_only=True)
+    can_borrow = serializers.BooleanField(read_only=True)
+    can_purchase = serializers.BooleanField(read_only=True)
     
     class Meta:
         model = Book
         fields = [
-            'id', 'name', 'title', 'author_id', 'author_name', 
+            'id', 'name', 'author_id', 'author_name', 
             'price', 'borrow_price', 'is_available', 'is_available_for_borrow', 'is_new',
             'quantity', 'available_copies', 'borrow_count',
             'library_name', 'category_id', 'category_name', 
@@ -714,8 +768,8 @@ class CategoryCreateSerializer(serializers.ModelSerializer):
                 'help_text': 'Name of the category (must be unique)'
             },
             'description': {
-                'required': True,
-                'help_text': 'Description of the category'
+                'required': False,
+                'help_text': 'Description of the category (optional)'
             },
             'is_active': {
                 'default': True,

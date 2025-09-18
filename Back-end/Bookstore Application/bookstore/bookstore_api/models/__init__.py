@@ -12,6 +12,11 @@ from .borrowing_model import (
     BorrowStatusChoices, ExtensionStatusChoices, FineStatusChoices
 )
 from .discount_model import DiscountCode, DiscountUsage
+from .complaint_model import Complaint, ComplaintResponse
+from .report_model import Report, ReportTemplate
+from .ad_model import Advertisement, AdvertisementStatusChoices
+from .user_preferences_model import UserNotificationPreferences, UserPrivacyPreferences, UserPreference
+from .help_support_model import FAQ, UserGuide, TroubleshootingGuide, SupportContact
 __all__ = [
     'User', 'UserProfile',  
     'Library', 'Book','BookImage', 'Category', 'Author',
@@ -21,5 +26,10 @@ __all__ = [
     'Notification', 'NotificationType', 'BookEvaluation', 'Favorite',
     'BorrowRequest', 'BorrowExtension', 'BorrowFine', 'BorrowStatistics',
     'BorrowStatusChoices', 'ExtensionStatusChoices', 'FineStatusChoices',
-    'DiscountCode', 'DiscountUsage'
+    'DiscountCode', 'DiscountUsage',
+    'Complaint', 'ComplaintResponse',
+    'Report', 'ReportTemplate',
+    'Advertisement', 'AdvertisementStatusChoices',
+    'UserNotificationPreferences', 'UserPrivacyPreferences', 'UserPreference',
+    'FAQ', 'UserGuide', 'TroubleshootingGuide', 'SupportContact'
 ]

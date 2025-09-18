@@ -21,8 +21,7 @@ from ..serializers import (
 )
 from ..services import (
     DiscountCodeService,
-    DiscountValidationService,
-    DiscountReportingService,
+    DiscountValidationService,  
 )
 from ..permissions import IsOwnerOrAdmin
 from ..utils import format_error_message
@@ -50,11 +49,22 @@ class DiscountCodeListCreateView(generics.ListCreateAPIView):
                 self.request.user.user_type == 'library_admin'):
             return DiscountCode.objects.none()
         
+        # Support both include_inactive and is_active parameters
         include_inactive = self.request.query_params.get('include_inactive', 'false').lower() == 'true'
-        if include_inactive:
-            return DiscountCode.objects.all().order_by('-created_at')
-        else:
-            return DiscountCode.objects.filter(is_active=True).order_by('-created_at')
+        is_active_param = self.request.query_params.get('is_active')
+        
+        queryset = DiscountCode.objects.all()
+        
+        if is_active_param is not None:
+            # If is_active parameter is provided, use it for filtering
+            is_active_bool = is_active_param.lower() in ['true', '1', 'yes']
+            queryset = queryset.filter(is_active=is_active_bool)
+        elif not include_inactive:
+            # If no is_active parameter but include_inactive is false, show only active
+            queryset = queryset.filter(is_active=True)
+        # If include_inactive is true and no is_active parameter, show all codes
+        
+        return queryset.order_by('-created_at')
     
     def get(self, request, *args, **kwargs):
         """
@@ -68,8 +78,29 @@ class DiscountCodeListCreateView(generics.ListCreateAPIView):
             )
         
         try:
+            # Support both include_inactive and is_active parameters
             include_inactive = request.query_params.get('include_inactive', 'false').lower() == 'true'
-            result = DiscountCodeService.get_discount_codes(include_inactive=include_inactive)
+            is_active_param = request.query_params.get('is_active')
+            
+            # Convert is_active parameter to boolean or None
+            is_active = None
+            if is_active_param is not None:
+                if is_active_param.lower() in ['true', '1', 'yes']:
+                    is_active = True
+                elif is_active_param.lower() in ['false', '0', 'no']:
+                    is_active = False
+                # If is_active_param is 'null' or any other value, keep is_active as None (show all)
+            
+            # If is_active is None (show all), set include_inactive to True
+            if is_active is None:
+                include_inactive = True
+            
+            logger.info(f"Discount API - include_inactive: {include_inactive}, is_active_param: {is_active_param}, is_active: {is_active}")
+            
+            result = DiscountCodeService.get_discount_codes(
+                include_inactive=include_inactive,
+                is_active=is_active
+            )
             
             if result['success']:
                 return Response(result['data'], status=status.HTTP_200_OK)
@@ -256,13 +287,13 @@ class DiscountCodeApplicationView(APIView):
             
             if not code:
                 return Response(
-                    {'error': 'Discount code is required.'},
+                    {'error': ('Discount code is required.')   },
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
             if not order_amount or order_amount <= 0:
                 return Response(
-                    {'error': 'Valid order amount is required.'},
+                    {'error': ('Valid order amount is required.')},
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
@@ -286,88 +317,7 @@ class DiscountCodeApplicationView(APIView):
             )
 
 
-class CustomerDiscountUsageHistoryView(generics.ListAPIView):
-    """
-    API view for customers to view their discount usage history.
-    """
-    serializer_class = CustomerDiscountUsageSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def get_queryset(self):
-        """
-        Return discount usage history for the current user.
-        """
-        if self.request.user.user_type != 'customer':
-            return DiscountUsage.objects.none()
-        
-        return DiscountUsage.objects.filter(
-            user=self.request.user
-        ).select_related('discount_code').order_by('-used_at')
-    
-    def get(self, request, *args, **kwargs):
-        """
-        Get discount usage history with summary statistics.
-        """
-        if request.user.user_type != 'customer':
-            return Response(
-                {'error': 'Only customers can view discount usage history.'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        try:
-            # Get detailed history
-            result = DiscountReportingService.get_user_discount_history(request.user)
-            
-            if result['success']:
-                return Response(result['data'], status=status.HTTP_200_OK)
-            else:
-                return Response(
-                    {'error': result.get('error', 'Unknown error')},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
-                )
-                
-        except Exception as e:
-            logger.error(f"Error in CustomerDiscountUsageHistoryView.get: {str(e)}")
-            return Response(
-                {'error': 'An unexpected error occurred while retrieving discount history.'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
 
-
-class DiscountUsageReportView(APIView):
-    """
-    API view for library admins to view discount usage reports and statistics.
-    """
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def get(self, request):
-        """
-        Get comprehensive discount usage statistics and reports.
-        """
-        # Only library admins can access reports
-        if not (request.user.is_authenticated and request.user.user_type == 'library_admin'):
-            return Response(
-                {'error': 'Only library administrators can access discount reports.'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        try:
-            result = DiscountReportingService.get_discount_usage_stats()
-            
-            if result['success']:
-                return Response(result['stats'], status=status.HTTP_200_OK)
-            else:
-                return Response(
-                    {'error': result.get('error', 'Unknown error')},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
-                )
-                
-        except Exception as e:
-            logger.error(f"Error in DiscountUsageReportView.get: {str(e)}")
-            return Response(
-                {'error': 'An unexpected error occurred while generating discount reports.'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
 
 
 class DiscountCodeCleanupView(APIView):

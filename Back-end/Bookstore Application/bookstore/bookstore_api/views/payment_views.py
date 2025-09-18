@@ -2,7 +2,6 @@ from rest_framework import status, permissions
 from rest_framework.views import APIView
 from rest_framework.response import Response
 import logging
-
 from ..models import Payment
 from ..serializers import (
     PaymentSerializer, CreditCardPaymentSerializer, CashOnDeliveryPaymentSerializer,
@@ -176,6 +175,6 @@ class CashOnDeliveryPaymentView(APIView):
             logger.error(f"Error processing cash on delivery payment: {str(e)}")
             return Response({
                 'success': False,
-                'message': 'Failed to process cash on delivery payment',
+                'message': 'Failed to process cash on delivery payment' ,
                 'errors': format_error_message(str(e))
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

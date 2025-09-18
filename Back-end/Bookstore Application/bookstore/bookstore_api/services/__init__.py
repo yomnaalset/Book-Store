@@ -30,7 +30,16 @@ from .borrowing_services import (
 from .discount_services import (
     DiscountCodeService,
     DiscountValidationService,
-    DiscountReportingService,
+)
+
+from .complaint_services import ComplaintManagementService
+from .report_services import ReportManagementService
+
+from .ad_services import (
+    AdvertisementManagementService,
+    AdvertisementStatusService,
+    AdvertisementAnalyticsService,
+    AdvertisementSchedulingService,
 )
 
 
@@ -59,5 +68,12 @@ __all__ = [
     # Discount services
     'DiscountCodeService',
     'DiscountValidationService',
-    'DiscountReportingService',
+    # Complaint services
+    'ComplaintManagementService',
+    'ReportManagementService',
+    # Advertisement services
+    'AdvertisementManagementService',
+    'AdvertisementStatusService',
+    'AdvertisementAnalyticsService',
+    'AdvertisementSchedulingService',
 ] 

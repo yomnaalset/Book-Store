@@ -56,6 +56,11 @@ class User(AbstractUser):
         ('busy', 'Busy - Currently Delivering'),
     ]
     
+    LANGUAGE_CHOICES = [
+        ('en', 'English'),
+        ('ar', 'Arabic'),
+    ]
+    
     # Basic user information (required during registration)
     email = models.EmailField(unique=True, help_text="User's email address")
     first_name = models.CharField(max_length=30, help_text="User's first name")
@@ -73,6 +78,14 @@ class User(AbstractUser):
         choices=DELIVERY_STATUS_CHOICES,
         default='offline',
         help_text="Current status of delivery manager (online/offline/busy)"
+    )
+    
+    # Language preference
+    preferred_language = models.CharField(
+        max_length=5,
+        choices=LANGUAGE_CHOICES,
+        default='en',
+        help_text="User's preferred language for the interface"
     )
     
     # Note: Contact information (phone_number, address, city) moved to UserProfile model
@@ -125,6 +138,10 @@ class User(AbstractUser):
     def is_system_admin(self):
         """Check if user is a library administrator (deprecated - use is_library_admin)."""
         return self.is_library_admin()
+    
+    def get_language_preference(self):
+        """Get user's preferred language."""
+        return self.preferred_language or 'en'
     
     def has_complete_profile(self):
         """Check if user has completed their profile."""
@@ -194,8 +211,8 @@ class UserProfile(models.Model):
     
     # Contact information (moved from User model)
     phone_regex = RegexValidator(
-        regex=r'^\+?1?\d{9,15}$',
-        message="Phone number must be entered in the format: '+999999999'. Up to 15 digits allowed."
+        regex=r'^\+?[\d\s\-\(\)]{7,20}$',
+        message="Phone number must be entered in a valid format (e.g., +1234567890)."
     )
     phone_number = models.CharField(
         validators=[phone_regex], 
@@ -212,10 +229,28 @@ class UserProfile(models.Model):
         help_text="User's address"
     )
     city = models.CharField(
-        max_length=100, 
-        blank=True, 
-        null=True, 
-        help_text="User's city"
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="User's city"  
+    )
+    state = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="User's state or province"
+    )
+    zip_code = models.CharField(
+        max_length=20,
+        blank=True,
+        null=True,
+        help_text="User's ZIP or postal code"
+    )
+    country = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="User's country"
     )
     
     # Additional profile fields (optional)
@@ -243,13 +278,7 @@ class UserProfile(models.Model):
         return f"{self.first_name} {self.last_name}".strip()
     
     def sync_name_from_user(self):
-        """Sync first_name and last_name from the related user."""
-        self.first_name = self.user.first_name or ''
-        self.last_name = self.user.last_name or ''
-    
-    def save(self, *args, **kwargs):
-        """Override save to keep name fields in sync with user."""
-        # Sync name from user before saving
-        if self.user_id:
-            self.sync_name_from_user()
-        super().save(*args, **kwargs) 
+        """Sync name fields from the associated User model."""
+        if self.user:
+            self.first_name = self.user.first_name
+            self.last_name = self.user.last_name

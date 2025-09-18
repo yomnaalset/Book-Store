@@ -74,11 +74,22 @@ class OrderService:
             if delivery_data:
                 delivery_info.update(delivery_data)
             
+            # Get discount information from payment if available
+            discount_info = {}
+            if payment.discount_code_used:
+                discount_info = {
+                    'original_amount': payment.original_amount or payment.amount,
+                    'discount_code': payment.discount_code_used,
+                    'discount_amount': payment.discount_amount,
+                    'discount_percentage': payment.discount_percentage,
+                }
+            
             # Create order
             order = Order.objects.create(
                 customer=payment.user,
                 payment=payment,
                 total_amount=payment.amount,
+                **discount_info,
                 **delivery_info
             )
             

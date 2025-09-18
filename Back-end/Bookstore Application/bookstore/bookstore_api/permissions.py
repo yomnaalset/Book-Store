@@ -264,7 +264,7 @@ class HasFullPermissions(permissions.BasePermission):
         if request.user.is_library_admin():
             return True  # All library admins have full access
         
-        return False
+        return False    
 
 
 # Convenience permission classes for common combinations

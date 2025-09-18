@@ -1,6 +1,5 @@
 from django.db import models
 from django.core.exceptions import ValidationError
-from django.utils.translation import gettext_lazy as _
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.utils import timezone
 from datetime import timedelta
@@ -81,54 +80,29 @@ class Library(models.Model):
     
     def clean(self):
         """
-        Validate that only one active library exists at a time.
+        Custom validation for the library.
         """
-        # Check if a library already exists when creating a new one
-        if not self.pk and Library.objects.filter(is_active=True).exists():
-            existing_library = Library.objects.filter(is_active=True).first()
-            raise ValidationError(
-                f"Only one active library can exist at a time. "
-                f"Please deactivate the existing library '{existing_library.name}' first."
-            )
+        if not self.name or not self.name.strip():
+            raise ValidationError("Library name is required.")
         
-        # Check if trying to deactivate the only library
-        if self.pk and not self.is_active:
-            # If this is the only library, don't allow deactivation
-            if Library.objects.count() == 1:
-                raise ValidationError("Cannot deactivate the only library. Create a new one first.")
-        
-        return super().clean()
+        if not self.details or not self.details.strip():
+            raise ValidationError("Library details are required.")
     
     def save(self, *args, **kwargs):
         """Override save to ensure only one active library exists."""
-        self.full_clean()
+        if self.is_active:
+            # Deactivate all other libraries
+            Library.objects.exclude(pk=self.pk).update(is_active=False)
         super().save(*args, **kwargs)
-    
-    def delete(self, *args, **kwargs):
-        """Override delete to handle logo file deletion."""
-        # Delete the logo file if it exists
-        if self.logo:
-            self.logo.delete(save=False)
-        super().delete(*args, **kwargs)
-    
-    def get_logo_url(self):
-        """
-        Get the URL of the library logo or return None if no logo exists.
-        """
-        if self.logo:
-            return self.logo.url
-        return None
-    
-    def has_logo(self):
-        """
-        Check if the library has a logo.
-        """
-        return bool(self.logo)
     
     @classmethod
     def get_current_library(cls):
         """
-        Get the current active library or None if no active library exists.
+        Get the current active library.
+        Only one library can be active at a time.
+        
+        Returns:
+            Library instance or None if no active library exists
         """
         return cls.objects.filter(is_active=True).first()
     
@@ -136,22 +110,49 @@ class Library(models.Model):
     def can_create_library(cls):
         """
         Check if a new library can be created.
+        Only one library can exist at a time.
+        
+        Returns:
+            Boolean indicating if a new library can be created
         """
         return not cls.objects.filter(is_active=True).exists()
+    
+    def get_logo_url(self):
+        """
+        Get the URL of the library logo.
+        
+        Returns:
+            String URL of the logo or None if no logo exists
+        """
+        if self.logo:
+            try:
+                return str(self.logo.url)
+            except Exception:
+                return None
+        return None
+    
+    def has_logo(self):
+        """
+        Check if the library has a logo.
+        
+        Returns:
+            Boolean indicating if the library has a logo
+        """
+        try:
+            return bool(self.logo)
+        except Exception:
+            return False
     
     @classmethod
     def get_library_stats(cls):
         """
-        Get library statistics.
+        Get statistics about the library system.
         """
-        total_libraries = cls.objects.count()
-        active_libraries = cls.objects.filter(is_active=True).count()
-        current_library = cls.get_current_library()
+        current_library = cls.objects.filter(is_active=True).first()
         
         return {
-            'total_libraries': total_libraries,
-            'active_libraries': active_libraries,
-            'has_current_library': current_library is not None,
+            'total_libraries': cls.objects.count(),
+            'active_library': current_library,
             'can_create_new': not current_library,
         }
 
@@ -171,7 +172,8 @@ class Category(models.Model):
     )
     
     description = models.TextField(
-        help_text="Description of the category"
+        blank=True,
+        help_text="Description of the category (optional)"
     )
     
     is_active = models.BooleanField(
@@ -209,7 +211,7 @@ class Category(models.Model):
     class Meta:
         db_table = 'category'
         verbose_name = 'Category'
-        verbose_name_plural = 'Categories'
+        verbose_name_plural = 'Categories'  
         ordering = ['name']
         indexes = [
             models.Index(fields=['name']),
@@ -228,6 +230,10 @@ class Category(models.Model):
         """Get the number of available books in this category."""
         return self.books.filter(is_available=True).count()
     
+    def get_borrowable_books_count(self):
+        """Get the number of books available for borrowing in this category."""
+        return self.books.filter(is_available_for_borrow=True).count()
+    
     @classmethod
     def get_active_categories(cls):
         """Get all active categories."""
@@ -236,7 +242,7 @@ class Category(models.Model):
     @classmethod
     def get_category_stats(cls):
         """
-        Get category statistics.
+        Get statistics about categories.
         """
         total_categories = cls.objects.count()
         active_categories = cls.objects.filter(is_active=True).count()
@@ -333,7 +339,7 @@ class Author(models.Model):
         indexes = [
             models.Index(fields=['name']),
             models.Index(fields=['is_active']),
-            models.Index(fields=['birth_date']),
+            models.Index(fields=['created_at']),
         ]
     
     def __str__(self):
@@ -347,55 +353,38 @@ class Author(models.Model):
         """Get the number of available books by this author."""
         return self.books.filter(is_available=True).count()
     
-    def get_photo_url(self):
-        """Get the URL of the author's photo or return None if no photo exists."""
-        if self.photo:
-            return self.photo.url
-        return None
-    
-    def has_photo(self):
-        """Check if the author has a photo."""
-        return bool(self.photo)
-    
-    def is_alive(self):
-        """Check if the author is alive (no death date)."""
-        return self.death_date is None
-    
-    def get_age(self):
-        """
-        Calculate the author's age.
-        Returns age in years if alive, or age at death if deceased.
-        Returns None if birth date is not set.
-        """
-        if not self.birth_date:
-            return None
-        
-        if self.death_date:
-            # Calculate age at death
-            delta = self.death_date - self.birth_date
-            return delta.days // 365
-        else:
-            # Calculate current age
-            delta = timezone.now().date() - self.birth_date
-            return delta.days // 365
+    def get_borrowable_books_count(self):
+        """Get the number of books available for borrowing by this author."""
+        return self.books.filter(is_available_for_borrow=True).count()
     
     @classmethod
-    def search_authors(cls, query):
+    def get_active_authors(cls):
+        """Get all active authors."""
+        return cls.objects.filter(is_active=True)
+    
+    @classmethod
+    def get_author_stats(cls):
         """
-        Search authors by name, bio, or nationality.
+        Get statistics about authors.
         """
-        from django.db.models import Q
-        return cls.objects.filter(
-            Q(name__icontains=query) | 
-            Q(bio__icontains=query) | 
-            Q(nationality__icontains=query)
-        )
+        total_authors = cls.objects.count()
+        active_authors = cls.objects.filter(is_active=True).count()
+        inactive_authors = total_authors - active_authors
+        
+        return {
+            'total_authors': total_authors,
+            'active_authors': active_authors,
+            'inactive_authors': inactive_authors,
+        }
     
     def delete(self, *args, **kwargs):
-        """Override delete to handle photo file deletion."""
-        # Delete the photo file if it exists
-        if self.photo:
-            self.photo.delete(save=False)
+        """
+        Prevent deletion if author has books.
+        """
+        if self.books.exists():
+            raise ValidationError(
+                "Cannot delete author with existing books. Please remove or reassign all books first."
+            )
         super().delete(*args, **kwargs)
 
 
@@ -412,24 +401,29 @@ class Book(models.Model):
         help_text="Name of the book"
     )
     
-    title = models.CharField(
-        max_length=300,
-        help_text="Title of the book (same as name, for API consistency)",
-        blank=True
-    )
-    
     description = models.TextField(
         help_text="Description of the book"
     )
     
-
+    # Relationships
+    library = models.ForeignKey(
+        Library,
+        on_delete=models.CASCADE,
+        related_name='books',
+        help_text="Library this book belongs to"
+    )
+    
+    category = models.ForeignKey(
+        Category,
+        on_delete=models.PROTECT,
+        related_name='books',
+        help_text="Category this book belongs to"
+    )
     
     author = models.ForeignKey(
         Author,
         on_delete=models.PROTECT,
         related_name='books',
-        null=True,
-        blank=True,
         help_text="Author of the book"
     )
     
@@ -477,38 +471,21 @@ class Book(models.Model):
     
     is_new = models.BooleanField(
         default=True,
-        help_text="Whether the book is marked as new (automatically set to False after 30 days)"
-    )
-    
-    # Relationships
-    library = models.ForeignKey(
-        Library,
-        on_delete=models.CASCADE,
-        related_name='books',
-        help_text="Library that owns this book"
-    )
-    
-    category = models.ForeignKey(
-        Category,
-        on_delete=models.SET_NULL,
-        related_name='books',
-        null=True,
-        blank=True,
-        help_text="Category this book belongs to (optional)"
+        help_text="Whether this is a new book"
     )
     
     # Metadata
     created_by = models.ForeignKey(
-        'User', 
+        User, 
         on_delete=models.PROTECT,
         related_name='created_books',
         limit_choices_to={'user_type': 'library_admin'},
-        help_text="Library administrator who added this book"
+        help_text="Library administrator who created this book"
     )
     
     created_at = models.DateTimeField(
         auto_now_add=True,
-        help_text="Date and time when book was added"
+        help_text="Date and time when book was created"
     )
     
     updated_at = models.DateTimeField(
@@ -517,7 +494,7 @@ class Book(models.Model):
     )
     
     last_updated_by = models.ForeignKey(
-        'User',
+        User,
         on_delete=models.PROTECT,
         related_name='updated_books',
         limit_choices_to={'user_type': 'library_admin'},
@@ -531,7 +508,6 @@ class Book(models.Model):
         ordering = ['-created_at']
         indexes = [
             models.Index(fields=['name']),
-            models.Index(fields=['title']),
             models.Index(fields=['author']),
             models.Index(fields=['is_available']),
             models.Index(fields=['is_available_for_borrow']),
@@ -549,11 +525,7 @@ class Book(models.Model):
         return self.name
     
     def save(self, *args, **kwargs):
-        """Override save to set title field and ensure data consistency"""
-        # Set title to name for API consistency
-        if not self.title:
-            self.title = self.name
-        
+        """Override save to ensure data consistency"""
         # Ensure available_copies doesn't exceed quantity
         if self.available_copies > self.quantity:
             self.available_copies = self.quantity
@@ -578,163 +550,143 @@ class Book(models.Model):
     # Borrowing-related methods
     def is_available_for_borrowing(self):
         """Check if the book is available for borrowing."""
-        return self.is_available_for_borrow and self.available_copies > 0
+        return (
+            self.is_available_for_borrow and 
+            self.available_copies > 0 and
+            self.is_available
+        )
     
-    def can_purchase(self):
-        """Check if the book can be purchased."""
-        return self.is_available and self.price is not None
+    def can_be_borrowed(self):
+        """Check if the book can be borrowed (same as is_available_for_borrowing)."""
+        return self.is_available_for_borrowing()
     
+    @property
     def can_borrow(self):
-        """Check if the book can be borrowed."""
-        return self.is_available_for_borrow and self.available_copies > 0
+        """Property to check if the book can be borrowed."""
+        return self.is_available_for_borrowing()
     
-    def reserve_copy(self):
-        """Reserve a copy for borrowing (decrease available copies)."""
-        if self.available_copies > 0:
-            self.available_copies -= 1
-            self.save(update_fields=['available_copies'])
-            return True
-        return False
-    
-    def release_copy(self):
-        """Release a copy back to available pool (increase available copies)."""
-        if self.available_copies < self.quantity:
-            self.available_copies += 1
-            self.save(update_fields=['available_copies'])
-            return True
-        return False
-    
-    def increment_borrow_count(self):
-        """Increment the borrow count when a book is successfully delivered."""
-        self.borrow_count += 1
-        self.save(update_fields=['borrow_count'])
+    @property
+    def can_purchase(self):
+        """Property to check if the book can be purchased."""
+        return self.is_available and self.quantity > 0
     
     def get_borrowing_options(self):
-        """Get borrowing options for the book."""
+        """Get borrowing options for this book."""
         return {
-            'can_borrow': self.can_borrow(),
-            'can_purchase': self.can_purchase(),
+            'can_borrow': self.can_borrow,
+            'can_purchase': self.can_purchase,
             'available_copies': self.available_copies,
-            'total_copies': self.quantity,
-            'borrow_price': self.borrow_price,
-            'purchase_price': self.price,
-            'borrow_periods': [7, 14, 21, 30]  # Available borrowing periods in days
+            'borrow_price': float(self.borrow_price) if self.borrow_price else None,
+            'purchase_price': float(self.price) if self.price else None,
         }
+    
+    def get_average_rating(self):
+        """Get the average rating for this book."""
+        from django.db.models import Avg
+        avg_rating = self.evaluations.aggregate(avg_rating=Avg('rating'))['avg_rating']
+        return round(avg_rating, 2) if avg_rating else 0.0
+    
+    def get_evaluations_count(self):
+        """Get the number of evaluations for this book."""
+        return self.evaluations.count()
+    
+    def borrow_copy(self):
+        """Mark one copy as borrowed."""
+        if self.available_copies > 0:
+            self.available_copies -= 1
+            self.borrow_count += 1
+            self.save()
+            return True
+        return False
+    
+    def return_copy(self):
+        """Mark one copy as returned."""
+        if self.available_copies < self.quantity:
+            self.available_copies += 1
+            self.save()
+            return True
+        return False
+    
+    def get_availability_status(self):
+        """Get a human-readable availability status."""
+        if not self.is_available and not self.is_available_for_borrow:
+            return "Not Available"
+        elif self.available_copies == 0:
+            return "Out of Stock"
+        elif self.available_copies <= 3:
+            return "Limited Stock"
+        else:
+            return "In Stock"
     
     @classmethod
     def get_available_books(cls, library=None):
-        """Get all available books, optionally filtered by library."""
+        """Get all available books."""
         queryset = cls.objects.filter(is_available=True)
         if library:
             queryset = queryset.filter(library=library)
         return queryset
     
     @classmethod
+    def get_borrowable_books(cls):
+        """Get all books available for borrowing."""
+        return cls.objects.filter(is_available_for_borrow=True, available_copies__gt=0)
+    
+    @classmethod
+    def get_new_books(cls):
+        """Get all new books."""
+        return cls.objects.filter(is_new=True)
+    
+    def get_average_rating(self):
+        """
+        Get the average rating for this book.
+        
+        Returns:
+            Float representing the average rating or 0.0 if no ratings exist
+        """
+        from django.db.models import Avg
+        result = self.evaluations.aggregate(avg_rating=Avg('rating'))
+        return result['avg_rating'] or 0.0
+    
+    @classmethod
     def search_books(cls, query, library=None):
         """
-        Search books by name, description, or author name.
+        Search books by name or author.
+        
+        Args:
+            query: Search query string
+            library: Optional library to filter books
+            
+        Returns:
+            QuerySet of matching books
         """
         from django.db.models import Q
+        
         queryset = cls.objects.filter(
             Q(name__icontains=query) | 
-            Q(description__icontains=query) |
             Q(author__name__icontains=query)
         )
         
         if library:
             queryset = queryset.filter(library=library)
-        
+            
         return queryset
     
     @classmethod
-    def get_new_books(cls, library=None, days=30):
+    def get_book_stats(cls):
         """
-        Get books marked as new or created within the specified number of days.
+        Get statistics about books.
         """
-        cutoff_date = timezone.now() - timedelta(days=days)
-        queryset = cls.objects.filter(
-            models.Q(is_new=True) | models.Q(created_at__gte=cutoff_date)
-        )
+        total_books = cls.objects.count()
+        available_books = cls.objects.filter(is_available=True).count()
+        borrowable_books = cls.objects.filter(is_available_for_borrow=True).count()
+        new_books = cls.objects.filter(is_new=True).count()
         
-        if library:
-            queryset = queryset.filter(library=library)
-        
-        return queryset
-    
-    @classmethod
-    def get_books_by_category(cls, category_id, library=None):
-        """
-        Get books in a specific category.
-        """
-        queryset = cls.objects.filter(category_id=category_id)
-        
-        if library:
-            queryset = queryset.filter(library=library)
-        
-        return queryset
-    
-    @classmethod
-    def get_books_by_author(cls, author, library=None):
-        """
-        Get books by a specific author.
-        """
-        queryset = cls.objects.filter(author=author)
-        
-        if library:
-            queryset = queryset.filter(library=library)
-        
-        return queryset
-    
-    @classmethod
-    def get_books_by_price_range(cls, min_price=None, max_price=None, library=None):
-        """
-        Get books within a specific price range.
-        """
-        queryset = cls.objects.all()
-        
-        if min_price is not None:
-            queryset = queryset.filter(price__gte=min_price)
-        
-        if max_price is not None:
-            queryset = queryset.filter(price__lte=max_price)
-        
-        if library:
-            queryset = queryset.filter(library=library)
-        
-        return queryset
-    
-    def is_recently_added(self, days=30):
-        """
-        Check if the book was added within the specified number of days.
-        """
-        cutoff_date = timezone.now() - timedelta(days=days)
-        return self.created_at >= cutoff_date
-    
-    def mark_as_old(self):
-        """
-        Mark the book as no longer new.
-        """
-        if self.is_new:
-            self.is_new = False
-            self.save(update_fields=['is_new', 'updated_at'])
-    
-    def get_average_rating(self):
-        """
-        Calculate the average rating for this book.
-        Returns None if there are no ratings.
-        """
-        evaluations = self.evaluations.all()
-        if not evaluations.exists():
-            return None
-        
-        total = sum(evaluation.rating for evaluation in evaluations)
-        return round(total / evaluations.count(), 1)
-    
-    def get_evaluations_count(self):
-        """
-        Get the number of evaluations for this book.
-        """
-        return self.evaluations.count()
+        return {
+            'total_books': total_books,
+            'available_books': available_books,
+            'borrowable_books': borrowable_books,
+            'new_books': new_books,
+        }
 
 
 class BookImage(models.Model):
@@ -772,7 +724,7 @@ class BookImage(models.Model):
     )
     
     uploaded_by = models.ForeignKey(
-        'User',
+        User,
         on_delete=models.PROTECT,
         related_name='uploaded_book_images',
         help_text="User who uploaded this image"
@@ -819,7 +771,7 @@ class BookEvaluation(models.Model):
             MinValueValidator(1),
             MaxValueValidator(5)
         ],
-        help_text=_("Rating from 1 to 5 stars")
+        help_text="Rating from 1 to 5 stars"
     )
     
     # Comments removed - only ratings for books
@@ -829,31 +781,31 @@ class BookEvaluation(models.Model):
         Book,
         on_delete=models.CASCADE,
         related_name='evaluations',
-        help_text=_("Book being evaluated")
+        help_text="Book being evaluated"
     )
     
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
         related_name='book_evaluations',
-        help_text=_("User who created the evaluation")
+        help_text="User who created the evaluation"
     )
     
     # Metadata
     created_at = models.DateTimeField(
         auto_now_add=True,
-        help_text=_("Date and time when evaluation was created")
+        help_text="Date and time when evaluation was created"
     )
     
     updated_at = models.DateTimeField(
         auto_now=True,
-        help_text=_("Date and time when evaluation was last updated")
+        help_text="Date and time when evaluation was last updated"
     )
     
     class Meta:
         db_table = 'book_evaluation'
-        verbose_name = _('Book Evaluation')
-        verbose_name_plural = _('Book Evaluations')
+        verbose_name = 'Book Evaluation'
+        verbose_name_plural = 'Book Evaluations'
         ordering = ['-updated_at']
         indexes = [
             models.Index(fields=['book']),
@@ -881,26 +833,26 @@ class Favorite(models.Model):
         on_delete=models.CASCADE,
         related_name='favorites',
         limit_choices_to={'user_type': 'customer'},
-        help_text=_("Customer who favorited the book")
+        help_text="Customer who favorited the book"
     )
     
     book = models.ForeignKey(
         Book,
         on_delete=models.CASCADE,
         related_name='favorited_by',
-        help_text=_("Book that was favorited")
+        help_text="Book that was favorited"
     )
     
     # Metadata
     created_at = models.DateTimeField(
         auto_now_add=True,
-        help_text=_("Date and time when book was added to favorites")
+        help_text="Date and time when book was added to favorites"
     )
     
     class Meta:
         db_table = 'favorite'
-        verbose_name = _('Favorite')
-        verbose_name_plural = _('Favorites')
+        verbose_name = 'Favorite'
+        verbose_name_plural = 'Favorites'
         ordering = ['-created_at']
         indexes = [
             models.Index(fields=['user']),
@@ -919,7 +871,7 @@ class Favorite(models.Model):
         """
         if self.user and self.user.user_type != 'customer':
             raise ValidationError(
-                _("Only customers can add books to favorites.")
+                "Only customers can add books to favorites."
             )
     
     def save(self, *args, **kwargs):

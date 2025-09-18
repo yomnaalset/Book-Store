@@ -107,7 +107,11 @@ class PaymentService:
                 user=user,
                 amount=payment_data['final_amount'],
                 payment_method=payment_method,
-                status='pending'
+                status='pending',
+                original_amount=payment_data['original_amount'],
+                discount_code_used=payment_data.get('discount_code_used'),
+                discount_amount=payment_data.get('discount_amount', 0),
+                discount_percentage=payment_data.get('discount_percentage'),
             )
             
             result_message = f'Payment initialized successfully with {payment.get_payment_method_display()}'

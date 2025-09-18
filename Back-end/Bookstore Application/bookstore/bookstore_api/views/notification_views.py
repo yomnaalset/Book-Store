@@ -2,7 +2,6 @@ from rest_framework import viewsets, status, permissions
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from django.shortcuts import get_object_or_404
-
 from ..models import Notification
 from ..serializers import (
     NotificationSerializer,
@@ -40,7 +39,7 @@ class NotificationViewSet(viewsets.ModelViewSet):
             return Notification.objects.all()
         
         # Otherwise, only show notifications for the current user
-        return Notification.objects.filter(user=user)
+        return Notification.objects.filter(recipient=user)
     
     def list(self, request, *args, **kwargs):
         """

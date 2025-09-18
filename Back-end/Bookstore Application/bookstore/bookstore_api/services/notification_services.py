@@ -20,7 +20,7 @@ class NotificationService:
                 related_order = Order.objects.get(id=related_order_id)
                 
             notification = Notification.objects.create(
-                user=user,
+                recipient=user,
                 title=title,
                 message=message,
                 notification_type=notification_type,
@@ -39,13 +39,21 @@ class NotificationService:
         """
         try:
             user = User.objects.get(id=user_id)
-            notifications = Notification.objects.filter(user=user)
+            notifications = Notification.objects.filter(recipient=user)
             
             if is_read is not None:
-                notifications = notifications.filter(is_read=is_read)
+                status_filter = 'read' if is_read else 'unread'
+                notifications = notifications.filter(status=status_filter)
                 
             if notification_type:
-                notifications = notifications.filter(notification_type=notification_type)
+                # Handle notification_type as string name instead of ID
+                try:
+                    from ..models import NotificationType
+                    notification_type_obj = NotificationType.objects.get(name=notification_type)
+                    notifications = notifications.filter(notification_type=notification_type_obj)
+                except NotificationType.DoesNotExist:
+                    # If notification type doesn't exist, return empty queryset
+                    notifications = notifications.none()
                 
             return notifications
         except User.DoesNotExist:
@@ -58,7 +66,7 @@ class NotificationService:
         """
         try:
             notification = Notification.objects.get(id=notification_id)
-            notification.is_read = True
+            notification.status = 'read'
             notification.save()
             return notification
         except Notification.DoesNotExist:
@@ -71,8 +79,8 @@ class NotificationService:
         """
         try:
             user = User.objects.get(id=user_id)
-            notifications = Notification.objects.filter(user=user, is_read=False)
-            notifications.update(is_read=True)
+            notifications = Notification.objects.filter(recipient=user, status='unread')
+            notifications.update(status='read')
             return notifications.count()
         except User.DoesNotExist:
             raise ValueError(f"User with ID {user_id} does not exist")

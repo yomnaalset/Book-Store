@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from django.utils import timezone
+from decimal import Decimal
 from ..models import DiscountCode, DiscountUsage, User
 
 
@@ -24,13 +25,13 @@ class DiscountCodeSerializer(serializers.ModelSerializer):
             'discount_percentage': {
                 'required': True,
                 'help_text': 'Discount percentage (1-100%)',
-                'min_value': 0.01,
-                'max_value': 100.00
+                'min_value': Decimal('0.01'),
+                'max_value': Decimal('100.00')
             },
             'usage_limit_per_customer': {
                 'required': True,
                 'help_text': 'Maximum number of times each customer can use this code',
-                'min_value': 1
+                'min_value': Decimal('1')
             },
             'expiration_date': {
                 'required': True,
@@ -103,20 +104,23 @@ class DiscountCodeUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = DiscountCode
         fields = [
-            'discount_percentage', 'usage_limit_per_customer', 'expiration_date'
+            'discount_percentage', 'usage_limit_per_customer', 'expiration_date', 'is_active'
         ]
         extra_kwargs = {
             'discount_percentage': {
                 'help_text': 'Discount percentage (1-100%)',
-                'min_value': 0.01,
-                'max_value': 100.00
+                'min_value': Decimal('0.01'),
+                'max_value': Decimal('100.00')
             },
             'usage_limit_per_customer': {
                 'help_text': 'Maximum number of times each customer can use this code',
-                'min_value': 1
+                'min_value': Decimal('1')
             },
             'expiration_date': {
                 'help_text': 'When this discount code expires'
+            },
+            'is_active': {
+                'help_text': 'Whether this discount code is currently active'
             }
         }
     
@@ -157,20 +161,30 @@ class DiscountCodeListSerializer(serializers.ModelSerializer):
     
     def get_usage_count(self, obj):
         """Get total usage count for this discount code."""
-        return obj.usage_records.count()
+        return obj.usages.count()
     
     def get_is_expired(self, obj):
         """Check if the discount code is expired."""
-        return obj.expiration_date <= timezone.now()
+        if obj.expiration_date is None:
+            return False
+        # Compare only date parts (ignore time)
+        now = timezone.now()
+        today = now.date()
+        expiry_date = obj.expiration_date.date()
+        return expiry_date < today
     
     def get_status(self, obj):
         """Get human-readable status of the discount code."""
         if not obj.is_active:
             return "Inactive"
-        elif obj.expiration_date <= timezone.now():
-            return "Expired"
-        else:
-            return "Active"
+        elif obj.expiration_date is not None:
+            # Compare only date parts (ignore time)
+            now = timezone.now()
+            today = now.date()
+            expiry_date = obj.expiration_date.date()
+            if expiry_date < today:
+                return "Expired"
+        return "Active"
 
 
 class DiscountCodeValidationSerializer(serializers.Serializer):
@@ -280,28 +294,8 @@ class DiscountUsageCreateSerializer(serializers.ModelSerializer):
             'final_amount', 'payment_reference'
         ]
     
-    def validate(self, attrs):
-        """
-        Validate the discount usage data.
-        """
-        discount_code = attrs.get('discount_code')
-        user = attrs.get('user')
-        order_amount = attrs.get('order_amount')
-        discount_amount = attrs.get('discount_amount')
-        
-        # Validate that the user can use this discount code
-        can_use, message = discount_code.can_be_used_by_user(user)
-        if not can_use:
-            raise serializers.ValidationError(f"Cannot use discount code: {message}")
-        
-        # Validate discount amount calculation
-        expected_discount = discount_code.calculate_discount_amount(order_amount)
-        if abs(discount_amount - expected_discount) > 0.01:  # Allow for small rounding differences
-            raise serializers.ValidationError(
-                f"Invalid discount amount. Expected: {expected_discount}, Got: {discount_amount}"
-            )
-        
-        return attrs
+    # Removed validation since it's already done in the service layer
+    # and causes issues when passing IDs instead of instances
 
 
 class CustomerDiscountUsageSerializer(serializers.ModelSerializer):

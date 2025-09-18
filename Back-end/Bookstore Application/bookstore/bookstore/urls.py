@@ -18,11 +18,12 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
-from bookstore_api.views.user_views import LoginView
+from bookstore_api.views.user_views import LoginView, LogoutView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('bookstore_api.urls')),
-    # Direct login endpoint at root level
+    # Direct login and logout endpoints at root level
     path('api/login/', LoginView.as_view(), name='direct_login'),
+    path('api/logout/', LogoutView.as_view(), name='direct_logout'),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

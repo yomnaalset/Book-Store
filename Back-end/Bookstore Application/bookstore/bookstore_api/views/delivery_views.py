@@ -328,6 +328,26 @@ class OrderListView(generics.ListAPIView):
             )
         
         return queryset.order_by('-created_at')
+    
+    def list(self, request, *args, **kwargs):
+        """
+        Override the default list method to ensure consistent response format.
+        """
+        queryset = self.get_queryset()
+        
+        # Apply pagination
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
+        # If no pagination, return the data directly
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({
+            'results': serializer.data,
+            'count': queryset.count(),
+            'totalItems': queryset.count(),
+        })
 
 
 class OrderDetailView(generics.RetrieveAPIView):
@@ -396,8 +416,13 @@ class OrderStatusUpdateView(APIView):
             # Set timestamps based on status
             if new_status == 'confirmed' and not order.confirmed_at:
                 order.confirmed_at = timezone.now()
+                # Update book quantities when order is confirmed
+                order.update_book_quantities()
             elif new_status == 'delivered' and not order.delivered_at:
                 order.delivered_at = timezone.now()
+            elif new_status == 'cancelled':
+                # Restore book quantities when order is cancelled
+                order.restore_book_quantities()
             
             order.save()
             
@@ -414,7 +439,7 @@ class OrderStatusUpdateView(APIView):
             
             response_serializer = OrderDetailSerializer(order)
             return Response({
-                'message': f'Order status updated from {old_status} to {new_status}',
+                'message': f'Order status updated from {old_status} to {new_status}' ,
                 'order': response_serializer.data
             }, status=status.HTTP_200_OK)
         
@@ -729,7 +754,7 @@ def delivery_dashboard_view(request):
             'by_status': {}
         },
         'delivery_assignments': {
-            'total': 0,
+            'total': 0, 
             'by_status': {},
             'avg_delivery_time_minutes': 0
         },
@@ -754,7 +779,7 @@ def bulk_assign_orders_view(request):
     # Check if user is admin
     if not request.user.is_staff:
         return Response({
-            'error': 'Only system administrators can perform bulk assignments'
+            'error': 'Only system administrators can perform bulk assignments'       
         }, status=status.HTTP_403_FORBIDDEN)
     
     # Validate input data
@@ -938,7 +963,7 @@ def order_delivery_contact_view(request, order_id):
         
     except Order.DoesNotExist:
         return Response({
-            'error': 'Order not found'
+            'error': 'Order not found'   
         }, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
         logger.error(f"Error getting delivery contact: {str(e)}")
@@ -996,7 +1021,7 @@ class DeliveryManagerStatusUpdateView(APIView):
         except Exception as e:
             logger.error(f"Error updating delivery manager status: {str(e)}")
             return Response({
-                'error': 'An error occurred while processing your request'
+                'error': 'An error occurred while processing your request'   
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 

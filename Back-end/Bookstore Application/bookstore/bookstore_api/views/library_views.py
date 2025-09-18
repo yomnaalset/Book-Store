@@ -1,10 +1,11 @@
-from rest_framework import generics, status, permissions
+from rest_framework import generics, status, permissions, serializers
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
 from django.core.exceptions import PermissionDenied
+from django.db import IntegrityError
+from django.utils.translation import gettext as _
 import logging
-
 from ..models import Library, Book, BookImage, Category, Author, BookEvaluation, Favorite
 from ..serializers import (
     LibraryCreateSerializer,
@@ -99,12 +100,19 @@ class LibraryCreateView(generics.CreateAPIView):
         Create a new library with the provided data.
         """
         try:
+            # Debug logging
+            logger.info(f"Library creation request from user: {request.user}")
+            logger.info(f"User authenticated: {request.user.is_authenticated}")
+            logger.info(f"User type: {getattr(request.user, 'user_type', 'Unknown')}")
+            logger.info(f"Request data: {request.data}")
+            
             # Check if a library can be created (single library constraint)
             if not Library.can_create_library():
                 existing_library = Library.get_current_library()
+                library_name = existing_library.name if existing_library else "Unknown"
                 return Response({
                     'success': False,
-                    'message': f"Only one library can exist at a time. Please delete the existing library '{existing_library.name}' first.",
+                    'message': f"Only one library can exist at a time. Please delete the existing library '{library_name}' first.",
                     'error_code': 'LIBRARY_EXISTS'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
@@ -113,6 +121,8 @@ class LibraryCreateView(generics.CreateAPIView):
             normalized_data = {}
             for key, value in data.items():
                 normalized_data[key.lower()] = value
+            
+            logger.info(f"Normalized data: {normalized_data}")
             
             # Create serializer with normalized data
             serializer = self.get_serializer(data=normalized_data)
@@ -125,6 +135,8 @@ class LibraryCreateView(generics.CreateAPIView):
             response_serializer = LibraryDetailSerializer(library)
             
             logger.info(f"Library '{library.name}' created by {request.user.email}")
+            logger.info(f"Serialized data: {response_serializer.data}")
+            logger.info(f"Serialized data type: {type(response_serializer.data)}")
             
             return Response({
                 'success': True,
@@ -137,6 +149,53 @@ class LibraryCreateView(generics.CreateAPIView):
             return Response({
                 'success': False,
                 'message': 'Failed to create library',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def delete(self, request, *args, **kwargs):
+        """
+        Delete the current library.
+        Only library administrators can delete libraries.
+        """
+        try:
+            # Check if user is authenticated
+            if not request.user.is_authenticated:
+                return Response({
+                    'success': False,
+                    'message': 'Authentication required'
+                }, status=status.HTTP_401_UNAUTHORIZED)
+
+            # Check if user is a library administrator
+            if not request.user.is_library_admin():
+                return Response({
+                    'success': False,
+                    'message': 'Only library administrators can delete libraries'
+                }, status=status.HTTP_403_FORBIDDEN)
+
+            # Get the current library
+            current_library = Library.get_current_library()
+            if not current_library:
+                return Response({
+                    'success': False,
+                    'message': 'No library found to delete'
+                }, status=status.HTTP_404_NOT_FOUND)
+
+            # Delete the library
+            library_name = current_library.name
+            current_library.delete()
+
+            logger.info(f"Library '{library_name}' deleted by {request.user.email}")
+
+            return Response({
+                'success': True,
+                'message': 'Library deleted successfully'
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"Error deleting library: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to delete library',
                 'errors': format_error_message(str(e))
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -260,7 +319,7 @@ class LibraryDetailView(generics.RetrieveUpdateDestroyAPIView):
         try:
             library = self.get_object()
             if not library:
-                return Response({
+                return Response({   
                     'success': False,
                     'message': 'No active library found to delete',
                     'error_code': 'NO_LIBRARY_FOUND'
@@ -312,7 +371,7 @@ class LibraryManagementView(APIView):
         """
         try:
             # Get library statistics
-            stats = LibraryAccessService.get_library_stats()
+            stats = LibraryManagementService.get_library_stats()
             
             # Get current library if exists
             current_library = Library.get_current_library()
@@ -355,7 +414,7 @@ class LibraryUpdateView(generics.UpdateAPIView):
         library = Library.get_current_library()
         if not library:
             from rest_framework.exceptions import NotFound
-            raise NotFound("No active library found to update")
+            raise NotFound(("No active library found to update"))
         return library
     
     def update(self, request, *args, **kwargs):
@@ -513,7 +572,7 @@ class BookCreateView(generics.CreateAPIView):
             if not library:
                 return Response({
                     'success': False,
-                    'message': 'No active library found. Please create a library first.',
+                    'message': 'No active library found. Please create a library first.' ,
                     'error_code': 'NO_LIBRARY'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
@@ -567,6 +626,28 @@ class BookCreateView(generics.CreateAPIView):
                 'data': response_serializer.data
             }, status=status.HTTP_201_CREATED)
                 
+        except serializers.ValidationError as e:
+            logger.error(f"Validation error creating book: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Validation failed',
+                'errors': e.detail
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except IntegrityError as e:
+            logger.error(f"Database integrity error creating book: {str(e)}")
+            # Handle unique constraint violations
+            if 'duplicate entry' in str(e).lower() and 'book_library_id_name_author_id' in str(e):
+                return Response({
+                    'success': False,
+                    'message': 'A book with this name and author already exists in this library',
+                    'error_code': 'DUPLICATE_BOOK'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                return Response({
+                    'success': False,
+                    'message': 'Database constraint violation',
+                    'errors': format_error_message(str(e))
+                }, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             logger.error(f"Error creating book: {str(e)}")
             return Response({
@@ -640,7 +721,11 @@ class BookListView(generics.ListAPIView):
         
         # Filter by author
         if author:
-            queryset = queryset.filter(author__icontains=author)
+            try:
+                author_id = int(author)
+                queryset = queryset.filter(author_id=author_id)
+            except (ValueError, TypeError):
+                pass  # Ignore invalid author values
         
         # Filter by category
         if category:
@@ -722,7 +807,7 @@ class BookListView(generics.ListAPIView):
             if not Library.get_current_library():
                 return Response({
                     'success': False,
-                    'message': 'No active library found',
+                    'message': ('No active library found'),
                     'error_code': 'NO_LIBRARY'
                 }, status=status.HTTP_404_NOT_FOUND)
             
@@ -732,14 +817,14 @@ class BookListView(generics.ListAPIView):
                 serializer = self.get_serializer(page, many=True)
                 return self.get_paginated_response({
                     'success': True,
-                    'message': 'Books retrieved successfully',
+                    'message': _('Books retrieved successfully'),
                     'data': serializer.data
                 })
             
             serializer = self.get_serializer(queryset, many=True)
             return Response({
                 'success': True,
-                'message': 'Books retrieved successfully',
+                'message': _('Books retrieved successfully'),
                 'data': serializer.data,
                 'count': queryset.count()
             }, status=status.HTTP_200_OK)
@@ -748,7 +833,7 @@ class BookListView(generics.ListAPIView):
             logger.error(f"Error retrieving books: {str(e)}")
             return Response({
                 'success': False,
-                'message': 'Failed to retrieve books',
+                'message': ('Failed to retrieve books'),
                 'errors': format_error_message(str(e))
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -768,7 +853,7 @@ class BookDetailView(generics.RetrieveAPIView):
             return Book.objects.get(id=book_id)
         except Book.DoesNotExist:
             from rest_framework.exceptions import NotFound
-            raise NotFound("Book not found")
+            raise NotFound(("Book not found"))
     
     def retrieve(self, request, *args, **kwargs):
         """Retrieve book details."""
@@ -778,7 +863,7 @@ class BookDetailView(generics.RetrieveAPIView):
             
             return Response({
                 'success': True,
-                'message': 'Book details retrieved successfully',
+                'message': _('Book details retrieved successfully'),
                 'data': serializer.data
             }, status=status.HTTP_200_OK)
             
@@ -786,7 +871,7 @@ class BookDetailView(generics.RetrieveAPIView):
             logger.error(f"Error retrieving book: {str(e)}")
             return Response({
                 'success': False,
-                'message': 'Failed to retrieve book details',
+                            'message': ('Failed to retrieve book details'),
                 'errors': format_error_message(str(e))
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -806,7 +891,7 @@ class BookUpdateView(generics.UpdateAPIView):
             return Book.objects.get(id=book_id)
         except Book.DoesNotExist:
             from rest_framework.exceptions import NotFound
-            raise NotFound("Book not found")
+            raise NotFound(("Book not found")) 
     
     def update(self, request, *args, **kwargs):
         """Update book with the provided data."""
@@ -853,7 +938,7 @@ class BookUpdateView(generics.UpdateAPIView):
             
             return Response({
                 'success': True,
-                'message': 'Book updated successfully',
+                'message': ('Book updated successfully'),
                 'data': response_serializer.data
             }, status=status.HTTP_200_OK)
                 
@@ -861,7 +946,7 @@ class BookUpdateView(generics.UpdateAPIView):
             logger.error(f"Error updating book: {str(e)}")
             return Response({
                 'success': False,
-                'message': 'Failed to update book',
+                'message': ('Failed to update book'),
                 'errors': format_error_message(str(e))
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -880,7 +965,7 @@ class BookDeleteView(generics.DestroyAPIView):
             return Book.objects.get(id=book_id)
         except Book.DoesNotExist:
             from rest_framework.exceptions import NotFound
-            raise NotFound("Book not found")
+            raise NotFound(("Book not found"))
     
     def delete(self, request, *args, **kwargs):
         """Delete the specified book."""
@@ -897,14 +982,14 @@ class BookDeleteView(generics.DestroyAPIView):
             
             return Response({
                 'success': True,
-                'message': f"Book '{book_name}' by {book_author} deleted successfully."
+                'message': (f"Book '{book_name}' by {book_author} deleted successfully.")
             }, status=status.HTTP_200_OK)
                 
         except Exception as e:
             logger.error(f"Error deleting book: {str(e)}")
             return Response({
                 'success': False,
-                'message': 'Failed to delete book',
+                'message': ('Failed to delete book'),
                 'errors': format_error_message(str(e))
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -1026,7 +1111,7 @@ class NewBooksView(generics.ListAPIView):
             
             return Response({
                 'success': True,
-                'message': f'New books retrieved successfully (within {days} days)',
+                'message': (f'New books retrieved successfully (within {days} days)'),
                 'data': serializer.data,
                 'count': queryset.count(),
                 'filter_criteria': {
@@ -1384,12 +1469,12 @@ class BooksByPriceRangeView(generics.ListAPIView):
             logger.error(f"Error retrieving books by price range: {str(e)}")
             return Response({
                 'success': False,
-                'message': 'Failed to retrieve books by price range',
+                'message': 'Failed to retrieve books by price range' ,
                 'errors': format_error_message(str(e))
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class BooksByRatingView(generics.ListAPIView):
+class BooksByRatingView(generics.ListAPIView):  
     """
     Get books sorted by customer ratings/evaluations.
     Available to all authenticated users.
@@ -1926,7 +2011,7 @@ class CategoryChoicesView(generics.ListAPIView):
             logger.error(f"Error retrieving category choices: {str(e)}")
             return Response({
                 'success': False,
-                'message': 'Failed to retrieve category choices',
+                'message': 'Failed to retrieve category choices' ,
                 'errors': format_error_message(str(e))
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -2181,7 +2266,7 @@ class AuthorUpdateView(generics.UpdateAPIView):
             logger.error(f"Error updating author: {str(e)}")
             return Response({
                 'success': False,
-                'message': 'Failed to update author',
+                'message': 'Failed to update author' ,
                 'errors': format_error_message(str(e))
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -2391,7 +2476,7 @@ class EvaluationListView(generics.ListAPIView):
                 # Add success wrapper to paginated response
                 paginated_response.data = {
                     'success': True,
-                    'message': 'Evaluations retrieved successfully',
+                    'message': 'Evaluations retrieved successfully'  ,
                     'pagination': paginated_response.data
                 }
                 return paginated_response

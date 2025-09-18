@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from decimal import Decimal
 from ..models.payment_model import Payment, CreditCardPayment, CashOnDeliveryPayment
 from ..models.user_model import User
 from ..models.cart_model import Cart
@@ -7,8 +8,8 @@ class PaymentSerializer(serializers.ModelSerializer):
     """
     Serializer for payment information.
     """
-    payment_method_display = serializers.CharField(
-        source='get_payment_method_display',
+    payment_type_display = serializers.CharField(
+        source='get_payment_type_display',
         read_only=True
     )
     status_display = serializers.CharField(
@@ -19,7 +20,7 @@ class PaymentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Payment
         fields = [
-            'id', 'user', 'amount', 'payment_method', 'payment_method_display',
+            'id', 'user', 'amount', 'payment_type', 'payment_type_display',
             'status', 'status_display', 'transaction_id', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'user', 'transaction_id', 'created_at', 'updated_at', 'status']
@@ -76,9 +77,9 @@ class PaymentInitSerializer(serializers.Serializer):
     """
     Serializer for initializing a payment.
     """
-    payment_method = serializers.ChoiceField(
-        choices=Payment.PAYMENT_METHOD_CHOICES,
-        help_text="Payment method to use"
+    payment_type = serializers.ChoiceField(
+        choices=Payment.PAYMENT_TYPE_CHOICES,
+        help_text="Payment type to use"
     )
     discount_code = serializers.CharField(
         max_length=50,
@@ -94,8 +95,8 @@ class CreditCardPaymentCreateSerializer(serializers.Serializer):
     """
     card_holder_name = serializers.CharField(max_length=100)
     card_number = serializers.CharField(max_length=16)
-    expiry_month = serializers.IntegerField(min_value=1, max_value=12)
-    expiry_year = serializers.IntegerField(min_value=2000)
+    expiry_month = serializers.IntegerField(min_value=Decimal('1'), max_value=Decimal('12'))
+    expiry_year = serializers.IntegerField(min_value=Decimal('2000'))
     cvv = serializers.CharField(max_length=4)
 
 
@@ -112,11 +113,11 @@ class PaymentBasicSerializer(serializers.ModelSerializer):
     """
     Basic payment information serializer for foreign key relationships.
     """
-    payment_method_display = serializers.CharField(source='get_payment_method_display', read_only=True)
+    payment_type_display = serializers.CharField(source='get_payment_type_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     
     class Meta:
         model = Payment
-        fields = ['id', 'amount', 'payment_method', 'payment_method_display', 'status', 'status_display', 'created_at']
-        read_only_fields = ['id', 'amount', 'payment_method', 'payment_method_display', 'status', 'status_display', 'created_at']
+        fields = ['id', 'amount', 'payment_type', 'payment_type_display', 'status', 'status_display', 'created_at']
+        read_only_fields = ['id', 'amount', 'payment_type', 'payment_type_display', 'status', 'status_display', 'created_at']
 

@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from django.utils import timezone
 from datetime import timedelta
+from decimal import Decimal
 from ..models import (
     BorrowRequest, BorrowExtension, BorrowFine, BorrowStatistics,
     Book, User, BorrowStatusChoices, ExtensionStatusChoices, FineStatusChoices
@@ -12,7 +13,7 @@ class BorrowRequestCreateSerializer(serializers.ModelSerializer):
     Serializer for creating borrow requests
     """
     book_id = serializers.IntegerField()
-    borrow_period_days = serializers.IntegerField(min_value=1, max_value=30)
+    borrow_period_days = serializers.IntegerField(min_value=Decimal('1'), max_value=Decimal('30'))
     
     class Meta:
         model = BorrowRequest
@@ -224,7 +225,7 @@ class BorrowExtensionCreateSerializer(serializers.ModelSerializer):
     """
     Serializer for creating extension requests
     """
-    additional_days = serializers.IntegerField(min_value=1, max_value=14)
+    additional_days = serializers.IntegerField(min_value=Decimal('1'), max_value=Decimal('14'))
     
     class Meta:
         model = BorrowExtension
@@ -292,7 +293,7 @@ class BorrowRatingSerializer(serializers.Serializer):
     """
     Serializer for rating borrowing experience
     """
-    rating = serializers.IntegerField(min_value=1, max_value=5)
+    rating = serializers.IntegerField(min_value=Decimal('1'), max_value=Decimal('5'))
     comment = serializers.CharField(required=False, allow_blank=True, max_length=1000)
     
     def validate(self, data):

@@ -1,8 +1,43 @@
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
-from django.core.exceptions import ValidationError
 from django.utils import timezone
 from .user_model import User
+
+
+class DiscountCodeManager(models.Manager):
+    """
+    Custom manager for DiscountCode model.
+    """
+    
+    def get_active_codes(self):
+        """Get all active discount codes."""
+        now = timezone.now()
+        return self.filter(
+            is_active=True,
+            expiration_date__gt=now
+        )
+    
+    def get_valid_code(self, code):
+        """Get a valid discount code by code string."""
+        now = timezone.now()
+        try:
+            return self.get(
+                code=code,
+                is_active=True,
+                expiration_date__gt=now
+            )
+        except DiscountCode.DoesNotExist:
+            return None
+    
+    def cleanup_expired_codes(self):
+        """Deactivate expired discount codes."""
+        now = timezone.now()
+        expired_codes = self.filter(
+            expiration_date__lte=now,
+            is_active=True
+        )
+        count = expired_codes.update(is_active=False)
+        return count
 
 
 class DiscountCode(models.Model):
@@ -51,11 +86,20 @@ class DiscountCode(models.Model):
         help_text="When this discount code was last updated"
     )
     
+    # Use custom manager
+    objects = DiscountCodeManager()
+    
     class Meta:
         db_table = 'discount_code'
         verbose_name = 'Discount Code'
         verbose_name_plural = 'Discount Codes'
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['code']),
+            models.Index(fields=['is_active']),
+            models.Index(fields=['expiration_date']),
+            models.Index(fields=['created_at']),
+        ]
     
     def __str__(self):
         return f"{self.code} ({self.discount_percentage}% off)"
@@ -64,95 +108,104 @@ class DiscountCode(models.Model):
         """
         Custom validation for the discount code.
         """
-        super().clean()
+        if self.discount_percentage <= 0 or self.discount_percentage > 100:
+            raise ValidationError(_("Discount percentage must be between 1 and 100."))
         
-        # Ensure code is uppercase and alphanumeric
-        if self.code:
-            self.code = self.code.upper().strip()
-            if not self.code.replace('_', '').replace('-', '').isalnum():
-                raise ValidationError({
-                    'code': 'Code can only contain letters, numbers, hyphens, and underscores.'
-                })
+        if self.expiration_date and self.expiration_date <= timezone.now():
+            raise ValidationError(_("Expiration date must be in the future."))
     
-    def save(self, *args, **kwargs):
-        """
-        Override save to ensure code is properly formatted.
-        """
-        self.full_clean()
-        super().save(*args, **kwargs)
+    def is_expired(self):
+        """Check if the discount code has expired."""
+        return timezone.now() > self.expiration_date
     
     def is_valid(self):
-        """
-        Check if the discount code is currently valid (active and not expired).
-        """
-        return self.is_active and self.expiration_date > timezone.now()
+        """Check if the discount code is valid (active and not expired)."""
+        return self.is_active and not self.is_expired()
     
-    def get_usage_count_for_user(self, user):
-        """
-        Get the number of times a specific user has used this discount code.
-        """
-        return self.usage_records.filter(user=user).count()
-    
-    def can_be_used_by_user(self, user):
-        """
-        Check if a user can use this discount code.
-        """
+    def can_be_used_by(self, customer):
+        """Check if a customer can use this discount code."""
         if not self.is_valid():
-            return False, "Discount code is not valid or has expired"
+            return False
         
-        usage_count = self.get_usage_count_for_user(user)
-        if usage_count >= self.usage_limit_per_customer:
-            return False, f"You have already used this code the maximum number of times ({self.usage_limit_per_customer})"
+        # Check usage limit
+        usage_count = DiscountUsage.objects.filter(
+            discount_code=self,
+            customer=customer
+        ).count()
         
-        return True, "Code can be used"
+        return usage_count < self.usage_limit_per_customer
     
-    def calculate_discount_amount(self, total_amount):
-        """
-        Calculate the discount amount based on the percentage and total amount.
-        """
-        if not self.is_valid():
-            return 0
+    def get_discount_amount(self, order_total):
+        """Calculate the discount amount for a given order total."""
+        return (order_total * self.discount_percentage) / 100
+    
+    def get_final_price(self, order_total):
+        """Calculate the final price after applying the discount."""
+        discount_amount = self.get_discount_amount(order_total)
+        return order_total - discount_amount
+    
+    def use_by_customer(self, customer, order):
+        """Record usage of this discount code by a customer."""
+        if not self.can_be_used_by(customer):
+            raise ValidationError(_("This discount code cannot be used by this customer."))
         
-        discount_amount = (total_amount * self.discount_percentage) / 100
-        return round(discount_amount, 2)
+        usage = DiscountUsage.objects.create(
+            discount_code=self,
+            customer=customer,
+            order=order,
+            discount_amount=self.get_discount_amount(order.total_amount)
+        )
+        
+        return usage
+    
+    @classmethod
+    def get_available_codes(cls):
+        """Get all available discount codes."""
+        return cls.objects.get_active_codes()
+    
+    @classmethod
+    def validate_code(cls, code, customer):
+        """Validate a discount code for a specific customer."""
+        discount_code = cls.objects.get_valid_code(code)
+        if not discount_code:
+            return None, _("Invalid or expired discount code.")
+        
+        if not discount_code.can_be_used_by(customer):
+            return None, _("You have already used this discount code the maximum number of times.")
+        
+        return discount_code, None
 
 
 class DiscountUsage(models.Model):
     """
     Model to track usage of discount codes by customers.
-    Records each time a customer uses a discount code.
     """
-    
     discount_code = models.ForeignKey(
         DiscountCode,
         on_delete=models.CASCADE,
-        related_name='usage_records',
-        help_text="The discount code that was used"
+        related_name='usages',
+        help_text="Discount code that was used"
     )
     
-    user = models.ForeignKey(
+    customer = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
         related_name='discount_usages',
-        help_text="User who used the discount code"
+        limit_choices_to={'user_type': 'customer'},
+        help_text="Customer who used the discount code"
     )
     
-    order_amount = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        help_text="Original order amount before discount"
+    order = models.ForeignKey(
+        'Order',
+        on_delete=models.CASCADE,
+        related_name='discount_usages',
+        help_text="Order where the discount code was applied"
     )
     
     discount_amount = models.DecimalField(
         max_digits=10,
         decimal_places=2,
-        help_text="Amount discounted from the order"
-    )
-    
-    final_amount = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        help_text="Final amount after discount is applied"
+        help_text="Amount of discount applied"
     )
     
     used_at = models.DateTimeField(
@@ -160,66 +213,54 @@ class DiscountUsage(models.Model):
         help_text="When the discount code was used"
     )
     
-    # Reference to payment/order if needed for tracking
-    payment_reference = models.CharField(
-        max_length=100,
-        blank=True,
-        null=True,
-        help_text="Reference to the payment/order where this discount was applied"
-    )
-    
     class Meta:
-        db_table = 'discount_usage'
+        db_table = 'discount_usage' 
         verbose_name = 'Discount Usage'
         verbose_name_plural = 'Discount Usages'
         ordering = ['-used_at']
-        # Ensure uniqueness per user per code per transaction
-        unique_together = ['discount_code', 'user', 'payment_reference']
+        indexes = [
+            models.Index(fields=['discount_code']),
+            models.Index(fields=['customer']),
+            models.Index(fields=['order']),
+            models.Index(fields=['used_at']),
+        ]
+        unique_together = ['discount_code', 'order']  # One usage per order
     
     def __str__(self):
-        return f"{self.user.email} used {self.discount_code.code} - ${self.discount_amount} off"
+        return f"{self.customer.get_full_name()} used {self.discount_code.code} on {self.order}"
     
-    def save(self, *args, **kwargs):
+    @classmethod
+    def get_customer_usage_stats(cls, customer):
         """
-        Calculate final amount before saving if not provided.
+        Get discount usage statistics for a customer.
         """
-        if not self.final_amount:
-            self.final_amount = self.order_amount - self.discount_amount
-        super().save(*args, **kwargs)
-
-
-class DiscountCodeManager(models.Manager):
-    """
-    Custom manager for DiscountCode model with utility methods.
-    """
+        total_usage = cls.objects.filter(customer=customer).count()
+        total_savings = cls.objects.filter(customer=customer).aggregate(
+            total=models.Sum('discount_amount')
+        )['total'] or 0
+        
+        return {
+            'total_usage': total_usage,
+            'total_savings': total_savings,
+        }
     
-    def get_valid_codes(self):
+    @classmethod
+    def get_discount_usage_stats(cls):
         """
-        Get all currently valid discount codes.
+        Get overall discount usage statistics.
         """
-        return self.filter(
-            is_active=True,
-            expiration_date__gt=timezone.now()
-        )
-    
-    def get_expired_codes(self):
-        """
-        Get all expired discount codes.
-        """
-        return self.filter(
-            expiration_date__lte=timezone.now()
-        )
-    
-    def cleanup_expired_codes(self):
-        """
-        Remove expired discount codes that haven't been used.
-        """
-        expired_codes = self.get_expired_codes()
-        unused_expired = expired_codes.filter(usage_records__isnull=True)
-        count = unused_expired.count()
-        unused_expired.delete()
-        return count
-
-
-# Add the custom manager to the DiscountCode model
-DiscountCode.add_to_class('objects', DiscountCodeManager())
+        total_usage = cls.objects.count()
+        total_savings = cls.objects.aggregate(
+            total=models.Sum('discount_amount')
+        )['total'] or 0
+        
+        # Get most popular discount codes
+        popular_codes = cls.objects.values('discount_code__code').annotate(
+            usage_count=models.Count('id')
+        ).order_by('-usage_count')[:5]
+        
+        return {
+            'total_usage': total_usage,
+            'total_savings': total_savings,
+            'popular_codes': popular_codes,
+        }

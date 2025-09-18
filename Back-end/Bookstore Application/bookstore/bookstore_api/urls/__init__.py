@@ -8,6 +8,10 @@ from .delivery_urls import urlpatterns as delivery_urls
 from .notification_urls import urlpatterns as notification_urls
 from .borrowing_urls import borrowing_urls
 from .discount_urls import discount_urls
+from .complaint_urls import complaint_urls
+from .report_urls import report_urls
+from .ad_urls import urlpatterns as ad_urls
+from .user_preferences_urls import user_preferences_urls
 
 urlpatterns = [
     # User management endpoints
@@ -26,5 +30,13 @@ urlpatterns = [
     path('borrowing/', include(borrowing_urls)),
     # Discount management endpoints
     path('discounts/', include(discount_urls)),
+    # Complaints management endpoints
+    path('complaints/', include(complaint_urls)),
+    # Reports management endpoints
+    path('reports/', include(report_urls)),
+    # Advertisement management endpoints
+    path('ads/', include(ad_urls)),
+    # User preferences endpoints (replaces manager settings)
+    path('preferences/', include(user_preferences_urls)),
     ]   
     

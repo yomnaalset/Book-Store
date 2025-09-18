@@ -1,0 +1,1 @@
+ C:\\Users\\ASUS\\Desktop\\Bookstore-project\\Front-end\\Bookstore\ Application\\bookstore\\.dart_tool\\flutter_build\\04b4e03f8d8b109c27b95a7329d2d3b5\\native_assets.json: 

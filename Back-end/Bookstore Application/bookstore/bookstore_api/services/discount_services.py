@@ -73,7 +73,7 @@ class DiscountCodeService:
             discount_code = DiscountCode.objects.get(id=discount_code_id)
             
             # Check if the code has been used and restrictions apply
-            usage_count = discount_code.usage_records.count()
+            usage_count = discount_code.usages.count()
             if usage_count > 0:
                 # Some restrictions might apply for codes that have been used
                 logger.info(f"Updating discount code {discount_code.code} that has {usage_count} uses")
@@ -122,7 +122,7 @@ class DiscountCodeService:
             discount_code = DiscountCode.objects.get(id=discount_code_id)
             
             # Check if the code has been used
-            usage_count = discount_code.usage_records.count()
+            usage_count = discount_code.usages.count()
             is_expired = discount_code.expiration_date <= timezone.now()
             
             if usage_count > 0 and not is_expired:
@@ -153,21 +153,32 @@ class DiscountCodeService:
             }
     
     @staticmethod
-    def get_discount_codes(include_inactive: bool = False) -> Dict[str, Any]:
+    def get_discount_codes(include_inactive: bool = False, is_active: Optional[bool] = None) -> Dict[str, Any]:
         """
         Get all discount codes with optional filtering.
         
         Args:
-            include_inactive: Whether to include inactive codes
+            include_inactive: Whether to include inactive codes (legacy parameter)
+            is_active: Filter by active status (True=active only, False=inactive only, None=all)
             
         Returns:
             Dictionary containing discount codes and metadata
         """
         try:
             queryset = DiscountCode.objects.all()
+            logger.info(f"DiscountService - Initial queryset count: {queryset.count()}")
             
-            if not include_inactive:
+            # Handle is_active parameter (takes precedence over include_inactive)
+            if is_active is not None:
+                queryset = queryset.filter(is_active=is_active)
+                logger.info(f"DiscountService - After is_active filter ({is_active}): {queryset.count()}")
+            elif include_inactive:
+                # If include_inactive is True, show all (no filtering)
+                logger.info(f"DiscountService - include_inactive=True, showing all: {queryset.count()}")
+            else:
+                # Default behavior: show only active
                 queryset = queryset.filter(is_active=True)
+                logger.info(f"DiscountService - Default behavior, showing only active: {queryset.count()}")
             
             # Add ordering and additional filtering
             queryset = queryset.order_by('-created_at')
@@ -187,13 +198,16 @@ class DiscountCodeService:
                 else:
                     active_codes.append(code_data)
             
+            total_count = len(active_codes) + len(expired_codes) + len(inactive_codes)
+            logger.info(f"DiscountService - Final counts - Active: {len(active_codes)}, Expired: {len(expired_codes)}, Inactive: {len(inactive_codes)}, Total: {total_count}")
+            
             return {
                 'success': True,
                 'data': {
                     'active_codes': active_codes,
                     'expired_codes': expired_codes,
                     'inactive_codes': inactive_codes,
-                    'total_count': len(active_codes) + len(expired_codes) + len(inactive_codes),
+                    'total_count': total_count,
                     'active_count': len(active_codes),
                     'expired_count': len(expired_codes),
                     'inactive_count': len(inactive_codes)
@@ -384,121 +398,3 @@ class DiscountValidationService:
                 'message': 'An unexpected error occurred while applying the discount code.'
             }
 
-
-class DiscountReportingService:
-    """
-    Service class for discount code reporting and analytics.
-    """
-    
-    @staticmethod
-    def get_discount_usage_stats() -> Dict[str, Any]:
-        """
-        Get comprehensive statistics about discount code usage.
-        
-        Returns:
-            Dictionary containing usage statistics
-        """
-        try:
-            # Overall stats
-            total_codes = DiscountCode.objects.count()
-            active_codes = DiscountCode.objects.get_valid_codes().count()
-            total_usage = DiscountUsage.objects.count()
-            total_savings = DiscountUsage.objects.aggregate(
-                total=models.Sum('discount_amount')
-            )['total'] or 0
-            
-            # Top used codes
-            top_codes = DiscountCode.objects.annotate(
-                usage_count=models.Count('usage_records')
-            ).order_by('-usage_count')[:5]
-            
-            # Recent activity
-            recent_usage = DiscountUsage.objects.select_related(
-                'discount_code', 'user'
-            ).order_by('-used_at')[:10]
-            
-            return {
-                'success': True,
-                'stats': {
-                    'total_codes': total_codes,
-                    'active_codes': active_codes,
-                    'total_usage': total_usage,
-                    'total_savings': float(total_savings),
-                    'top_codes': [
-                        {
-                            'code': code.code,
-                            'usage_count': code.usage_count,
-                            'discount_percentage': float(code.discount_percentage)
-                        }
-                        for code in top_codes
-                    ],
-                    'recent_usage': [
-                        {
-                            'code': usage.discount_code.code,
-                            'user_email': usage.user.email,
-                            'discount_amount': float(usage.discount_amount),
-                            'used_at': usage.used_at
-                        }
-                        for usage in recent_usage
-                    ]
-                }
-            }
-            
-        except Exception as e:
-            logger.error(f"Error generating discount statistics: {str(e)}")
-            return {
-                'success': False,
-                'error': str(e),
-                'message': 'An error occurred while generating discount statistics.'
-            }
-    
-    @staticmethod
-    def get_user_discount_history(user: User) -> Dict[str, Any]:
-        """
-        Get discount usage history for a specific user.
-        
-        Args:
-            user: The user to get history for
-            
-        Returns:
-            Dictionary containing user's discount history
-        """
-        try:
-            usage_records = DiscountUsage.objects.filter(
-                user=user
-            ).select_related('discount_code').order_by('-used_at')
-            
-            total_savings = usage_records.aggregate(
-                total=models.Sum('discount_amount')
-            )['total'] or 0
-            
-            return {
-                'success': True,
-                'data': {
-                    'total_savings': float(total_savings),
-                    'total_uses': usage_records.count(),
-                    'usage_history': [
-                        {
-                            'code': record.discount_code.code,
-                            'discount_percentage': float(record.discount_code.discount_percentage),
-                            'order_amount': float(record.order_amount),
-                            'discount_amount': float(record.discount_amount),
-                            'final_amount': float(record.final_amount),
-                            'used_at': record.used_at
-                        }
-                        for record in usage_records
-                    ]
-                }
-            }
-            
-        except Exception as e:
-            logger.error(f"Error getting user discount history: {str(e)}")
-            return {
-                'success': False,
-                'error': str(e),
-                'message': 'An error occurred while retrieving discount history.'
-            }
-
-
-# Import models for annotations
-from django.db import models

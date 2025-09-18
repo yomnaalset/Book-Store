@@ -12,6 +12,7 @@ from bookstore_api.views.borrowing_views import (
     BorrowRatingView,
     BorrowCancelView,
     BorrowFineDetailView,
+    BorrowStatisticsView,
     
     # Library Manager views
     PendingRequestsView,
@@ -50,6 +51,9 @@ borrowing_urls = [
     
     # Customer fine management
     path('borrowings/<int:pk>/fine/', BorrowFineDetailView.as_view(), name='borrow_fine_detail'),
+    
+    # Customer statistics
+    path('statistics/', BorrowStatisticsView.as_view(), name='borrow_statistics'),
     
     # =====================================
     # LIBRARY MANAGER ENDPOINTS

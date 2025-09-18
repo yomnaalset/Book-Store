@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
 from django.db.models import Q
-from django.utils import timezone
+from django.utils import timezone, translation
 
 from ..models import (
     BorrowRequest, BorrowExtension, BorrowFine, BorrowStatistics,
@@ -20,7 +20,7 @@ from ..serializers.borrowing_serializers import (
 from ..services.borrowing_services import (
     BorrowingService, BorrowingNotificationService, BorrowingReportService
 )
-from ..permissions import IsCustomer, IsLibraryAdmin, IsDeliveryAdmin, IsAnyAdmin
+from ..permissions import IsCustomer, IsLibraryAdmin, IsDeliveryAdmin, IsAnyAdmin, CustomerOrAdmin
 from ..utils import format_error_message
 import logging
 
@@ -107,7 +107,7 @@ class CustomerBorrowingsView(generics.ListAPIView):
     API view for customers to view their borrowings
     """
     serializer_class = BorrowRequestListSerializer
-    permission_classes = [permissions.IsAuthenticated, IsCustomer]
+    permission_classes = [permissions.IsAuthenticated, CustomerOrAdmin]
     
     def get_queryset(self):
         """Get customer's borrowings"""
@@ -254,7 +254,7 @@ class BorrowApprovalView(APIView):
             
             return Response({
                 'success': True,
-                'message': message,
+                'message': message, # TODO: translate this message  
                 'data': response_serializer.data
             }, status=status.HTTP_200_OK)
             
@@ -715,5 +715,53 @@ class BorrowingReportView(APIView):
             return Response({
                 'success': False,
                 'message': 'Failed to generate report',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class BorrowStatisticsView(APIView):
+    """
+    API view to get borrowing statistics for the current user
+    """
+    permission_classes = [permissions.IsAuthenticated, CustomerOrAdmin]
+    
+    def get(self, request):
+        try:
+            user = request.user
+            
+            # Get user's borrowing statistics
+            total_borrowings = BorrowRequest.objects.filter(customer=user).count()
+            active_borrowings = BorrowRequest.objects.filter(
+                customer=user, 
+                status__in=['approved', 'delivered']
+            ).count()
+            overdue_borrowings = BorrowRequest.objects.filter(
+                customer=user,
+                status='delivered',
+                expected_return_date__lt=timezone.now()
+            ).count()
+            pending_requests = BorrowRequest.objects.filter(
+                customer=user,
+                status='pending'
+            ).count()
+            
+            statistics = {
+                'total': total_borrowings,
+                'active': active_borrowings,
+                'overdue': overdue_borrowings,
+                'pending': pending_requests
+            }
+            
+            return Response({
+                'success': True,
+                'message': 'Borrowing statistics retrieved successfully',
+                'data': statistics
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error getting borrowing statistics: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to get statistics',
                 'errors': format_error_message(str(e))
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
