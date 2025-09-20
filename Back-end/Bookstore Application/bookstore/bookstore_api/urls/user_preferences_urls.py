@@ -6,6 +6,7 @@ from bookstore_api.views.user_preferences_views import (
     UserPreferencesResetView,
     UserPreferencesStatisticsView,
 )
+from bookstore_api.views.user_views import LanguageOptionsView
 
 user_preferences_urls = [
     # Legacy notification preferences endpoints
@@ -13,6 +14,9 @@ user_preferences_urls = [
     
     # Legacy privacy preferences endpoints
     path('privacy/', PrivacyPreferencesView.as_view(), name='privacy_preferences'),
+    
+    # Language options endpoint (for Flutter compatibility)
+    path('languages/', LanguageOptionsView.as_view(), name='preferences_language_options'),
     
     # Comprehensive user preferences endpoints (replaces manage_settings)
     path('settings/', UserPreferencesView.as_view(), name='user_preferences'),

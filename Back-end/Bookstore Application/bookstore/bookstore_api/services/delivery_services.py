@@ -510,6 +510,433 @@ class DeliveryService:
                 'message': f"Failed to get delivery dashboard stats: {str(e)}",
                 'error_code': 'GET_DELIVERY_DASHBOARD_STATS_ERROR'
             }
+    
+    @staticmethod
+    def update_delivery_manager_location(delivery_manager: User, latitude: float = None, longitude: float = None, address: str = None) -> Dict[str, Any]:
+        """
+        Update delivery manager's location.
+        """
+        try:
+            if not delivery_manager.is_delivery_admin():
+                return {
+                    'success': False,
+                    'message': 'User must be a delivery administrator',
+                    'error_code': 'INVALID_DELIVERY_MANAGER'
+                }
+            
+            # Validate coordinates if provided
+            if latitude is not None and not (-90 <= latitude <= 90):
+                return {
+                    'success': False,
+                    'message': 'Latitude must be between -90 and 90',
+                    'error_code': 'INVALID_LATITUDE'
+                }
+            
+            if longitude is not None and not (-180 <= longitude <= 180):
+                return {
+                    'success': False,
+                    'message': 'Longitude must be between -180 and 180',
+                    'error_code': 'INVALID_LONGITUDE'
+                }
+            
+            # Update location
+            delivery_manager.update_location(
+                latitude=latitude,
+                longitude=longitude,
+                address=address
+            )
+            
+            return {
+                'success': True,
+                'message': 'Location updated successfully',
+                'location': delivery_manager.get_location_dict()
+            }
+            
+        except Exception as e:
+            logger.error(f"Error updating delivery manager location: {str(e)}")
+            return {
+                'success': False,
+                'message': f"Failed to update location: {str(e)}",
+                'error_code': 'UPDATE_LOCATION_ERROR'
+            }
+    
+    @staticmethod
+    def get_delivery_manager_location(delivery_manager: User) -> Dict[str, Any]:
+        """
+        Get delivery manager's location.
+        """
+        try:
+            if not delivery_manager.is_delivery_admin():
+                return {
+                    'success': False,
+                    'message': 'User must be a delivery administrator',
+                    'error_code': 'INVALID_DELIVERY_MANAGER'
+                }
+            
+            return {
+                'success': True,
+                'location': delivery_manager.get_location_dict()
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting delivery manager location: {str(e)}")
+            return {
+                'success': False,
+                'message': f"Failed to get location: {str(e)}",
+                'error_code': 'GET_LOCATION_ERROR'
+            }
+    
+    @staticmethod
+    def get_delivery_managers_with_locations() -> Dict[str, Any]:
+        """
+        Get all delivery managers with their location data.
+        """
+        try:
+            delivery_managers = User.objects.filter(
+                user_type='delivery_admin',
+                is_active=True
+            ).exclude(
+                latitude__isnull=True,
+                longitude__isnull=True,
+                address__isnull=True
+            ).exclude(
+                latitude='',
+                longitude='',
+                address=''
+            )
+            
+            managers_data = []
+            for manager in delivery_managers:
+                managers_data.append({
+                    'id': manager.id,
+                    'name': manager.get_full_name(),
+                    'email': manager.email,
+                    'location': manager.get_location_dict()
+                })
+            
+            return {
+                'success': True,
+                'delivery_managers': managers_data,
+                'total_count': len(managers_data)
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting delivery managers with locations: {str(e)}")
+            return {
+                'success': False,
+                'message': f"Failed to get delivery managers: {str(e)}",
+                'error_code': 'GET_DELIVERY_MANAGERS_ERROR'
+            }
+
+
+class LocationTrackingService:
+    """
+    Service for managing real-time location tracking and history.
+    """
+    
+    @staticmethod
+    def start_real_time_tracking(delivery_manager: User, interval_seconds: int = 30) -> Dict[str, Any]:
+        """
+        Start real-time location tracking for a delivery manager.
+        """
+        try:
+            if not delivery_manager.is_delivery_admin():
+                return {
+                    'success': False,
+                    'message': 'Only delivery managers can start real-time tracking',
+                    'error_code': 'INVALID_USER_TYPE'
+                }
+            
+            # Start tracking
+            success, message = delivery_manager.start_real_time_tracking(interval_seconds)
+            
+            if success:
+                # Create or update RealTimeTracking record
+                from ..models.delivery_model import RealTimeTracking
+                tracking, created = RealTimeTracking.objects.get_or_create(
+                    delivery_manager=delivery_manager,
+                    defaults={
+                        'is_tracking_enabled': True,
+                        'tracking_interval': interval_seconds,
+                    }
+                )
+                
+                if not created:
+                    tracking.is_tracking_enabled = True
+                    tracking.tracking_interval = interval_seconds
+                    tracking.save()
+                
+                return {
+                    'success': True,
+                    'message': 'Real-time tracking started successfully',
+                    'tracking_settings': {
+                        'is_tracking_enabled': True,
+                        'tracking_interval': interval_seconds,
+                        'delivery_manager_id': delivery_manager.id
+                    }
+                }
+            else:
+                return {
+                    'success': False,
+                    'message': message,
+                    'error_code': 'TRACKING_START_FAILED'
+                }
+                
+        except Exception as e:
+            logger.error(f"Error starting real-time tracking: {str(e)}")
+            return {
+                'success': False,
+                'message': f"Failed to start tracking: {str(e)}",
+                'error_code': 'TRACKING_START_ERROR'
+            }
+    
+    @staticmethod
+    def stop_real_time_tracking(delivery_manager: User) -> Dict[str, Any]:
+        """
+        Stop real-time location tracking for a delivery manager.
+        """
+        try:
+            if not delivery_manager.is_delivery_admin():
+                return {
+                    'success': False,
+                    'message': 'Only delivery managers can stop real-time tracking',
+                    'error_code': 'INVALID_USER_TYPE'
+                }
+            
+            # Stop tracking
+            success, message = delivery_manager.stop_real_time_tracking()
+            
+            if success:
+                # Update RealTimeTracking record
+                from ..models.delivery_model import RealTimeTracking
+                try:
+                    tracking = RealTimeTracking.objects.get(delivery_manager=delivery_manager)
+                    tracking.is_tracking_enabled = False
+                    tracking.is_delivering = False
+                    tracking.current_delivery_assignment = None
+                    tracking.save()
+                except RealTimeTracking.DoesNotExist:
+                    pass  # No tracking record exists
+                
+                return {
+                    'success': True,
+                    'message': 'Real-time tracking stopped successfully'
+                }
+            else:
+                return {
+                    'success': False,
+                    'message': message,
+                    'error_code': 'TRACKING_STOP_FAILED'
+                }
+                
+        except Exception as e:
+            logger.error(f"Error stopping real-time tracking: {str(e)}")
+            return {
+                'success': False,
+                'message': f"Failed to stop tracking: {str(e)}",
+                'error_code': 'TRACKING_STOP_ERROR'
+            }
+    
+    @staticmethod
+    def update_location_with_tracking(
+        delivery_manager: User,
+        latitude: float,
+        longitude: float,
+        address: str = None,
+        tracking_type: str = 'gps',
+        accuracy: float = None,
+        speed: float = None,
+        heading: float = None,
+        battery_level: int = None,
+        network_type: str = None,
+        delivery_assignment_id: int = None
+    ) -> Dict[str, Any]:
+        """
+        Update location with real-time tracking data.
+        """
+        try:
+            if not delivery_manager.is_delivery_admin():
+                return {
+                    'success': False,
+                    'message': 'Only delivery managers can update tracking location',
+                    'error_code': 'INVALID_USER_TYPE'
+                }
+            
+            # Get delivery assignment if provided
+            delivery_assignment = None
+            if delivery_assignment_id:
+                from ..models.delivery_model import DeliveryAssignment
+                try:
+                    delivery_assignment = DeliveryAssignment.objects.get(id=delivery_assignment_id)
+                except DeliveryAssignment.DoesNotExist:
+                    return {
+                        'success': False,
+                        'message': 'Delivery assignment not found',
+                        'error_code': 'DELIVERY_ASSIGNMENT_NOT_FOUND'
+                    }
+            
+            # Update location with tracking data
+            success, message = delivery_manager.update_tracking_location(
+                latitude=latitude,
+                longitude=longitude,
+                address=address,
+                tracking_type=tracking_type,
+                accuracy=accuracy,
+                speed=speed,
+                heading=heading,
+                battery_level=battery_level,
+                network_type=network_type,
+                delivery_assignment=delivery_assignment
+            )
+            
+            if success:
+                # Update RealTimeTracking last_location_update
+                from ..models.delivery_model import RealTimeTracking
+                try:
+                    tracking = RealTimeTracking.objects.get(delivery_manager=delivery_manager)
+                    tracking.last_location_update = timezone.now()
+                    tracking.save(update_fields=['last_location_update'])
+                except RealTimeTracking.DoesNotExist:
+                    pass
+                
+                return {
+                    'success': True,
+                    'message': 'Location updated with tracking data',
+                    'location': delivery_manager.get_location_dict()
+                }
+            else:
+                return {
+                    'success': False,
+                    'message': message,
+                    'error_code': 'LOCATION_UPDATE_FAILED'
+                }
+                
+        except Exception as e:
+            logger.error(f"Error updating tracking location: {str(e)}")
+            return {
+                'success': False,
+                'message': f"Failed to update location: {str(e)}",
+                'error_code': 'LOCATION_UPDATE_ERROR'
+            }
+    
+    @staticmethod
+    def get_location_history(delivery_manager: User, hours: int = 24) -> Dict[str, Any]:
+        """
+        Get location history for a delivery manager.
+        """
+        try:
+            if not delivery_manager.is_delivery_admin():
+                return {
+                    'success': False,
+                    'message': 'Only delivery managers can view location history',
+                    'error_code': 'INVALID_USER_TYPE'
+                }
+            
+            # Get location history
+            history = delivery_manager.get_location_history(hours)
+            
+            return {
+                'success': True,
+                'location_history': [
+                    {
+                        'id': location.id,
+                        'latitude': float(location.latitude),
+                        'longitude': float(location.longitude),
+                        'address': location.address,
+                        'tracking_type': location.tracking_type,
+                        'accuracy': location.accuracy,
+                        'speed': location.speed,
+                        'heading': location.heading,
+                        'recorded_at': location.recorded_at,
+                        'battery_level': location.battery_level,
+                        'network_type': location.network_type,
+                    }
+                    for location in history
+                ],
+                'total_points': history.count(),
+                'hours_analyzed': hours
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting location history: {str(e)}")
+            return {
+                'success': False,
+                'message': f"Failed to get location history: {str(e)}",
+                'error_code': 'HISTORY_GET_ERROR'
+            }
+    
+    @staticmethod
+    def get_movement_summary(delivery_manager: User, hours: int = 24) -> Dict[str, Any]:
+        """
+        Get movement summary for a delivery manager.
+        """
+        try:
+            if not delivery_manager.is_delivery_admin():
+                return {
+                    'success': False,
+                    'message': 'Only delivery managers can view movement summary',
+                    'error_code': 'INVALID_USER_TYPE'
+                }
+            
+            # Get movement summary
+            summary = delivery_manager.get_movement_summary(hours)
+            summary['hours_analyzed'] = hours
+            
+            return {
+                'success': True,
+                'movement_summary': summary
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting movement summary: {str(e)}")
+            return {
+                'success': False,
+                'message': f"Failed to get movement summary: {str(e)}",
+                'error_code': 'SUMMARY_GET_ERROR'
+            }
+    
+    @staticmethod
+    def get_all_tracking_managers() -> Dict[str, Any]:
+        """
+        Get all delivery managers with their tracking status.
+        """
+        try:
+            from ..models.delivery_model import RealTimeTracking
+            
+            # Get all delivery managers with tracking enabled
+            tracking_managers = RealTimeTracking.objects.filter(
+                is_tracking_enabled=True
+            ).select_related('delivery_manager', 'current_delivery_assignment')
+            
+            managers_data = []
+            for tracking in tracking_managers:
+                manager = tracking.delivery_manager
+                managers_data.append({
+                    'id': manager.id,
+                    'name': manager.get_full_name(),
+                    'email': manager.email,
+                    'is_online': tracking.last_location_update and 
+                               (timezone.now() - tracking.last_location_update).total_seconds() < 300,  # 5 minutes
+                    'is_delivering': tracking.is_delivering,
+                    'current_delivery_assignment': tracking.current_delivery_assignment.id if tracking.current_delivery_assignment else None,
+                    'last_location_update': tracking.last_location_update,
+                    'tracking_interval': tracking.tracking_interval,
+                    'location': manager.get_location_dict() if manager.has_location() else None
+                })
+            
+            return {
+                'success': True,
+                'tracking_managers': managers_data,
+                'total_count': len(managers_data)
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting tracking managers: {str(e)}")
+            return {
+                'success': False,
+                'message': f"Failed to get tracking managers: {str(e)}",
+                'error_code': 'TRACKING_MANAGERS_ERROR'
+            }
 
 
 class BorrowingDeliveryService:

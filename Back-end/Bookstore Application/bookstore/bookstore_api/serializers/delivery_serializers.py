@@ -2,7 +2,7 @@ from rest_framework import serializers
 from django.utils import timezone
 from django.db import transaction
 from ..models import Order, OrderItem, DeliveryAssignment, DeliveryStatusHistory, User, Payment, Book
-from ..models.delivery_model import DeliveryRequest
+from ..models.delivery_model import DeliveryRequest, LocationHistory, RealTimeTracking
 from .user_serializers import UserBasicInfoSerializer, UserDetailSerializer 
 from .payment_serializers import PaymentBasicSerializer
 from rest_framework.views import APIView
@@ -533,6 +533,211 @@ class DeliveryRequestWithAvailableManagersSerializer(serializers.ModelSerializer
         available_managers = DeliveryRequest.get_available_delivery_managers()
         serializer = DeliveryManagerForRequestSerializer(available_managers, many=True)
         return serializer.data
+
+
+class LocationHistorySerializer(serializers.ModelSerializer):
+    """
+    Serializer for location history entries.
+    """
+    delivery_manager_name = serializers.CharField(source='delivery_manager.get_full_name', read_only=True)
+    location_display = serializers.CharField(source='get_location_display', read_only=True)
+    distance_from_previous = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = LocationHistory
+        fields = [
+            'id', 'delivery_manager', 'delivery_manager_name',
+            'latitude', 'longitude', 'address', 'location_display',
+            'tracking_type', 'accuracy', 'speed', 'heading',
+            'recorded_at', 'delivery_assignment', 'battery_level',
+            'network_type', 'distance_from_previous'
+        ]
+        read_only_fields = ['id', 'recorded_at', 'delivery_manager_name', 'location_display']
+    
+    def get_distance_from_previous(self, obj):
+        """Calculate distance from previous location."""
+        if not hasattr(self, '_previous_location'):
+            return None
+        
+        return obj.get_distance_from(self._previous_location)
+
+
+class LocationHistoryCreateSerializer(serializers.ModelSerializer):
+    """
+    Serializer for creating location history entries.
+    """
+    class Meta:
+        model = LocationHistory
+        fields = [
+            'latitude', 'longitude', 'address', 'tracking_type',
+            'accuracy', 'speed', 'heading', 'battery_level',
+            'network_type', 'delivery_assignment'
+        ]
+    
+    def validate_latitude(self, value):
+        """Validate latitude value."""
+        if not (-90 <= value <= 90):
+            raise serializers.ValidationError("Latitude must be between -90 and 90")
+        return value
+    
+    def validate_longitude(self, value):
+        """Validate longitude value."""
+        if not (-180 <= value <= 180):
+            raise serializers.ValidationError("Longitude must be between -180 and 180")
+        return value
+    
+    def validate_speed(self, value):
+        """Validate speed value."""
+        if value is not None and value < 0:
+            raise serializers.ValidationError("Speed cannot be negative")
+        return value
+    
+    def validate_heading(self, value):
+        """Validate heading value."""
+        if value is not None and not (0 <= value <= 360):
+            raise serializers.ValidationError("Heading must be between 0 and 360 degrees")
+        return value
+
+
+class RealTimeTrackingSerializer(serializers.ModelSerializer):
+    """
+    Serializer for real-time tracking settings.
+    """
+    delivery_manager_name = serializers.CharField(source='delivery_manager.get_full_name', read_only=True)
+    is_online = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = RealTimeTracking
+        fields = [
+            'id', 'delivery_manager', 'delivery_manager_name',
+            'is_tracking_enabled', 'tracking_interval', 'last_location_update',
+            'is_delivering', 'current_delivery_assignment', 'auto_track_deliveries',
+            'share_location_with_admin', 'share_location_with_customers',
+            'tracking_accuracy', 'max_tracking_duration', 'is_online',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'delivery_manager', 'last_location_update', 'created_at', 'updated_at']
+    
+    def get_is_online(self, obj):
+        """Check if delivery manager is currently online."""
+        if not obj.last_location_update:
+            return False
+        
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        # Consider online if last update was within 5 minutes
+        five_minutes_ago = timezone.now() - timedelta(minutes=5)
+        return obj.last_location_update > five_minutes_ago
+
+
+class RealTimeTrackingUpdateSerializer(serializers.ModelSerializer):
+    """
+    Serializer for updating real-time tracking settings.
+    """
+    class Meta:
+        model = RealTimeTracking
+        fields = [
+            'is_tracking_enabled', 'tracking_interval', 'auto_track_deliveries',
+            'share_location_with_admin', 'share_location_with_customers',
+            'tracking_accuracy', 'max_tracking_duration'
+        ]
+    
+    def validate_tracking_interval(self, value):
+        """Validate tracking interval."""
+        if not (10 <= value <= 300):  # 10 seconds to 5 minutes
+            raise serializers.ValidationError("Tracking interval must be between 10 and 300 seconds")
+        return value
+    
+    def validate_max_tracking_duration(self, value):
+        """Validate max tracking duration."""
+        if not (1 <= value <= 24):  # 1 to 24 hours
+            raise serializers.ValidationError("Max tracking duration must be between 1 and 24 hours")
+        return value
+
+
+class LocationTrackingUpdateSerializer(serializers.Serializer):
+    """
+    Serializer for real-time location updates.
+    """
+    latitude = serializers.DecimalField(max_digits=10, decimal_places=7)
+    longitude = serializers.DecimalField(max_digits=10, decimal_places=7)
+    address = serializers.CharField(required=False, allow_blank=True)
+    tracking_type = serializers.ChoiceField(
+        choices=LocationHistory.TRACKING_TYPE_CHOICES,
+        default='gps'
+    )
+    accuracy = serializers.FloatField(required=False, min_value=0)
+    speed = serializers.FloatField(required=False, min_value=0)
+    heading = serializers.FloatField(required=False, min_value=0, max_value=360)
+    battery_level = serializers.IntegerField(required=False, min_value=0, max_value=100)
+    network_type = serializers.CharField(required=False, max_length=20)
+    delivery_assignment_id = serializers.IntegerField(required=False)
+    
+    def validate_latitude(self, value):
+        """Validate latitude value."""
+        if not (-90 <= value <= 90):
+            raise serializers.ValidationError("Latitude must be between -90 and 90")
+        return value
+    
+    def validate_longitude(self, value):
+        """Validate longitude value."""
+        if not (-180 <= value <= 180):
+            raise serializers.ValidationError("Longitude must be between -180 and 180")
+        return value
+
+
+class MovementSummarySerializer(serializers.Serializer):
+    """
+    Serializer for movement summary data.
+    """
+    total_points = serializers.IntegerField()
+    total_distance = serializers.FloatField()
+    average_speed = serializers.FloatField()
+    movement_time = serializers.FloatField()
+    hours_analyzed = serializers.IntegerField()
+
+
+class DeliveryManagerLocationWithHistorySerializer(serializers.ModelSerializer):
+    """
+    Serializer for delivery manager location with history.
+    """
+    location = serializers.SerializerMethodField()
+    recent_locations = serializers.SerializerMethodField()
+    movement_summary = serializers.SerializerMethodField()
+    real_time_tracking = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = User
+        fields = [
+            'id', 'first_name', 'last_name', 'email',
+            'location', 'recent_locations', 'movement_summary',
+            'real_time_tracking'
+        ]
+    
+    def get_location(self, obj):
+        """Get current location data."""
+        return obj.get_location_dict()
+    
+    def get_recent_locations(self, obj):
+        """Get recent location history."""
+        hours = self.context.get('hours', 24)
+        recent_locations = obj.get_location_history(hours)
+        return LocationHistorySerializer(recent_locations, many=True).data
+    
+    def get_movement_summary(self, obj):
+        """Get movement summary."""
+        hours = self.context.get('hours', 24)
+        summary = obj.get_movement_summary(hours)
+        return MovementSummarySerializer(summary).data
+    
+    def get_real_time_tracking(self, obj):
+        """Get real-time tracking settings."""
+        try:
+            tracking = obj.real_time_tracking
+            return RealTimeTrackingSerializer(tracking).data
+        except RealTimeTracking.DoesNotExist:
+            return None
 
 
  

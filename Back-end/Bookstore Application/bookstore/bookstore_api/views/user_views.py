@@ -417,64 +417,6 @@ class PasswordResetView(APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class ChangePasswordView(APIView):
-    """
-    API view for changing user password.
-    Requires current password and new password.
-    """
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def post(self, request):
-        """
-        Change user password.
-        """
-        current_password = request.data.get('current_password')
-        new_password = request.data.get('new_password')
-        
-        if not current_password or not new_password:
-            return Response({
-                'success': False,
-                'message': 'Current password and new password are required',
-                'errors': {'password': ['Both password fields are required']}
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        try:
-            user = request.user
-            
-            # Verify current password
-            if not user.check_password(current_password):
-                return Response({
-                    'success': False,
-                    'message': 'Current password is incorrect',
-                    'errors': {'current_password': ['Current password is incorrect']}
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            # Validate new password
-            if len(new_password) < 8:
-                return Response({
-                    'success': False,
-                    'message': 'New password must be at least 8 characters long',
-                    'errors': {'new_password': ['Password must be at least 8 characters long']}
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            # Set new password
-            user.set_password(new_password)
-            user.save()
-            
-            logger.info(f"Password changed successfully for user {user.email}")
-            
-            return Response({
-                'success': True,
-                'message': 'Password changed successfully'
-            }, status=status.HTTP_200_OK)
-            
-        except Exception as e:
-            logger.error(f"Error in password change: {str(e)}")
-            return Response({
-                'success': False,
-                'message': 'Failed to change password',
-                'errors': format_error_message(str(e))
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class UserProfileView(generics.RetrieveUpdateAPIView):

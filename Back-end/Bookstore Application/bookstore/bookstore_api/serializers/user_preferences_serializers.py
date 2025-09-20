@@ -185,6 +185,7 @@ class UserPreferenceUpdateSerializer(serializers.Serializer):
     
     # Language and Display Settings
     language = serializers.CharField(max_length=10, required=False)
+    preferred_language = serializers.CharField(max_length=10, required=False)  # For Flutter compatibility
     dark_mode = serializers.BooleanField(required=False)
     theme = serializers.CharField(max_length=20, required=False)
     timezone = serializers.CharField(max_length=50, required=False)
@@ -213,10 +214,23 @@ class UserPreferenceUpdateSerializer(serializers.Serializer):
     show_tooltips = serializers.BooleanField(required=False)
     show_help_text = serializers.BooleanField(required=False)
     
+    def validate_preferred_language(self, value):
+        """Validate preferred language field."""
+        if value:
+            valid_languages = ['en', 'ar']
+            if value not in valid_languages:
+                raise serializers.ValidationError(f"Language '{value}' is not supported. Supported languages: {valid_languages}")
+        return value
+    
     def validate(self, data):
         """Validate the update data."""
         if not data:
             raise serializers.ValidationError("At least one field must be provided for update.")
+        
+        # Handle preferred_language -> language mapping for Flutter compatibility
+        if 'preferred_language' in data and 'language' not in data:
+            data['language'] = data['preferred_language']
+        
         return data
 
 

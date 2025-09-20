@@ -17,6 +17,8 @@ from ..views.delivery_views import  (
     # Delivery manager views
     available_delivery_managers_view,
     DeliveryManagerStatusUpdateView,
+    DeliveryManagerLocationView,
+    get_delivery_manager_location_view,
     
     # Bulk operations
     bulk_assign_orders_view,
@@ -36,6 +38,16 @@ from ..views.delivery_views import  (
     LibraryAdminRequestListView,
     LibraryAdminAssignManagerView,
     
+    # Location tracking views
+    RealTimeTrackingView,
+    LocationTrackingUpdateView,
+    LocationHistoryView,
+    MovementSummaryView,
+    AllTrackingManagersView,
+    RealTimeTrackingSettingsView,
+    
+    # Notifications views
+    DeliveryNotificationsView,
 
 )
 
@@ -81,5 +93,19 @@ urlpatterns = [
     path('requests/', LibraryAdminRequestListView.as_view(), name='request-list'),
     path('requests/<int:pk>/assign-manager/', LibraryAdminAssignManagerView.as_view(), name='assign-manager'),
     
+    # Location management endpoints
+    path('location/', DeliveryManagerLocationView.as_view(), name='location-manage'),
+    path('location/<int:delivery_manager_id>/', get_delivery_manager_location_view, name='location-get'),
+    
+    # Real-time location tracking endpoints
+    path('tracking/', RealTimeTrackingView.as_view(), name='real-time-tracking'),
+    path('tracking/update-location/', LocationTrackingUpdateView.as_view(), name='update-tracking-location'),
+    path('tracking/history/', LocationHistoryView.as_view(), name='location-history'),
+    path('tracking/movement-summary/', MovementSummaryView.as_view(), name='movement-summary'),
+    path('tracking/all-managers/', AllTrackingManagersView.as_view(), name='all-tracking-managers'),
+    path('tracking/settings/', RealTimeTrackingSettingsView.as_view(), name='tracking-settings'),
+    
+    # Notifications endpoints
+    path('notifications/', DeliveryNotificationsView.as_view(), name='delivery-notifications'),
 
 ]

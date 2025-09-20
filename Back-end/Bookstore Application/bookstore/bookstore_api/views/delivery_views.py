@@ -925,6 +925,178 @@ def order_tracking_view(request, order_number):
     return Response(serializer.data, status=status.HTTP_200_OK) 
 
 
+class DeliveryManagerLocationView(APIView):
+    """
+    Manage delivery manager's location.
+    Accessible by delivery managers to update their location.
+    Accessible by admins and customers to view delivery manager location.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request, delivery_manager_id=None):
+        """
+        Get delivery manager's location.
+        If delivery_manager_id is provided, get that manager's location.
+        Otherwise, get current user's location (if they are a delivery manager).
+        """
+        try:
+            # If delivery_manager_id is provided, get that manager's location
+            if delivery_manager_id:
+                delivery_manager = get_object_or_404(User, id=delivery_manager_id)
+                
+                # Check permissions - only admins, customers with orders from this manager, or the manager themselves can view
+                user = request.user
+                if not (user.is_library_admin() or user.is_staff or 
+                       delivery_manager == user or
+                       self._user_has_orders_from_manager(user, delivery_manager)):
+                    return Response({
+                        'error': "You don't have permission to view this delivery manager's location"
+                    }, status=status.HTTP_403_FORBIDDEN)
+            else:
+                # Get current user's location (must be delivery manager)
+                delivery_manager = request.user
+                if not delivery_manager.is_delivery_admin():
+                    return Response({
+                        'error': "Only delivery managers can manage their location"
+                    }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Return location data
+            location_data = delivery_manager.get_location_dict()
+            
+            return Response({
+                'success': True,
+                'delivery_manager': {
+                    'id': delivery_manager.id,
+                    'name': delivery_manager.get_full_name(),
+                    'email': delivery_manager.email
+                },
+                'location': location_data
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error getting delivery manager location: {str(e)}")
+            return Response({
+                'error': 'An error occurred while retrieving location'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def post(self, request):
+        """
+        Update delivery manager's location.
+        Only accessible by delivery managers.
+        """
+        try:
+            user = request.user
+            
+            # Check if user is a delivery manager
+            if not user.is_delivery_admin():
+                return Response({
+                    'error': "Only delivery managers can update their location"
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Get location data from request
+            latitude = request.data.get('latitude')
+            longitude = request.data.get('longitude')
+            address = request.data.get('address', '')
+            
+            # Validate coordinates if provided
+            if latitude is not None:
+                try:
+                    latitude = float(latitude)
+                    if not (-90 <= latitude <= 90):
+                        return Response({
+                            'error': 'Latitude must be between -90 and 90'
+                        }, status=status.HTTP_400_BAD_REQUEST)
+                except (ValueError, TypeError):
+                    return Response({
+                        'error': 'Invalid latitude value'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+            
+            if longitude is not None:
+                try:
+                    longitude = float(longitude)
+                    if not (-180 <= longitude <= 180):
+                        return Response({
+                            'error': 'Longitude must be between -180 and 180'
+                        }, status=status.HTTP_400_BAD_REQUEST)
+                except (ValueError, TypeError):
+                    return Response({
+                        'error': 'Invalid longitude value'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Update location
+            user.update_location(
+                latitude=latitude,
+                longitude=longitude,
+                address=address
+            )
+            
+            # Return updated location data
+            location_data = user.get_location_dict()
+            
+            return Response({
+                'success': True,
+                'message': 'Location updated successfully',
+                'location': location_data
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error updating delivery manager location: {str(e)}")
+            return Response({
+                'error': 'An error occurred while updating location'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def _user_has_orders_from_manager(self, user, delivery_manager):
+        """Check if user has orders assigned to the delivery manager."""
+        if not user.is_customer():
+            return False
+        
+        # Check if user has any orders assigned to this delivery manager
+        from ..models import DeliveryAssignment
+        return DeliveryAssignment.objects.filter(
+            order__customer=user,
+            delivery_manager=delivery_manager
+        ).exists()
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_delivery_manager_location_view(request, delivery_manager_id):
+    """
+    Get a specific delivery manager's location.
+    Accessible by admins and customers with orders from this manager.
+    """
+    try:
+        delivery_manager = get_object_or_404(User, id=delivery_manager_id)
+        user = request.user
+        
+        # Check permissions
+        if not (user.is_library_admin() or user.is_staff or 
+               delivery_manager == user or
+               DeliveryManagerLocationView()._user_has_orders_from_manager(user, delivery_manager)):
+            return Response({
+                'error': "You don't have permission to view this delivery manager's location"
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        # Return location data
+        location_data = delivery_manager.get_location_dict()
+        
+        return Response({
+            'success': True,
+            'delivery_manager': {
+                'id': delivery_manager.id,
+                'name': delivery_manager.get_full_name(),
+                'email': delivery_manager.email
+            },
+            'location': location_data
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f"Error getting delivery manager location: {str(e)}")
+        return Response({
+            'error': 'An error occurred while retrieving location'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def order_delivery_contact_view(request, order_id):
@@ -950,14 +1122,19 @@ def order_delivery_contact_view(request, order_id):
         
         assignment = order.delivery_assignment
         
-        # Return delivery representative contact information
+        # Get delivery manager location
+        delivery_manager = assignment.delivery_manager
+        location_data = delivery_manager.get_location_dict()
+        
+        # Return delivery representative contact information with location
         return Response({
             'success': True,
             'delivery_rep': {
                 'name': f"{assignment.delivery_manager.first_name} {assignment.delivery_manager.last_name}",
                 'contact_phone': assignment.contact_phone or "Not provided",
                 'estimated_delivery_time': assignment.estimated_delivery_time,
-                'status': assignment.get_status_display()
+                'status': assignment.get_status_display(),
+                'location': location_data
             }
         }, status=status.HTTP_200_OK)
         
@@ -990,9 +1167,9 @@ class DeliveryManagerStatusUpdateView(APIView):
             
             # Get the new status from request data
             new_status = request.data.get('status')
-            if new_status not in ['online', 'offline']:
+            if new_status not in ['online', 'offline', 'busy']:
                 return Response({
-                    'error': 'Invalid status. Must be "online" or "offline".'
+                    'error': 'Invalid status. Must be "online", "offline", or "busy".'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
             # Check if the delivery manager is currently busy
@@ -1022,6 +1199,479 @@ class DeliveryManagerStatusUpdateView(APIView):
             logger.error(f"Error updating delivery manager status: {str(e)}")
             return Response({
                 'error': 'An error occurred while processing your request'   
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# ==================== LOCATION TRACKING VIEWS ====================
+
+class RealTimeTrackingView(APIView):
+    """
+    Manage real-time location tracking for delivery managers.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request):
+        """
+        Get real-time tracking status for the current user.
+        """
+        try:
+            user = request.user
+            
+            if not user.is_delivery_admin():
+                return Response({
+                    'error': 'Only delivery managers can access tracking status'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            from ..models.delivery_model import RealTimeTracking
+            from ..serializers.delivery_serializers import RealTimeTrackingSerializer
+            
+            try:
+                tracking = RealTimeTracking.objects.get(delivery_manager=user)
+                serializer = RealTimeTrackingSerializer(tracking)
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            except RealTimeTracking.DoesNotExist:
+                return Response({
+                    'error': 'No tracking settings found. Please enable tracking first.'
+                }, status=status.HTTP_404_NOT_FOUND)
+                
+        except Exception as e:
+            logger.error(f"Error getting tracking status: {str(e)}")
+            return Response({
+                'error': 'An error occurred while retrieving tracking status'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def post(self, request):
+        """
+        Start real-time tracking.
+        """
+        try:
+            user = request.user
+            
+            if not user.is_delivery_admin():
+                return Response({
+                    'error': 'Only delivery managers can start tracking'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            interval_seconds = request.data.get('interval_seconds', 30)
+            
+            from ..services.delivery_services import LocationTrackingService
+            result = LocationTrackingService.start_real_time_tracking(user, interval_seconds)
+            
+            if result['success']:
+                return Response(result, status=status.HTTP_200_OK)
+            else:
+                return Response(result, status=status.HTTP_400_BAD_REQUEST)
+                
+        except Exception as e:
+            logger.error(f"Error starting tracking: {str(e)}")
+            return Response({
+                'error': 'An error occurred while starting tracking'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def delete(self, request):
+        """
+        Stop real-time tracking.
+        """
+        try:
+            user = request.user
+            
+            if not user.is_delivery_admin():
+                return Response({
+                    'error': 'Only delivery managers can stop tracking'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            from ..services.delivery_services import LocationTrackingService
+            result = LocationTrackingService.stop_real_time_tracking(user)
+            
+            if result['success']:
+                return Response(result, status=status.HTTP_200_OK)
+            else:
+                return Response(result, status=status.HTTP_400_BAD_REQUEST)
+                
+        except Exception as e:
+            logger.error(f"Error stopping tracking: {str(e)}")
+            return Response({
+                'error': 'An error occurred while stopping tracking'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class LocationTrackingUpdateView(APIView):
+    """
+    Update location with real-time tracking data.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def post(self, request):
+        """
+        Update location with tracking metadata.
+        """
+        try:
+            user = request.user
+            
+            if not user.is_delivery_admin():
+                return Response({
+                    'error': 'Only delivery managers can update tracking location'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            from ..serializers.delivery_serializers import LocationTrackingUpdateSerializer
+            from ..services.delivery_services import LocationTrackingService
+            
+            serializer = LocationTrackingUpdateSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response({
+                    'error': 'Invalid data provided',
+                    'details': serializer.errors
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            data = serializer.validated_data
+            result = LocationTrackingService.update_location_with_tracking(
+                delivery_manager=user,
+                latitude=data['latitude'],
+                longitude=data['longitude'],
+                address=data.get('address'),
+                tracking_type=data.get('tracking_type', 'gps'),
+                accuracy=data.get('accuracy'),
+                speed=data.get('speed'),
+                heading=data.get('heading'),
+                battery_level=data.get('battery_level'),
+                network_type=data.get('network_type'),
+                delivery_assignment_id=data.get('delivery_assignment_id')
+            )
+            
+            if result['success']:
+                return Response(result, status=status.HTTP_200_OK)
+            else:
+                return Response(result, status=status.HTTP_400_BAD_REQUEST)
+                
+        except Exception as e:
+            logger.error(f"Error updating tracking location: {str(e)}")
+            return Response({
+                'error': 'An error occurred while updating location'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class LocationHistoryView(APIView):
+    """
+    Get location history for delivery managers.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request):
+        """
+        Get location history for the current user or specified delivery manager.
+        """
+        try:
+            user = request.user
+            delivery_manager_id = request.query_params.get('delivery_manager_id')
+            hours = int(request.query_params.get('hours', 24))
+            
+            # Determine which delivery manager to get history for
+            if delivery_manager_id:
+                # Admin or customer requesting specific manager's history
+                if not (user.is_library_admin() or user.is_staff):
+                    return Response({
+                        'error': 'Only admins can view other delivery managers\' history'
+                    }, status=status.HTTP_403_FORBIDDEN)
+                
+                from ..models import User
+                try:
+                    delivery_manager = User.objects.get(id=delivery_manager_id, user_type='delivery_admin')
+                except User.DoesNotExist:
+                    return Response({
+                        'error': 'Delivery manager not found'
+                    }, status=status.HTTP_404_NOT_FOUND)
+            else:
+                # Current user's history
+                if not user.is_delivery_admin():
+                    return Response({
+                        'error': 'Only delivery managers can view location history'
+                    }, status=status.HTTP_403_FORBIDDEN)
+                delivery_manager = user
+            
+            from ..services.delivery_services import LocationTrackingService
+            result = LocationTrackingService.get_location_history(delivery_manager, hours)
+            
+            if result['success']:
+                return Response(result, status=status.HTTP_200_OK)
+            else:
+                return Response(result, status=status.HTTP_400_BAD_REQUEST)
+                
+        except Exception as e:
+            logger.error(f"Error getting location history: {str(e)}")
+            return Response({
+                'error': 'An error occurred while retrieving location history'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class MovementSummaryView(APIView):
+    """
+    Get movement summary for delivery managers.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request):
+        """
+        Get movement summary for the current user or specified delivery manager.
+        """
+        try:
+            user = request.user
+            delivery_manager_id = request.query_params.get('delivery_manager_id')
+            hours = int(request.query_params.get('hours', 24))
+            
+            # Determine which delivery manager to get summary for
+            if delivery_manager_id:
+                # Admin requesting specific manager's summary
+                if not (user.is_library_admin() or user.is_staff):
+                    return Response({
+                        'error': 'Only admins can view other delivery managers\' movement summary'
+                    }, status=status.HTTP_403_FORBIDDEN)
+                
+                from ..models import User
+                try:
+                    delivery_manager = User.objects.get(id=delivery_manager_id, user_type='delivery_admin')
+                except User.DoesNotExist:
+                    return Response({
+                        'error': 'Delivery manager not found'
+                    }, status=status.HTTP_404_NOT_FOUND)
+            else:
+                # Current user's summary
+                if not user.is_delivery_admin():
+                    return Response({
+                        'error': 'Only delivery managers can view movement summary'
+                    }, status=status.HTTP_403_FORBIDDEN)
+                delivery_manager = user
+            
+            from ..services.delivery_services import LocationTrackingService
+            result = LocationTrackingService.get_movement_summary(delivery_manager, hours)
+            
+            if result['success']:
+                return Response(result, status=status.HTTP_200_OK)
+            else:
+                return Response(result, status=status.HTTP_400_BAD_REQUEST)
+                
+        except Exception as e:
+            logger.error(f"Error getting movement summary: {str(e)}")
+            return Response({
+                'error': 'An error occurred while retrieving movement summary'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class AllTrackingManagersView(APIView):
+    """
+    Get all delivery managers with their tracking status (Admin only).
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request):
+        """
+        Get all delivery managers with tracking enabled.
+        """
+        try:
+            user = request.user
+            
+            if not (user.is_library_admin() or user.is_staff):
+                return Response({
+                    'error': 'Only library admins can view all tracking managers'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            from ..services.delivery_services import LocationTrackingService
+            result = LocationTrackingService.get_all_tracking_managers()
+            
+            if result['success']:
+                return Response(result, status=status.HTTP_200_OK)
+            else:
+                return Response(result, status=status.HTTP_400_BAD_REQUEST)
+                
+        except Exception as e:
+            logger.error(f"Error getting tracking managers: {str(e)}")
+            return Response({
+                'error': 'An error occurred while retrieving tracking managers'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class RealTimeTrackingSettingsView(APIView):
+    """
+    Manage real-time tracking settings.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request):
+        """
+        Get tracking settings for the current user.
+        """
+        try:
+            user = request.user
+            
+            if not user.is_delivery_admin():
+                return Response({
+                    'error': 'Only delivery managers can access tracking settings'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            from ..models.delivery_model import RealTimeTracking
+            from ..serializers.delivery_serializers import RealTimeTrackingSerializer
+            
+            tracking, created = RealTimeTracking.objects.get_or_create(
+                delivery_manager=user,
+                defaults={
+                    'is_tracking_enabled': False,
+                    'tracking_interval': 30,
+                }
+            )
+            
+            serializer = RealTimeTrackingSerializer(tracking)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+                
+        except Exception as e:
+            logger.error(f"Error getting tracking settings: {str(e)}")
+            return Response({
+                'error': 'An error occurred while retrieving tracking settings'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def put(self, request):
+        """
+        Update tracking settings for the current user.
+        """
+        try:
+            user = request.user
+            
+            if not user.is_delivery_admin():
+                return Response({
+                    'error': 'Only delivery managers can update tracking settings'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            from ..models.delivery_model import RealTimeTracking
+            from ..serializers.delivery_serializers import RealTimeTrackingUpdateSerializer
+            
+            tracking, created = RealTimeTracking.objects.get_or_create(
+                delivery_manager=user,
+                defaults={
+                    'is_tracking_enabled': False,
+                    'tracking_interval': 30,
+                }
+            )
+            
+            serializer = RealTimeTrackingUpdateSerializer(tracking, data=request.data, partial=True)
+            if not serializer.is_valid():
+                return Response({
+                    'error': 'Invalid data provided',
+                    'details': serializer.errors
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            serializer.save()
+            
+            return Response({
+                'success': True,
+                'message': 'Tracking settings updated successfully',
+                'settings': serializer.data
+            }, status=status.HTTP_200_OK)
+                
+        except Exception as e:
+            logger.error(f"Error updating tracking settings: {str(e)}")
+            return Response({
+                'error': 'An error occurred while updating tracking settings'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class DeliveryNotificationsView(APIView):
+    """
+    Delivery-specific notifications endpoint that proxies to the main notifications API.
+    This provides a consistent API for delivery managers to access their notifications.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request):
+        """
+        Get notifications for the current delivery manager.
+        """
+        try:
+            user = request.user
+            
+            # Check if user is a delivery manager
+            if not user.is_delivery_admin():
+                return Response({
+                    'error': 'Only delivery managers can access delivery notifications'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Get query parameters for filtering
+            is_read = request.query_params.get('is_read')
+            notification_type = request.query_params.get('notification_type')
+            limit = request.query_params.get('limit')
+            offset = request.query_params.get('offset')
+            
+            # Convert string parameters to appropriate types
+            if is_read is not None:
+                is_read = is_read.lower() == 'true'
+            
+            # Get notifications using the NotificationService
+            from ..services.notification_services import NotificationService
+            
+            notifications = NotificationService.get_user_notifications(
+                user_id=user.id,
+                is_read=is_read,
+                notification_type=notification_type
+            )
+            
+            # Apply pagination if requested
+            if limit or offset:
+                limit = int(limit) if limit else 20
+                offset = int(offset) if offset else 0
+                notifications = notifications[offset:offset + limit]
+            
+            # Serialize notifications
+            from ..serializers.notification_serializers import NotificationSerializer
+            serializer = NotificationSerializer(notifications, many=True)
+            
+            return Response({
+                'success': True,
+                'notifications': serializer.data,
+                'count': len(serializer.data)
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error fetching delivery notifications: {str(e)}")
+            return Response({
+                'error': 'An error occurred while fetching notifications'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def post(self, request):
+        """
+        Mark notification as read.
+        """
+        try:
+            user = request.user
+            
+            if not user.is_delivery_admin():
+                return Response({
+                    'error': 'Only delivery managers can access delivery notifications'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            notification_id = request.data.get('notification_id')
+            if not notification_id:
+                return Response({
+                    'error': 'notification_id is required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            from ..services.notification_services import NotificationService
+            
+            try:
+                notification = NotificationService.mark_notification_as_read(notification_id)
+                from ..serializers.notification_serializers import NotificationSerializer
+                serializer = NotificationSerializer(notification)
+                
+                return Response({
+                    'success': True,
+                    'notification': serializer.data
+                }, status=status.HTTP_200_OK)
+                
+            except ValueError as e:
+                return Response({
+                    'error': str(e)
+                }, status=status.HTTP_404_NOT_FOUND)
+                
+        except Exception as e:
+            logger.error(f"Error marking notification as read: {str(e)}")
+            return Response({
+                'error': 'An error occurred while updating notification'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 

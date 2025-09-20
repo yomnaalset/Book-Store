@@ -481,11 +481,18 @@ class UserBasicInfoSerializer(serializers.ModelSerializer):
     """
     full_name = serializers.CharField(source='get_full_name', read_only=True)
     user_type_display = serializers.CharField(source='get_user_type_display', read_only=True)
+    location = serializers.SerializerMethodField()
     
     class Meta:
         model = User
-        fields = ['id', 'email', 'first_name', 'last_name', 'full_name', 'user_type', 'user_type_display']
-        read_only_fields = ['id', 'email', 'first_name', 'last_name', 'full_name', 'user_type', 'user_type_display']
+        fields = ['id', 'email', 'first_name', 'last_name', 'full_name', 'user_type', 'user_type_display', 'location']
+        read_only_fields = ['id', 'email', 'first_name', 'last_name', 'full_name', 'user_type', 'user_type_display', 'location']
+    
+    def get_location(self, obj):
+        """Get location data for delivery managers."""
+        if obj.is_delivery_admin():
+            return obj.get_location_dict()
+        return None
 
 
 class UserTypeOptionsSerializer(serializers.Serializer):
@@ -522,6 +529,46 @@ class LanguageOptionsSerializer(serializers.Serializer):
     """
     languages = serializers.ListField(read_only=True, help_text="List of available language choices")
     current_language = serializers.CharField(read_only=True, help_text="Current user's language preference")
+
+
+class DeliveryManagerLocationSerializer(serializers.ModelSerializer):
+    """
+    Serializer for managing delivery manager location.
+    """
+    location_display = serializers.CharField(source='get_location_display', read_only=True)
+    has_location = serializers.BooleanField(source='has_location', read_only=True)
+    
+    class Meta:
+        model = User
+        fields = [
+            'id', 'first_name', 'last_name', 'email',
+            'latitude', 'longitude', 'address', 'location_updated_at',
+            'location_display', 'has_location'
+        ]
+        read_only_fields = ['id', 'first_name', 'last_name', 'email', 'location_updated_at', 'location_display', 'has_location']
+    
+    def validate_latitude(self, value):
+        """Validate latitude value."""
+        if value is not None and not (-90 <= value <= 90):
+            raise serializers.ValidationError("Latitude must be between -90 and 90")
+        return value
+    
+    def validate_longitude(self, value):
+        """Validate longitude value."""
+        if value is not None and not (-180 <= value <= 180):
+            raise serializers.ValidationError("Longitude must be between -180 and 180")
+        return value
+    
+    def validate(self, attrs):
+        """Validate that at least one location field is provided."""
+        latitude = attrs.get('latitude')
+        longitude = attrs.get('longitude')
+        address = attrs.get('address')
+        
+        if not any([latitude, longitude, address]):
+            raise serializers.ValidationError("At least one location field (latitude, longitude, or address) must be provided")
+        
+        return attrs
 
 
 class EmailChangeSerializer(serializers.Serializer):

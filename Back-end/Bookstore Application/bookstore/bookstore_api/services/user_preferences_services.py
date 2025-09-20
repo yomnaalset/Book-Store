@@ -55,6 +55,12 @@ class UserPreferencesService:
             validated_settings = UserPreferencesService.validate_settings(settings)
             preferences.update_settings(validated_settings)
             
+            # Update user's preferred_language if language is being updated
+            if 'language' in validated_settings:
+                user.preferred_language = validated_settings['language']
+                user.save(update_fields=['preferred_language'])
+                logger.info(f"Updated user preferred_language to {validated_settings['language']} for user {user.id}")
+            
             logger.info(f"Updated preferences for user {user.id}")
             return True
             

@@ -538,3 +538,313 @@ class DeliveryRequest(models.Model):
             'in_progress_requests': in_progress_requests,
             'completed_requests': completed_requests,
         }
+
+
+class LocationHistory(models.Model):
+    """
+    Model to store historical location data for delivery managers.
+    Tracks movement and location changes over time.
+    """
+    TRACKING_TYPE_CHOICES = [
+        ('manual', 'Manual Update'),
+        ('gps', 'GPS Automatic'),
+        ('delivery_start', 'Delivery Start'),
+        ('delivery_end', 'Delivery End'),
+        ('break_start', 'Break Start'),
+        ('break_end', 'Break End'),
+    ]
+    
+    # Delivery manager reference
+    delivery_manager = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='location_history',
+        limit_choices_to={'user_type': 'delivery_admin'},
+        help_text="Delivery manager whose location is being tracked"
+    )
+    
+    # Location data
+    latitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        help_text="Latitude coordinate"
+    )
+    
+    longitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        help_text="Longitude coordinate"
+    )
+    
+    address = models.TextField(
+        null=True,
+        blank=True,
+        help_text="Text address at this location"
+    )
+    
+    # Tracking metadata
+    tracking_type = models.CharField(
+        max_length=20,
+        choices=TRACKING_TYPE_CHOICES,
+        default='manual',
+        help_text="Type of location update"
+    )
+    
+    accuracy = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="GPS accuracy in meters"
+    )
+    
+    speed = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="Speed in km/h at time of recording"
+    )
+    
+    heading = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="Direction of movement in degrees"
+    )
+    
+    # Timestamps
+    recorded_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When this location was recorded"
+    )
+    
+    # Related delivery assignment (if applicable)
+    delivery_assignment = models.ForeignKey(
+        'DeliveryAssignment',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='location_updates',
+        help_text="Delivery assignment this location update is related to"
+    )
+    
+    # Additional metadata
+    battery_level = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Device battery level at time of recording"
+    )
+    
+    network_type = models.CharField(
+        max_length=20,
+        null=True,
+        blank=True,
+        help_text="Network type (wifi, 4g, 5g, etc.)"
+    )
+    
+    class Meta:
+        ordering = ['-recorded_at']
+        indexes = [
+            models.Index(fields=['delivery_manager', 'recorded_at']),
+            models.Index(fields=['delivery_assignment', 'recorded_at']),
+            models.Index(fields=['tracking_type', 'recorded_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.delivery_manager.get_full_name()} - {self.recorded_at.strftime('%Y-%m-%d %H:%M')}"
+    
+    def get_location_display(self):
+        """Get formatted location string."""
+        if self.address:
+            return self.address
+        return f"Lat: {self.latitude}, Lng: {self.longitude}"
+    
+    def get_distance_from(self, other_location):
+        """Calculate distance from another location in kilometers."""
+        from math import radians, cos, sin, asin, sqrt
+        
+        if not other_location:
+            return None
+            
+        # Haversine formula
+        lat1, lon1 = float(self.latitude), float(self.longitude)
+        lat2, lon2 = float(other_location.latitude), float(other_location.longitude)
+        
+        # Convert decimal degrees to radians
+        lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
+        
+        # Haversine formula
+        dlat = lat2 - lat1
+        dlon = lon2 - lon1
+        a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
+        c = 2 * asin(sqrt(a))
+        
+        # Radius of earth in kilometers
+        r = 6371
+        return c * r
+    
+    @classmethod
+    def get_recent_locations(cls, delivery_manager, hours=24):
+        """Get recent locations for a delivery manager."""
+        from django.utils import timezone
+        cutoff_time = timezone.now() - timezone.timedelta(hours=hours)
+        return cls.objects.filter(
+            delivery_manager=delivery_manager,
+            recorded_at__gte=cutoff_time
+        ).order_by('-recorded_at')
+    
+    @classmethod
+    def get_movement_summary(cls, delivery_manager, hours=24):
+        """Get movement summary for a delivery manager."""
+        recent_locations = cls.get_recent_locations(delivery_manager, hours)
+        
+        if not recent_locations.exists():
+            return {
+                'total_points': 0,
+                'total_distance': 0,
+                'average_speed': 0,
+                'movement_time': 0,
+            }
+        
+        total_distance = 0
+        total_speed = 0
+        speed_count = 0
+        previous_location = None
+        
+        for location in recent_locations:
+            if previous_location:
+                distance = location.get_distance_from(previous_location)
+                if distance:
+                    total_distance += distance
+            
+            if location.speed is not None:
+                total_speed += location.speed
+                speed_count += 1
+            
+            previous_location = location
+        
+        movement_time = 0
+        if recent_locations.count() > 1:
+            first_location = recent_locations.last()
+            last_location = recent_locations.first()
+            movement_time = (last_location.recorded_at - first_location.recorded_at).total_seconds() / 3600  # hours
+        
+        return {
+            'total_points': recent_locations.count(),
+            'total_distance': round(total_distance, 2),
+            'average_speed': round(total_speed / speed_count, 2) if speed_count > 0 else 0,
+            'movement_time': round(movement_time, 2),
+        }
+
+
+class RealTimeTracking(models.Model):
+    """
+    Model to store real-time tracking status and settings.
+    """
+    delivery_manager = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='real_time_tracking',
+        limit_choices_to={'user_type': 'delivery_admin'},
+        help_text="Delivery manager for real-time tracking"
+    )
+    
+    is_tracking_enabled = models.BooleanField(
+        default=False,
+        help_text="Whether real-time tracking is enabled"
+    )
+    
+    tracking_interval = models.IntegerField(
+        default=30,
+        help_text="Tracking interval in seconds"
+    )
+    
+    last_location_update = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Last time location was updated"
+    )
+    
+    is_delivering = models.BooleanField(
+        default=False,
+        help_text="Whether currently on a delivery"
+    )
+    
+    current_delivery_assignment = models.ForeignKey(
+        'DeliveryAssignment',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='real_time_tracking',
+        help_text="Current delivery assignment being tracked"
+    )
+    
+    # Settings
+    auto_track_deliveries = models.BooleanField(
+        default=True,
+        help_text="Automatically start tracking when delivery starts"
+    )
+    
+    share_location_with_admin = models.BooleanField(
+        default=True,
+        help_text="Share location with library admin"
+    )
+    
+    share_location_with_customers = models.BooleanField(
+        default=True,
+        help_text="Share location with customers for their orders"
+    )
+    
+    # Privacy settings
+    tracking_accuracy = models.CharField(
+        max_length=20,
+        choices=[
+            ('high', 'High Accuracy (GPS)'),
+            ('medium', 'Medium Accuracy'),
+            ('low', 'Low Accuracy'),
+        ],
+        default='high',
+        help_text="Tracking accuracy level"
+    )
+    
+    max_tracking_duration = models.IntegerField(
+        default=8,
+        help_text="Maximum tracking duration in hours per day"
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Real-time Tracking"
+        verbose_name_plural = "Real-time Tracking"
+    
+    def __str__(self):
+        return f"{self.delivery_manager.get_full_name()} - Tracking: {'ON' if self.is_tracking_enabled else 'OFF'}"
+    
+    def can_start_tracking(self):
+        """Check if tracking can be started."""
+        if not self.is_tracking_enabled:
+            return False, "Tracking is disabled"
+        
+        if self.is_delivering and not self.auto_track_deliveries:
+            return False, "Auto-tracking is disabled for deliveries"
+        
+        return True, "Tracking can be started"
+    
+    def start_tracking(self, delivery_assignment=None):
+        """Start real-time tracking."""
+        can_start, message = self.can_start_tracking()
+        if not can_start:
+            return False, message
+        
+        self.is_delivering = True
+        if delivery_assignment:
+            self.current_delivery_assignment = delivery_assignment
+        self.save()
+        
+        return True, "Tracking started successfully"
+    
+    def stop_tracking(self):
+        """Stop real-time tracking."""
+        self.is_delivering = False
+        self.current_delivery_assignment = None
+        self.save()
+        
+        return True, "Tracking stopped successfully"

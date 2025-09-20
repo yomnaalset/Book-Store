@@ -88,6 +88,52 @@ class User(AbstractUser):
         help_text="User's preferred language for the interface"
     )
     
+    # Location fields for delivery managers
+    latitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        null=True,
+        blank=True,
+        help_text="Latitude coordinate for delivery manager location"
+    )
+    
+    longitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7,
+        null=True,
+        blank=True,
+        help_text="Longitude coordinate for delivery manager location"
+    )
+    
+    address = models.TextField(
+        null=True,
+        blank=True,
+        help_text="Text address for delivery manager location"
+    )
+    
+    location_updated_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the location was last updated"
+    )
+    
+    # Real-time tracking fields
+    is_tracking_active = models.BooleanField(
+        default=False,
+        help_text="Whether real-time location tracking is currently active"
+    )
+    
+    last_tracking_update = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Last time location was updated via tracking"
+    )
+    
+    tracking_interval = models.IntegerField(
+        default=30,
+        help_text="Tracking interval in seconds (for real-time updates)"
+    )
+    
     # Note: Contact information (phone_number, address, city) moved to UserProfile model
     
     # Account status and metadata
@@ -142,6 +188,103 @@ class User(AbstractUser):
     def get_language_preference(self):
         """Get user's preferred language."""
         return self.preferred_language or 'en'
+    
+    def has_location(self):
+        """Check if user has location data."""
+        return self.latitude is not None and self.longitude is not None
+    
+    def get_location_display(self):
+        """Get formatted location string."""
+        if self.address:
+            return self.address
+        elif self.has_location():
+            return f"Lat: {self.latitude}, Lng: {self.longitude}"
+        return "No location set"
+    
+    def update_location(self, latitude=None, longitude=None, address=None):
+        """Update user's location data."""
+        from django.utils import timezone
+        
+        if latitude is not None:
+            self.latitude = latitude
+        if longitude is not None:
+            self.longitude = longitude
+        if address is not None:
+            self.address = address
+        
+        self.location_updated_at = timezone.now()
+        self.save(update_fields=['latitude', 'longitude', 'address', 'location_updated_at'])
+    
+    def get_location_dict(self):
+        """Get location as dictionary."""
+        return {
+            'latitude': float(self.latitude) if self.latitude else None,
+            'longitude': float(self.longitude) if self.longitude else None,
+            'address': self.address,
+            'location_updated_at': self.location_updated_at,
+            'has_location': self.has_location(),
+            'is_tracking_active': self.is_tracking_active,
+            'last_tracking_update': self.last_tracking_update,
+        }
+    
+    def start_real_time_tracking(self, interval_seconds=30):
+        """Start real-time location tracking."""
+        if not self.is_delivery_admin():
+            return False, "Only delivery managers can start real-time tracking"
+        
+        self.is_tracking_active = True
+        self.tracking_interval = interval_seconds
+        self.save(update_fields=['is_tracking_active', 'tracking_interval'])
+        
+        return True, "Real-time tracking started"
+    
+    def stop_real_time_tracking(self):
+        """Stop real-time location tracking."""
+        self.is_tracking_active = False
+        self.save(update_fields=['is_tracking_active'])
+        
+        return True, "Real-time tracking stopped"
+    
+    def update_tracking_location(self, latitude, longitude, address=None, tracking_type='gps', 
+                                accuracy=None, speed=None, heading=None, battery_level=None, 
+                                network_type=None, delivery_assignment=None):
+        """Update location with tracking metadata."""
+        from django.utils import timezone
+        from .delivery_model import LocationHistory
+        
+        # Update main location
+        self.update_location(latitude, longitude, address)
+        
+        # Update tracking timestamp
+        self.last_tracking_update = timezone.now()
+        self.save(update_fields=['last_tracking_update'])
+        
+        # Create location history entry
+        LocationHistory.objects.create(
+            delivery_manager=self,
+            latitude=latitude,
+            longitude=longitude,
+            address=address,
+            tracking_type=tracking_type,
+            accuracy=accuracy,
+            speed=speed,
+            heading=heading,
+            battery_level=battery_level,
+            network_type=network_type,
+            delivery_assignment=delivery_assignment
+        )
+        
+        return True, "Location updated with tracking data"
+    
+    def get_location_history(self, hours=24):
+        """Get location history for the user."""
+        from .delivery_model import LocationHistory
+        return LocationHistory.get_recent_locations(self, hours)
+    
+    def get_movement_summary(self, hours=24):
+        """Get movement summary for the user."""
+        from .delivery_model import LocationHistory
+        return LocationHistory.get_movement_summary(self, hours)
     
     def has_complete_profile(self):
         """Check if user has completed their profile."""
