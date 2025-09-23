@@ -689,7 +689,7 @@ class BookListView(generics.ListAPIView):
         if query:
             from django.db.models import Q
             queryset = queryset.filter(
-                Q(name__icontains=query) | Q(author__icontains=query)
+                Q(name__icontains=query) | Q(author__name__icontains=query)
             )
         
         # Filter by availability
@@ -1073,7 +1073,7 @@ class NewBooksView(generics.ListAPIView):
             days = 30
         
         # Use the Book model method
-        queryset = Book.get_new_books(library=library, days=days)
+        queryset = Book.get_new_books()
         
         # Apply additional filters if provided
         is_available = self.request.query_params.get('is_available', None)
@@ -1253,12 +1253,17 @@ class BooksByAuthorView(generics.ListAPIView):
         if not library:
             return Book.objects.none()
         
-        author = self.request.query_params.get('author', '')
-        if not author:
+        # Get author_id from URL parameters
+        author_id = self.kwargs.get('author_id')
+        if not author_id:
             return Book.objects.none()
         
-        # Use the Book model method
-        queryset = Book.get_books_by_author(author=author, library=library)
+        # Filter books by author ID
+        queryset = Book.objects.filter(
+            library=library,
+            author_id=author_id,
+            is_available=True
+        )
         
         # Apply additional filters if provided
         is_available = self.request.query_params.get('is_available', None)
@@ -1291,55 +1296,6 @@ class BooksByAuthorView(generics.ListAPIView):
         
         return queryset
     
-    def list(self, request, *args, **kwargs):
-        """List books by author."""
-        try:
-            author = self.request.query_params.get('author', '')
-            if not author:
-                return Response({
-                    'success': False,
-                    'message': 'Author parameter is required',
-                    'error_code': 'MISSING_AUTHOR'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            queryset = self.get_queryset()
-            
-            # Check if library exists
-            if not Library.get_current_library():
-                return Response({
-                    'success': False,
-                    'message': 'No active library found',
-                    'error_code': 'NO_LIBRARY'
-                }, status=status.HTTP_404_NOT_FOUND)
-            
-            # Pagination
-            page = self.paginate_queryset(queryset)
-            if page is not None:
-                serializer = self.get_serializer(page, many=True)
-                return self.get_paginated_response({
-                    'success': True,
-                    'message': f'Books by author "{author}" retrieved successfully',
-                    'data': serializer.data,
-                    'author': author
-                })
-            
-            serializer = self.get_serializer(queryset, many=True)
-            
-            return Response({
-                'success': True,
-                'message': f'Books by author "{author}" retrieved successfully',
-                'data': serializer.data,
-                'count': queryset.count(),
-                'author': author
-            }, status=status.HTTP_200_OK)
-            
-        except Exception as e:
-            logger.error(f"Error retrieving books by author: {str(e)}")
-            return Response({
-                'success': False,
-                'message': 'Failed to retrieve books by author',
-                'errors': format_error_message(str(e))
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class BooksByPriceRangeView(generics.ListAPIView):
@@ -1694,6 +1650,44 @@ class TopRatedBooksView(generics.ListAPIView):
                 'message': 'Failed to retrieve top-rated books',
                 'errors': format_error_message(str(e))
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class PurchasingBooksView(generics.ListAPIView):
+    """
+    Get books available for purchase only (not borrowing).
+    Available to all authenticated users.
+    """
+    serializer_class = BookListSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        """Get books available for purchase only."""
+        library = Library.get_current_library()
+        if not library:
+            return Book.objects.none()
+        
+        # Get limit parameter (default 10)
+        limit = self.request.query_params.get('limit', 10)
+        try:
+            limit = int(limit)
+        except (ValueError, TypeError):
+            limit = 10
+        
+        # Return books available for purchase (is_available=True) 
+        # but NOT available for borrowing (is_available_for_borrow=False)
+        # OR books that have a price but no borrow_price
+        queryset = Book.objects.filter(
+            library=library,
+            is_available=True,
+            price__isnull=False,  # Must have a purchase price
+            price__gt=0  # Price must be greater than 0
+        ).exclude(
+            # Exclude books that are ONLY available for borrowing
+            is_available_for_borrow=True,
+            price__isnull=True
+        ).order_by('-created_at', 'name')[:limit]
+        
+        return queryset
 
 
 # =====================================

@@ -13,7 +13,7 @@ class BorrowRequestCreateSerializer(serializers.ModelSerializer):
     Serializer for creating borrow requests
     """
     book_id = serializers.IntegerField()
-    borrow_period_days = serializers.IntegerField(min_value=Decimal('1'), max_value=Decimal('30'))
+    borrow_period_days = serializers.IntegerField(min_value=Decimal('7'), max_value=Decimal('14'))
     
     class Meta:
         model = BorrowRequest
@@ -352,7 +352,7 @@ class MostBorrowedBookSerializer(serializers.ModelSerializer):
     class Meta:
         model = Book
         fields = [
-            'id', 'name', 'title', 'author_name', 'quantity',
+            'id', 'name', 'author_name', 'quantity',
             'borrow_count', 'available_copies', 'is_available',
             'average_rating', 'description'
         ]

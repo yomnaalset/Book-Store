@@ -377,12 +377,6 @@ class UserProfile(models.Model):
         null=True,
         help_text="User's city"  
     )
-    state = models.CharField(
-        max_length=100,
-        blank=True,
-        null=True,
-        help_text="User's state or province"
-    )
     zip_code = models.CharField(
         max_length=20,
         blank=True,

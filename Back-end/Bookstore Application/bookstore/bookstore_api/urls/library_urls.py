@@ -7,7 +7,7 @@ from bookstore_api.views.library_views import (
     BookManagementView,
     # Advanced book filtering views
     NewBooksView, BooksByCategoryView, BooksByAuthorView, BooksByPriceRangeView,
-    BooksByRatingView, TopRatedBooksView,
+    BooksByRatingView, TopRatedBooksView, PurchasingBooksView,
     # Category views
     CategoryCreateView, CategoryListView, CategoryDetailView, CategoryUpdateView, 
     CategoryDeleteView, CategoryManagementView, CategoryChoicesView,
@@ -47,10 +47,12 @@ library_urls = [
     # =====================================
     # New books
     path('books/new/', NewBooksView.as_view(), name='new_books'),
+    # Purchasing books (books available for purchase only)
+    path('books/purchasing/', PurchasingBooksView.as_view(), name='purchasing_books'),
     # Books by category
     path('books/category/<int:category_id>/', BooksByCategoryView.as_view(), name='books_by_category'),
     # Books by author
-    path('books/author/', BooksByAuthorView.as_view(), name='books_by_author'),
+    path('books/author/<int:author_id>/', BooksByAuthorView.as_view(), name='books_by_author'),
     # Books by price range
     path('books/price-range/', BooksByPriceRangeView.as_view(), name='books_by_price_range'),
     # Books by rating/evaluation

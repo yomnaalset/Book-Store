@@ -334,12 +334,6 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
         allow_blank=True,
         help_text="City"
     )
-    state = serializers.CharField(
-        required=False,
-        allow_null=True,
-        allow_blank=True,
-        help_text="State/Province"
-    )
     zip_code = serializers.CharField(
         required=False,
         allow_null=True,
@@ -367,7 +361,7 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'first_name', 'last_name', 'preferred_language',
-            'phone_number', 'address', 'city', 'state', 'zip_code', 'country',
+            'phone_number', 'address', 'city', 'zip_code', 'country',
             'profile_picture', 'date_of_birth'
         ]
         extra_kwargs = {
@@ -389,7 +383,6 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
         phone_number = validated_data.pop('phone_number', 'not_provided')
         address = validated_data.pop('address', 'not_provided')
         city = validated_data.pop('city', 'not_provided')
-        state = validated_data.pop('state', 'not_provided')
         zip_code = validated_data.pop('zip_code', 'not_provided')
         country = validated_data.pop('country', 'not_provided')
         profile_picture = validated_data.pop('profile_picture', 'not_provided')
@@ -428,9 +421,6 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
             profile_updated = True
         if city != 'not_provided':
             profile.city = city if city else None
-            profile_updated = True
-        if state != 'not_provided':
-            profile.state = state if state else None
             profile_updated = True
         if zip_code != 'not_provided':
             profile.zip_code = zip_code if zip_code else None

@@ -687,6 +687,28 @@ class Book(models.Model):
             'borrowable_books': borrowable_books,
             'new_books': new_books,
         }
+    
+    @classmethod
+    def get_books_by_category(cls, category_id, library):
+        """
+        Get books by specific category and library.
+        """
+        return cls.objects.filter(
+            category_id=category_id,
+            library=library,
+            is_available=True
+        )
+    
+    @classmethod
+    def get_books_by_author(cls, author, library):
+        """
+        Get books by specific author and library.
+        """
+        return cls.objects.filter(
+            author__name__icontains=author,
+            library=library,
+            is_available=True
+        )
 
 
 class BookImage(models.Model):
