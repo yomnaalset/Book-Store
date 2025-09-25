@@ -191,8 +191,9 @@ class PendingRequestsView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated, IsLibraryAdmin]
     
     def get_queryset(self):
-        """Get pending borrow requests"""
-        return BorrowingService.get_pending_requests()
+        """Get pending borrow requests with optional search"""
+        search_query = self.request.query_params.get('search', None)
+        return BorrowingService.get_pending_requests(search=search_query)
     
     def list(self, request, *args, **kwargs):
         try:
@@ -763,5 +764,119 @@ class BorrowStatisticsView(APIView):
             return Response({
                 'success': False,
                 'message': 'Failed to get statistics',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class BorrowExtensionsListView(generics.ListAPIView):
+    """
+    API view for library managers to view all borrowing extensions
+    """
+    serializer_class = BorrowExtensionSerializer
+    permission_classes = [permissions.IsAuthenticated, IsLibraryAdmin]
+    
+    def get_queryset(self):
+        """Get all borrowing extensions with optional filtering"""
+        queryset = BorrowExtension.objects.select_related(
+            'borrow_request__customer',
+            'borrow_request__book'
+        ).order_by('-created_at')
+        
+        # Filter by status if provided
+        status_filter = self.request.query_params.get('status')
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        
+        return queryset
+    
+    def list(self, request, *args, **kwargs):
+        try:
+            queryset = self.get_queryset()
+            
+            # Apply pagination
+            page = int(request.query_params.get('page', 1))
+            limit = int(request.query_params.get('limit', 10))
+            
+            start = (page - 1) * limit
+            end = start + limit
+            
+            paginated_queryset = queryset[start:end]
+            serializer = self.get_serializer(paginated_queryset, many=True)
+            
+            return Response({
+                'success': True,
+                'message': 'Borrowing extensions retrieved successfully',
+                'data': serializer.data,
+                'pagination': {
+                    'page': page,
+                    'limit': limit,
+                    'total': queryset.count(),
+                    'has_next': end < queryset.count(),
+                    'has_previous': page > 1
+                }
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error retrieving borrowing extensions: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to retrieve borrowing extensions',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class BorrowFinesListView(generics.ListAPIView):
+    """
+    API view for library managers to view all borrowing fines
+    """
+    serializer_class = BorrowFineSerializer
+    permission_classes = [permissions.IsAuthenticated, IsLibraryAdmin]
+    
+    def get_queryset(self):
+        """Get all borrowing fines with optional filtering"""
+        queryset = BorrowFine.objects.select_related(
+            'borrow_request__customer',
+            'borrow_request__book'
+        ).order_by('-created_at')
+        
+        # Filter by status if provided
+        status_filter = self.request.query_params.get('status')
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        
+        return queryset
+    
+    def list(self, request, *args, **kwargs):
+        try:
+            queryset = self.get_queryset()
+            
+            # Apply pagination
+            page = int(request.query_params.get('page', 1))
+            limit = int(request.query_params.get('limit', 10))
+            
+            start = (page - 1) * limit
+            end = start + limit
+            
+            paginated_queryset = queryset[start:end]
+            serializer = self.get_serializer(paginated_queryset, many=True)
+            
+            return Response({
+                'success': True,
+                'message': 'Borrowing fines retrieved successfully',
+                'data': serializer.data,
+                'pagination': {
+                    'page': page,
+                    'limit': limit,
+                    'total': queryset.count(),
+                    'has_next': end < queryset.count(),
+                    'has_previous': page > 1
+                }
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error retrieving borrowing fines: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to retrieve borrowing fines',
                 'errors': format_error_message(str(e))
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

@@ -2,6 +2,7 @@ from rest_framework import generics, status, permissions
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.pagination import PageNumberPagination
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.core.exceptions import PermissionDenied
@@ -213,14 +214,37 @@ class LibraryAdminRequestListView(generics.ListAPIView):
     """
     serializer_class = DeliveryRequestWithAvailableManagersSerializer
     permission_classes = [permissions.IsAuthenticated, IsLibraryAdmin]
+    pagination_class = PageNumberPagination
     
     def get_queryset(self):
-        queryset = DeliveryRequest.objects.filter(status='pending')
+        queryset = DeliveryRequest.objects.select_related('customer', 'delivery_manager', 'assigned_by').all()
+        
+        # Filter by status
+        status_filter = self.request.query_params.get('status')
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
         
         # Filter by customer
         customer_id = self.request.query_params.get('customer_id')
         if customer_id:
             queryset = queryset.filter(customer_id=customer_id)
+        
+        # Search functionality
+        search = self.request.query_params.get('search')
+        if search:
+            from django.db.models import Q
+            queryset = queryset.filter(
+                Q(id__icontains=search) |
+                Q(customer__first_name__icontains=search) |
+                Q(customer__last_name__icontains=search) |
+                Q(customer__email__icontains=search) |
+                Q(delivery_address__icontains=search) |
+                Q(delivery_city__icontains=search) |
+                Q(pickup_address__icontains=search) |
+                Q(pickup_city__icontains=search) |
+                Q(notes__icontains=search) |
+                Q(status__icontains=search)
+            )
         
         return queryset.order_by('-created_at')
 
@@ -317,15 +341,20 @@ class OrderListView(generics.ListAPIView):
         if end_date:
             queryset = queryset.filter(created_at__date__lte=end_date)
         
-        # Search by order number or customer name
+        # Search by order number, customer name, email, or delivery address
         search = self.request.query_params.get('search')
         if search:
             queryset = queryset.filter(
                 Q(order_number__icontains=search) |
                 Q(customer__first_name__icontains=search) |
                 Q(customer__last_name__icontains=search) |
-                Q(customer__email__icontains=search)
-            )
+                Q(customer__email__icontains=search) |
+                Q(delivery_address__icontains=search) |
+                Q(delivery_city__icontains=search) |
+                Q(delivery_notes__icontains=search) |
+                Q(items__book__name__icontains=search) |
+                Q(items__book__author__name__icontains=search)
+            ).distinct()
         
         return queryset.order_by('-created_at')
     

@@ -1,6 +1,8 @@
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
+from django.core.exceptions import ValidationError
 from django.utils import timezone
+from django.utils.translation import gettext_lazy as _
 from .user_model import User
 
 
@@ -263,4 +265,325 @@ class DiscountUsage(models.Model):
             'total_usage': total_usage,
             'total_savings': total_savings,
             'popular_codes': popular_codes,
+        }
+
+
+class BookDiscountManager(models.Manager):
+    """
+    Custom manager for BookDiscount model.
+    """
+    
+    def get_active_discounts(self):
+        """Get all active book discounts."""
+        now = timezone.now()
+        return self.filter(
+            is_active=True,
+            start_date__lte=now,
+            end_date__gt=now
+        )
+    
+    def get_discount_for_book(self, book):
+        """Get active discount for a specific book."""
+        now = timezone.now()
+        try:
+            return self.get(
+                book=book,
+                is_active=True,
+                start_date__lte=now,
+                end_date__gt=now
+            )
+        except BookDiscount.DoesNotExist:
+            return None
+    
+    def cleanup_expired_discounts(self):
+        """Deactivate expired book discounts."""
+        now = timezone.now()
+        expired_discounts = self.filter(
+            end_date__lte=now,
+            is_active=True
+        )
+        count = expired_discounts.update(is_active=False)
+        return count
+
+
+class BookDiscount(models.Model):
+    """
+    Model to store discounts for specific books.
+    Supports both percentage and fixed price discounts.
+    """
+    
+    DISCOUNT_TYPE_CHOICES = [
+        ('fixed_price', 'Fixed Price'),
+    ]
+    
+    # Basic discount information
+    code = models.CharField(
+        max_length=50,
+        unique=True,
+        help_text="Unique discount code (e.g., BOOK20)"
+    )
+    
+    discount_type = models.CharField(
+        max_length=20,
+        choices=DISCOUNT_TYPE_CHOICES,
+        default='fixed_price',
+        help_text="Type of discount: fixed price only"
+    )
+    
+    # Book relationship
+    book = models.ForeignKey(
+        'Book',
+        on_delete=models.CASCADE,
+        related_name='discounts',
+        help_text="Book this discount applies to"
+    )
+    
+    # Discount values
+    discounted_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(0.01)],
+        default=0.01,
+        help_text="Fixed discounted price for the book"
+    )
+    
+    # Usage limits
+    usage_limit_per_customer = models.PositiveIntegerField(
+        default=1,
+        help_text="Maximum number of times each customer can use this discount"
+    )
+    
+    # Validity period
+    start_date = models.DateTimeField(
+        help_text="When this discount becomes active"
+    )
+    
+    end_date = models.DateTimeField(
+        help_text="When this discount expires"
+    )
+    
+    # Status
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Whether this discount is currently active"
+    )
+    
+    # Metadata
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When this discount was created"
+    )
+    
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        help_text="When this discount was last updated"
+    )
+    
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name='created_book_discounts',
+        limit_choices_to={'user_type': 'library_admin'},
+        help_text="Library administrator who created this discount"
+    )
+    
+    # Use custom manager
+    objects = BookDiscountManager()
+    
+    class Meta:
+        db_table = 'book_discount'
+        verbose_name = 'Book Discount'
+        verbose_name_plural = 'Book Discounts'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['code']),
+            models.Index(fields=['book']),
+            models.Index(fields=['is_active']),
+            models.Index(fields=['start_date']),
+            models.Index(fields=['end_date']),
+            models.Index(fields=['created_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.code} - {self.book.name}"
+    
+    def clean(self):
+        """
+        Custom validation for the book discount.
+        """
+        
+        # Validate discounted price
+        if not self.discounted_price:
+            raise ValidationError("Discounted price is required.")
+        if self.discounted_price <= 0:
+            raise ValidationError("Discounted price must be greater than 0.")
+        if self.book.price and self.discounted_price >= self.book.price:
+            raise ValidationError("Discounted price must be less than the original book price.")
+        
+        # Validate date range
+        if self.start_date and self.end_date and self.start_date >= self.end_date:
+            raise ValidationError("Start date must be before end date.")
+        
+        if self.start_date and self.start_date <= timezone.now():
+            raise ValidationError("Start date must be in the future.")
+    
+    def is_expired(self):
+        """Check if the discount has expired."""
+        return timezone.now() > self.end_date
+    
+    def is_not_started(self):
+        """Check if the discount hasn't started yet."""
+        return timezone.now() < self.start_date
+    
+    def is_valid(self):
+        """Check if the discount is valid (active and within date range)."""
+        return (self.is_active and 
+                not self.is_expired() and 
+                not self.is_not_started())
+    
+    def can_be_used_by(self, customer):
+        """Check if a customer can use this discount."""
+        if not self.is_valid():
+            return False, "Discount is not currently active or has expired."
+        
+        # Check usage limit
+        usage_count = BookDiscountUsage.objects.filter(
+            book_discount=self,
+            customer=customer
+        ).count()
+        
+        if usage_count >= self.usage_limit_per_customer:
+            return False, f"You have already used this discount the maximum number of times ({self.usage_limit_per_customer})."
+        
+        return True, "Discount can be used."
+    
+    def get_discount_amount(self, original_price):
+        """Calculate the discount amount for a given original price."""
+        return original_price - self.discounted_price
+    
+    def get_final_price(self, original_price):
+        """Calculate the final price after applying the discount."""
+        return self.discounted_price
+    
+    def use_by_customer(self, customer, order):
+        """Record usage of this discount by a customer."""
+        can_use, message = self.can_be_used_by(customer)
+        if not can_use:
+            raise ValidationError(message)
+        
+        original_price = self.book.price or 0
+        discount_amount = self.get_discount_amount(original_price)
+        final_price = self.get_final_price(original_price)
+        
+        usage = BookDiscountUsage.objects.create(
+            book_discount=self,
+            customer=customer,
+            order=order,
+            original_price=original_price,
+            discount_amount=discount_amount,
+            final_price=final_price
+        )
+        
+        return usage
+
+
+class BookDiscountUsage(models.Model):
+    """
+    Model to track usage of book discounts by customers.
+    """
+    book_discount = models.ForeignKey(
+        BookDiscount,
+        on_delete=models.CASCADE,
+        related_name='usages',
+        help_text="Book discount that was used"
+    )
+    
+    customer = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='book_discount_usages',
+        limit_choices_to={'user_type': 'customer'},
+        help_text="Customer who used the discount"
+    )
+    
+    order = models.ForeignKey(
+        'Order',
+        on_delete=models.CASCADE,
+        related_name='book_discount_usages',
+        help_text="Order where the discount was applied"
+    )
+    
+    original_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        help_text="Original price of the book"
+    )
+    
+    discount_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        help_text="Amount of discount applied"
+    )
+    
+    final_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        help_text="Final price after discount"
+    )
+    
+    used_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When the discount was used"
+    )
+    
+    class Meta:
+        db_table = 'book_discount_usage'
+        verbose_name = 'Book Discount Usage'
+        verbose_name_plural = 'Book Discount Usages'
+        ordering = ['-used_at']
+        indexes = [
+            models.Index(fields=['book_discount']),
+            models.Index(fields=['customer']),
+            models.Index(fields=['order']),
+            models.Index(fields=['used_at']),
+        ]
+        unique_together = ['book_discount', 'order']  # One usage per order
+    
+    def __str__(self):
+        return f"{self.customer.get_full_name()} used {self.book_discount.code} on {self.order}"
+    
+    @classmethod
+    def get_customer_usage_stats(cls, customer):
+        """
+        Get book discount usage statistics for a customer.
+        """
+        total_usage = cls.objects.filter(customer=customer).count()
+        total_savings = cls.objects.filter(customer=customer).aggregate(
+            total=models.Sum('discount_amount')
+        )['total'] or 0
+        
+        return {
+            'total_usage': total_usage,
+            'total_savings': total_savings,
+        }
+    
+    @classmethod
+    def get_discount_usage_stats(cls):
+        """
+        Get overall book discount usage statistics.
+        """
+        total_usage = cls.objects.count()
+        total_savings = cls.objects.aggregate(
+            total=models.Sum('discount_amount')
+        )['total'] or 0
+        
+        # Get most popular book discounts
+        popular_discounts = cls.objects.values('book_discount__code').annotate(
+            usage_count=models.Count('id')
+        ).order_by('-usage_count')[:5]
+        
+        return {
+            'total_usage': total_usage,
+            'total_savings': total_savings,
+            'popular_discounts': popular_discounts,
         }

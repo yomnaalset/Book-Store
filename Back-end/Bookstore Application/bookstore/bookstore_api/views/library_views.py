@@ -685,11 +685,14 @@ class BookListView(generics.ListAPIView):
         new_books_days = self.request.query_params.get('new_books_days', None)
         ordering = self.request.query_params.get('ordering', None)
         
-        # Search by name or author
+        # Search by name, author, description, or category
         if query:
             from django.db.models import Q
             queryset = queryset.filter(
-                Q(name__icontains=query) | Q(author__name__icontains=query)
+                Q(name__icontains=query) | 
+                Q(author__name__icontains=query) |
+                Q(description__icontains=query) |
+                Q(category__name__icontains=query)
             )
         
         # Filter by availability

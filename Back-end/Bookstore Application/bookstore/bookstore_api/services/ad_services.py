@@ -39,7 +39,13 @@ class AdvertisementManagementService:
                 ad_data['created_by'] = user
                 
                 # Create the advertisement
-                advertisement = Advertisement.objects.create(**ad_data)
+                advertisement = Advertisement(**ad_data)
+                
+                # If status was explicitly provided, mark it as such
+                if 'status' in ad_data:
+                    advertisement.set_status_explicitly(ad_data['status'])
+                
+                advertisement.save()
                 
                 logger.info(f"Advertisement '{advertisement.title}' created by {user.username}")
                 return advertisement
@@ -81,6 +87,10 @@ class AdvertisementManagementService:
                 for field, value in ad_data.items():
                     if hasattr(advertisement, field):
                         setattr(advertisement, field, value)
+                
+                # If status was explicitly updated, mark it as such
+                if 'status' in ad_data:
+                    advertisement.set_status_explicitly(ad_data['status'])
                 
                 # Save the advertisement (this will trigger status updates)
                 advertisement.save()
@@ -205,12 +215,47 @@ class AdvertisementManagementService:
     @staticmethod
     def get_public_advertisements():
         """
-        Get advertisements for public display (active only)
+        Get advertisements for public display (all statuses)
         
         Returns:
             QuerySet: Public advertisements
         """
-        return AdvertisementManagementService.get_active_advertisements()
+        return Advertisement.objects.filter(
+            status__in=[
+                AdvertisementStatusChoices.ACTIVE, 
+                AdvertisementStatusChoices.SCHEDULED,
+                AdvertisementStatusChoices.INACTIVE,
+                AdvertisementStatusChoices.EXPIRED
+            ]
+        ).order_by('-created_at')
+    
+    @staticmethod
+    def get_public_advertisement(ad_id):
+        """
+        Get a specific advertisement for public display (all statuses)
+        
+        Args:
+            ad_id (int): Advertisement ID
+            
+        Returns:
+            Advertisement: Public advertisement instance
+            
+        Raises:
+            ValidationError: If advertisement not found or not available
+        """
+        try:
+            advertisement = Advertisement.objects.get(
+                id=ad_id,
+                status__in=[
+                    AdvertisementStatusChoices.ACTIVE, 
+                    AdvertisementStatusChoices.SCHEDULED,
+                    AdvertisementStatusChoices.INACTIVE,
+                    AdvertisementStatusChoices.EXPIRED
+                ]
+            )
+            return advertisement
+        except Advertisement.DoesNotExist:
+            raise ValidationError("Advertisement not found or not available for public display")
 
 
 class AdvertisementStatusService:

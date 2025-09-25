@@ -11,7 +11,7 @@ from .borrowing_model import (
     BorrowRequest, BorrowExtension, BorrowFine, BorrowStatistics,
     BorrowStatusChoices, ExtensionStatusChoices, FineStatusChoices
 )
-from .discount_model import DiscountCode, DiscountUsage
+from .discount_model import DiscountCode, DiscountUsage, BookDiscount, BookDiscountUsage
 from .complaint_model import Complaint, ComplaintResponse
 from .report_model import Report, ReportTemplate
 from .ad_model import Advertisement, AdvertisementStatusChoices
@@ -26,7 +26,7 @@ __all__ = [
     'Notification', 'NotificationType', 'BookEvaluation', 'Favorite',
     'BorrowRequest', 'BorrowExtension', 'BorrowFine', 'BorrowStatistics',
     'BorrowStatusChoices', 'ExtensionStatusChoices', 'FineStatusChoices',
-    'DiscountCode', 'DiscountUsage',
+    'DiscountCode', 'DiscountUsage', 'BookDiscount', 'BookDiscountUsage',
     'Complaint', 'ComplaintResponse',
     'Report', 'ReportTemplate',
     'Advertisement', 'AdvertisementStatusChoices',

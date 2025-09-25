@@ -30,6 +30,8 @@ from .borrowing_services import (
 from .discount_services import (
     DiscountCodeService,
     DiscountValidationService,
+    BookDiscountService,
+    BookDiscountValidationService,
 )
 
 from .complaint_services import ComplaintManagementService
@@ -68,6 +70,8 @@ __all__ = [
     # Discount services
     'DiscountCodeService',
     'DiscountValidationService',
+    'BookDiscountService',
+    'BookDiscountValidationService',
     # Complaint services
     'ComplaintManagementService',
     'ReportManagementService',

@@ -108,39 +108,31 @@ class Advertisement(models.Model):
                     'end_date': 'End date must be after start date.'
                 })
         
-        # Validate that start_date is not in the past for new advertisements
+        # Validate that start_date is not too far in the past for new advertisements
+        # Allow future dates for scheduled advertisements
         if self.pk is None and self.start_date:
             start_date = self.start_date
             if start_date.tzinfo is None:
                 start_date = timezone.make_aware(start_date)
                 
-            if start_date < timezone.now():
+            # Allow dates up to 1 hour in the past for immediate activation
+            # This prevents accidentally creating ads with very old dates
+            one_hour_ago = timezone.now() - timedelta(hours=1)
+            if start_date < one_hour_ago:
                 raise ValidationError({
-                    'start_date': 'Start date cannot be in the past for new advertisements.'
+                    'start_date': 'Start date cannot be more than 1 hour in the past for new advertisements.'
                 })
     
     def save(self, *args, **kwargs):
-        """Override save to automatically set status based on dates"""
+        """Override save to automatically set status based on dates only when no explicit status is provided"""
         self.full_clean()
         
-        # Only auto-set status if it hasn't been explicitly set by the user
-        # Check if this is an update (has pk) and if status was explicitly changed
-        is_update = self.pk is not None
-        original_status = None
+        # Check if status was explicitly set by checking if it's in the kwargs
+        # This is a simple way to detect if status was provided during creation/update
+        status_explicitly_set = 'status' in kwargs or hasattr(self, '_status_explicitly_set')
         
-        if is_update:
-            try:
-                original = Advertisement.objects.get(pk=self.pk)
-                original_status = original.status
-            except Advertisement.DoesNotExist:
-                original_status = None
-        
-        # Auto-set status based on current time and dates only if:
-        # 1. This is a new advertisement (not an update), OR
-        # 2. This is an update but the status hasn't been explicitly changed by the user
-        should_auto_set_status = not is_update or (is_update and self.status == original_status)
-        
-        if should_auto_set_status and self.status != AdvertisementStatusChoices.EXPIRED:
+        # Only auto-set status if it wasn't explicitly set by the user
+        if not status_explicitly_set and self.status != AdvertisementStatusChoices.EXPIRED:
             # Ensure dates are timezone-aware for comparison
             now = timezone.now()
             start_date = self.start_date
@@ -151,6 +143,7 @@ class Advertisement(models.Model):
             if end_date and end_date.tzinfo is None:
                 end_date = timezone.make_aware(end_date)
             
+            # Auto-set status based on dates
             if end_date and end_date <= now:
                 self.status = AdvertisementStatusChoices.EXPIRED
             elif start_date and start_date > now:
@@ -160,6 +153,11 @@ class Advertisement(models.Model):
                     self.status = AdvertisementStatusChoices.ACTIVE
         
         super().save(*args, **kwargs)
+    
+    def set_status_explicitly(self, status):
+        """Helper method to mark that status was explicitly set by user"""
+        self.status = status
+        self._status_explicitly_set = True
     
     def is_active(self):
         """Check if advertisement is currently active"""

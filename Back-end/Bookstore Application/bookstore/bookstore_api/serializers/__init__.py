@@ -110,6 +110,17 @@ from .discount_serializers import (
     DiscountUsageSerializer,
     DiscountUsageCreateSerializer,
     CustomerDiscountUsageSerializer,
+    # Book discount serializers
+    BookDiscountSerializer,
+    BookDiscountCreateSerializer,
+    BookDiscountUpdateSerializer,
+    BookDiscountListSerializer,
+    BookDiscountValidationSerializer,
+    BookDiscountApplicationSerializer,
+    BookDiscountUsageSerializer,
+    BookDiscountUsageCreateSerializer,
+    CustomerBookDiscountUsageSerializer,
+    AvailableBooksSerializer,
 )
 
 from .complaint_serializers import (
@@ -275,6 +286,17 @@ __all__ = [
     'DiscountUsageSerializer',
     'DiscountUsageCreateSerializer',
     'CustomerDiscountUsageSerializer',
+    # Book discount serializers
+    'BookDiscountSerializer',
+    'BookDiscountCreateSerializer',
+    'BookDiscountUpdateSerializer',
+    'BookDiscountListSerializer',
+    'BookDiscountValidationSerializer',
+    'BookDiscountApplicationSerializer',
+    'BookDiscountUsageSerializer',
+    'BookDiscountUsageCreateSerializer',
+    'CustomerBookDiscountUsageSerializer',
+    'AvailableBooksSerializer',
     # Complaint serializers
     'ComplaintListSerializer',
     'ComplaintDetailSerializer',

@@ -16,7 +16,7 @@ class AdvertisementCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Advertisement
         fields = [
-            'title', 'content', 'image', 'start_date', 'end_date',
+            'title', 'content', 'image', 'start_date', 'end_date', 'status',
             # Add camelCase fields for frontend compatibility
             'startDate', 'endDate', 'imageUrl'
         ]
@@ -47,10 +47,13 @@ class AdvertisementCreateSerializer(serializers.ModelSerializer):
         if value and value.tzinfo is None:
             value = timezone.make_aware(value)
         
+        # Allow future dates for scheduled advertisements
+        # Only prevent dates that are too far in the past (more than 1 hour)
         now = timezone.now()
-        if value < now:
+        one_hour_ago = now - timedelta(hours=1)
+        if value < one_hour_ago:
             raise serializers.ValidationError(
-                "Start date cannot be in the past for new advertisements."
+                "Start date cannot be more than 1 hour in the past for new advertisements."
             )
         return value
     
@@ -323,7 +326,8 @@ class AdvertisementPublicSerializer(serializers.ModelSerializer):
     class Meta:
         model = Advertisement
         fields = [
-            'id', 'title', 'content', 'image', 'image_url'
+            'id', 'title', 'content', 'image', 'image_url', 'status', 
+            'start_date', 'end_date', 'created_at', 'updated_at'
         ]
     
     def get_image_url(self, obj):

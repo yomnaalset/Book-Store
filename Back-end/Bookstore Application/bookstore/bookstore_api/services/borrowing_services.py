@@ -379,13 +379,31 @@ class BorrowingService:
         return queryset.order_by('-request_date')
     
     @staticmethod
-    def get_pending_requests() -> List[BorrowRequest]:
+    def get_pending_requests(search: Optional[str] = None) -> List[BorrowRequest]:
         """
-        Get pending borrow requests for library manager
+        Get pending borrow requests for library manager with optional search
+        
+        Args:
+            search: Optional search query to filter by customer name, book name, or request ID
+            
+        Returns:
+            List of pending borrow requests
         """
-        return BorrowRequest.objects.filter(
+        queryset = BorrowRequest.objects.filter(
             status=BorrowStatusChoices.PENDING
         ).select_related('customer', 'book').order_by('request_date')
+        
+        # Add search functionality
+        if search:
+            queryset = queryset.filter(
+                Q(customer__full_name__icontains=search) |
+                Q(customer__email__icontains=search) |
+                Q(book__name__icontains=search) |
+                Q(book__author__name__icontains=search) |
+                Q(id__icontains=search)
+            )
+        
+        return queryset
     
     @staticmethod
     def get_ready_for_delivery() -> List[BorrowRequest]:

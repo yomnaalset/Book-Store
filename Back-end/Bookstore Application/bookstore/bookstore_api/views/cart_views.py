@@ -29,7 +29,7 @@ class CartAddView(APIView):
             quantity = serializer.validated_data['quantity']
             
             # Get or create user's cart
-            cart, created = Cart.objects.get_or_create(user=request.user)
+            cart, created = Cart.objects.get_or_create(customer=request.user)
             
             # Get the book
             book = Book.objects.get(id=book_id)
@@ -76,7 +76,7 @@ class CartListView(APIView):
     def get(self, request):
         try:
             # Get or create user's cart
-            cart, created = Cart.objects.get_or_create(user=request.user)
+            cart, created = Cart.objects.get_or_create(customer=request.user)
             
             # Serialize cart data
             serializer = CartSerializer(cart)
@@ -112,7 +112,7 @@ class CartItemUpdateView(APIView):
             try:
                 cart_item = CartItem.objects.get(
                     id=item_id,
-                    cart__user=request.user
+                    cart__customer=request.user
                 )
             except CartItem.DoesNotExist:
                 return Response({
@@ -155,7 +155,7 @@ class CartItemDeleteView(APIView):
             try:
                 cart_item = CartItem.objects.get(
                     id=item_id,
-                    cart__user=request.user
+                    cart__customer=request.user
                 )
             except CartItem.DoesNotExist:
                 return Response({
@@ -170,7 +170,7 @@ class CartItemDeleteView(APIView):
             cart_item.delete()
             
             # Get updated cart
-            cart = Cart.objects.get(user=request.user)
+            cart = Cart.objects.get(customer=request.user)
             cart_serializer = CartSerializer(cart)
             
             return Response({
@@ -198,7 +198,7 @@ class CartEmptyView(APIView):
         try:
             # Get user's cart
             try:
-                cart = Cart.objects.get(user=request.user)
+                cart = Cart.objects.get(customer=request.user)
             except Cart.DoesNotExist:
                 return Response({
                     'success': True,

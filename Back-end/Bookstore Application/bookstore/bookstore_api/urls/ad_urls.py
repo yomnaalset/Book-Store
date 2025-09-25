@@ -34,4 +34,5 @@ urlpatterns = [
     
     # Public endpoints (for frontend display)
     path('public/', ad_views.get_public_advertisements, name='get_public_advertisements'),
+    path('public/<int:ad_id>/', ad_views.get_public_advertisement_details, name='get_public_advertisement_details'),
 ]

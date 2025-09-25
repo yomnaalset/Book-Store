@@ -377,6 +377,18 @@ class Author(models.Model):
             'inactive_authors': inactive_authors,
         }
     
+    @classmethod
+    def search_authors(cls, search_term):
+        """
+        Search authors by name, biography, or nationality.
+        """
+        from django.db.models import Q
+        return cls.objects.filter(
+            Q(name__icontains=search_term) |
+            Q(bio__icontains=search_term) |
+            Q(nationality__icontains=search_term)
+        )
+
     def delete(self, *args, **kwargs):
         """
         Prevent deletion if author has books.
@@ -650,7 +662,7 @@ class Book(models.Model):
     @classmethod
     def search_books(cls, query, library=None):
         """
-        Search books by name or author.
+        Search books by name, author, description, or category.
         
         Args:
             query: Search query string
@@ -663,7 +675,9 @@ class Book(models.Model):
         
         queryset = cls.objects.filter(
             Q(name__icontains=query) | 
-            Q(author__name__icontains=query)
+            Q(author__name__icontains=query) |
+            Q(description__icontains=query) |
+            Q(category__name__icontains=query)
         )
         
         if library:

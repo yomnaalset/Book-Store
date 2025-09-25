@@ -432,14 +432,17 @@ class DeliveryRequestListSerializer(serializers.ModelSerializer):
     Serializer for listing delivery requests.
     """
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    request_type_display = serializers.CharField(source='get_request_type_display', read_only=True)
+    customer_name = serializers.CharField(source='customer.get_full_name', read_only=True)
     
     class Meta:
         model = DeliveryRequest
         fields = [
-            'id', 'request_number', 'delivery_address', 'status', 
-            'status_display', 'preferred_delivery_date', 'created_at'
+            'id', 'request_type', 'request_type_display', 'customer', 'customer_name',
+            'delivery_address', 'delivery_city', 'status', 'status_display', 
+            'preferred_delivery_time', 'created_at'
         ]
-        read_only_fields = ['id', 'request_number', 'created_at']
+        read_only_fields = ['id', 'created_at']
 
 
 class DeliveryRequestDetailSerializer(serializers.ModelSerializer):
@@ -448,20 +451,22 @@ class DeliveryRequestDetailSerializer(serializers.ModelSerializer):
     """
     customer = UserDetailSerializer(read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    request_type_display = serializers.CharField(source='get_request_type_display', read_only=True)
     delivery_manager_name = serializers.CharField(source='delivery_manager.get_full_name', read_only=True)
     assigned_by_name = serializers.CharField(source='assigned_by.get_full_name', read_only=True, allow_null=True)
     
     class Meta:
         model = DeliveryRequest
         fields = [
-            'id', 'request_number', 'customer', 'delivery_address',
-            'contact_phone', 'delivery_notes', 'preferred_delivery_date',
+            'id', 'request_type', 'request_type_display', 'customer', 
+            'pickup_address', 'pickup_city', 'delivery_address', 'delivery_city',
+            'preferred_pickup_time', 'preferred_delivery_time', 'notes',
             'status', 'status_display', 'delivery_manager', 'delivery_manager_name',
             'assigned_by', 'assigned_by_name', 'created_at', 'updated_at', 
             'assigned_at', 'delivered_at'
         ]
         read_only_fields = [
-            'id', 'request_number', 'customer', 'delivery_manager', 'assigned_by',
+            'id', 'customer', 'delivery_manager', 'assigned_by',
             'created_at', 'updated_at', 'assigned_at', 'delivered_at'
         ]
 

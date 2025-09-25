@@ -1,6 +1,6 @@
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
 from django.core.exceptions import ValidationError, PermissionDenied
@@ -417,6 +417,7 @@ def get_advertisements_ending_soon(request):
 
 # Public endpoints (for frontend display)
 @api_view(['GET'])
+@permission_classes([AllowAny])
 def get_public_advertisements(request):
     """
     Get advertisements for public display (active only)
@@ -425,16 +426,41 @@ def get_public_advertisements(request):
     try:
         advertisements = AdvertisementManagementService.get_public_advertisements()
         serializer = AdvertisementPublicSerializer(
-            advertisements, 
-            many=True, 
+            advertisements,
+            many=True,
             context={'request': request}
         )
         return Response(serializer.data)
-        
+
     except Exception as e:
         logger.error(f"Error getting public advertisements: {str(e)}")
         return Response(
-            {'error': 'Failed to get public advertisements'}, 
+            {'error': 'Failed to get public advertisements'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_public_advertisement_details(request, ad_id):
+    """
+    Get advertisement details for public display (active only)
+    GET /ads/public/<id>/
+    """
+    try:
+        advertisement = AdvertisementManagementService.get_public_advertisement(ad_id)
+        serializer = AdvertisementPublicSerializer(
+            advertisement,
+            context={'request': request}
+        )
+        return Response(serializer.data)
+
+    except ValidationError as e:
+        return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        logger.error(f"Error getting public advertisement {ad_id}: {str(e)}")
+        return Response(
+            {'error': 'Failed to get advertisement details'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 

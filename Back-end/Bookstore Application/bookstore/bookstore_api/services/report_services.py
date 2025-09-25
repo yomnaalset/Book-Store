@@ -177,8 +177,8 @@ class ReportManagementService:
                 'revenue_trend_value': revenue_trend['value'],
                 'trend': trend_data,
                 'period': period,
-                'start_date': start_date.isoformat(),
-                'end_date': end_date.isoformat(),
+                'start_date': start_date.isoformat() if start_date else None,
+                'end_date': end_date.isoformat() if end_date else None,
             }
             
         except Exception as e:
@@ -547,8 +547,8 @@ class ReportManagementService:
                 'order_trend': order_trend['trend'],
                 'order_trend_value': order_trend['value'],
                 'status_distribution': status_data,
-                'start_date': start_date.isoformat(),
-                'end_date': end_date.isoformat(),
+                'start_date': start_date.isoformat() if start_date else None,
+                'end_date': end_date.isoformat() if end_date else None,
             }
             
         except Exception as e:
@@ -699,8 +699,8 @@ class ReportManagementService:
                 'return_rate': round(return_rate, 2),
                 
                 # Period information
-                'start_date': start_date.isoformat(),
-                'end_date': end_date.isoformat(),
+                'start_date': start_date.isoformat() if start_date else None,
+                'end_date': end_date.isoformat() if end_date else None,
             }
             
         except Exception as e:
@@ -822,8 +822,8 @@ class ReportManagementService:
                 
                 # Period information
                 'period': period,
-                'start_date': start_date.isoformat(),
-                'end_date': end_date.isoformat(),
+                'start_date': start_date.isoformat() if start_date else None,
+                'end_date': end_date.isoformat() if end_date else None,
             }
             
         except Exception as e:

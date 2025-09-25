@@ -19,6 +19,8 @@ from bookstore_api.views.borrowing_views import (
     BorrowApprovalView,
     OverdueBorrowingsView,
     BorrowingReportView,
+    BorrowExtensionsListView,
+    BorrowFinesListView,
     
     # Delivery Manager views
     DeliveryReadyView,
@@ -66,6 +68,10 @@ borrowing_urls = [
     # Library manager monitoring
     path('borrowings/overdue/', OverdueBorrowingsView.as_view(), name='overdue_borrowings'),
     path('ratings/report/', BorrowingReportView.as_view(), name='borrowing_report'),
+    
+    # Library manager extension and fine management
+    path('extensions/', BorrowExtensionsListView.as_view(), name='borrowing_extensions_list'),
+    path('fines/', BorrowFinesListView.as_view(), name='borrowing_fines_list'),
     
     # =====================================
     # DELIVERY MANAGER ENDPOINTS
