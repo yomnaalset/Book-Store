@@ -45,12 +45,15 @@ def create_advertisement(request):
     """
     try:
         logger.info(f"Creating advertisement with data: {request.data}")
+        logger.info(f"DEBUG: ad_type in request.data: {request.data.get('ad_type')}")
         serializer = AdvertisementCreateSerializer(data=request.data)
         if serializer.is_valid():
+            logger.info(f"DEBUG: validated_data ad_type: {serializer.validated_data.get('ad_type')}")
             advertisement = AdvertisementManagementService.create_advertisement(
                 serializer.validated_data, 
                 request.user
             )
+            logger.info(f"DEBUG: Created advertisement ad_type: {advertisement.ad_type}")
             
             response_serializer = AdvertisementDetailSerializer(
                 advertisement, 
@@ -87,6 +90,7 @@ def list_advertisements(request):
         status_filter = request.query_params.get('status')
         created_by = request.query_params.get('created_by')
         search = request.query_params.get('search')
+        ad_type = request.query_params.get('ad_type')
         ordering = request.query_params.get('ordering', '-created_at')
         
         # Get advertisements
@@ -95,6 +99,7 @@ def list_advertisements(request):
             status=status_filter,
             created_by=created_by,
             search=search,
+            ad_type=ad_type,
             ordering=ordering
         )
         

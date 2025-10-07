@@ -13,11 +13,13 @@ class BorrowRequestCreateSerializer(serializers.ModelSerializer):
     Serializer for creating borrow requests
     """
     book_id = serializers.IntegerField()
-    borrow_period_days = serializers.IntegerField(min_value=Decimal('7'), max_value=Decimal('14'))
+    borrow_period_days = serializers.IntegerField(min_value=1, max_value=30)
+    delivery_address = serializers.CharField(max_length=500, required=False, allow_blank=True)
+    additional_notes = serializers.CharField(required=False, allow_blank=True, max_length=1000)
     
     class Meta:
         model = BorrowRequest
-        fields = ['book_id', 'borrow_period_days']
+        fields = ['book_id', 'borrow_period_days', 'delivery_address', 'additional_notes']
     
     def validate_book_id(self, value):
         """Validate book exists and is available"""
@@ -31,19 +33,19 @@ class BorrowRequestCreateSerializer(serializers.ModelSerializer):
             book=book,
             status__in=[
                 BorrowStatusChoices.APPROVED,
-                BorrowStatusChoices.ON_DELIVERY,
+                BorrowStatusChoices.PENDING_DELIVERY,
                 BorrowStatusChoices.ACTIVE,
                 BorrowStatusChoices.EXTENDED
             ]
         ).count()
         
-        if current_borrows >= book.quantity:
+        if current_borrows >= book.available_copies:
             raise serializers.ValidationError("No copies available for borrowing")
         
         return value
     
     def validate(self, data):
-        """Validate customer hasn't already borrowed this book"""
+        """Validate customer hasn't already borrowed this book and has address"""
         customer = self.context['request'].user
         book_id = data['book_id']
         
@@ -54,7 +56,7 @@ class BorrowRequestCreateSerializer(serializers.ModelSerializer):
             status__in=[
                 BorrowStatusChoices.PENDING,
                 BorrowStatusChoices.APPROVED,
-                BorrowStatusChoices.ON_DELIVERY,
+                BorrowStatusChoices.PENDING_DELIVERY,
                 BorrowStatusChoices.ACTIVE,
                 BorrowStatusChoices.EXTENDED,
                 BorrowStatusChoices.RETURN_REQUESTED
@@ -64,12 +66,19 @@ class BorrowRequestCreateSerializer(serializers.ModelSerializer):
         if active_borrow:
             raise serializers.ValidationError("You already have an active borrow request for this book")
         
+        # Validate that customer has an address in their profile
+        if not customer.profile.address or customer.profile.address.strip() == '':
+            raise serializers.ValidationError("You must add an address to your profile before submitting a borrow request.")
+        
         return data
     
     def create(self, validated_data):
         book_id = validated_data.pop('book_id')
         book = Book.objects.get(id=book_id)
         customer = self.context['request'].user
+        
+        # Automatically populate delivery address from user's profile
+        validated_data['delivery_address'] = customer.profile.address
         
         borrow_request = BorrowRequest.objects.create(
             customer=customer,
@@ -86,7 +95,7 @@ class BookBasicSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Book
-        fields = ['id', 'name', 'title', 'author_name', 'category']
+        fields = ['id', 'name', 'author_name', 'category']
 
 
 class CustomerBasicSerializer(serializers.ModelSerializer):
@@ -104,6 +113,8 @@ class BorrowRequestListSerializer(serializers.ModelSerializer):
     """
     book = BookBasicSerializer(read_only=True)
     customer = CustomerBasicSerializer(read_only=True)
+    book_title = serializers.CharField(source='book.name', read_only=True)
+    customer_name = serializers.CharField(source='customer.get_full_name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     days_remaining = serializers.ReadOnlyField()
     days_overdue = serializers.ReadOnlyField()
@@ -113,12 +124,11 @@ class BorrowRequestListSerializer(serializers.ModelSerializer):
     class Meta:
         model = BorrowRequest
         fields = [
-            'id', 'book', 'customer', 'status', 'status_display',
-            'borrow_period_days', 'request_date', 'expected_return_date',
-            'final_return_date', 'delivery_date', 'actual_return_date',
-            'extension_used', 'additional_days', 'days_remaining',
-            'days_overdue', 'can_extend', 'can_rate', 'rating',
-            'rating_comment'
+            'id', 'book', 'book_title', 'customer', 'customer_name', 'status', 'status_display',
+            'borrow_period_days', 'delivery_address', 'additional_notes',
+            'request_date', 'expected_return_date', 'final_return_date', 
+            'delivery_date', 'actual_return_date', 'days_remaining', 
+            'days_overdue', 'can_extend', 'can_rate'
         ]
 
 
@@ -134,8 +144,7 @@ class BorrowRequestDetailSerializer(BorrowRequestListSerializer):
         fields = BorrowRequestListSerializer.Meta.fields + [
             'approved_by', 'approved_date', 'rejection_reason',
             'pickup_date', 'delivery_person', 'delivery_notes',
-            'early_return_requested', 'early_return_date', 'return_reason',
-            'rating_date', 'timeline'
+            'timeline'
         ]
     
     def get_timeline(self, obj):
@@ -180,19 +189,11 @@ class BorrowRequestDetailSerializer(BorrowRequestListSerializer):
             })
         
         # Extension
-        if obj.extension_used and obj.extension_date:
+        if obj.status == BorrowStatusChoices.EXTENDED:
             timeline.append({
                 'status': 'extended',
-                'date': obj.extension_date,
-                'description': f'Borrowing extended by {obj.additional_days} days'
-            })
-        
-        # Early return request
-        if obj.early_return_requested and obj.early_return_date:
-            timeline.append({
-                'status': 'return_requested',
-                'date': obj.early_return_date,
-                'description': 'Early return requested'
+                'date': obj.updated_at,
+                'description': 'Borrowing extended'
             })
         
         # Actual return
@@ -212,12 +213,43 @@ class BorrowApprovalSerializer(serializers.Serializer):
     """
     action = serializers.ChoiceField(choices=['approve', 'reject'])
     rejection_reason = serializers.CharField(required=False, allow_blank=True)
+    delivery_manager_id = serializers.IntegerField(required=False, allow_null=True)
     
     def validate(self, data):
         if data['action'] == 'reject' and not data.get('rejection_reason'):
             raise serializers.ValidationError({
                 'rejection_reason': 'Rejection reason is required when rejecting a request'
             })
+        
+        if data['action'] == 'approve' and not data.get('delivery_manager_id'):
+            raise serializers.ValidationError({
+                'delivery_manager_id': 'Delivery manager must be selected when approving a request'
+            })
+        
+        # Validate delivery manager if provided
+        if data.get('delivery_manager_id'):
+            from ..models import User
+            try:
+                delivery_manager = User.objects.get(
+                    id=data['delivery_manager_id'],
+                    user_type='delivery_admin',
+                    is_active=True
+                )
+                # Check if delivery manager is available (online)
+                if hasattr(delivery_manager, 'delivery_profile'):
+                    if delivery_manager.delivery_profile.delivery_status not in ['online']:
+                        raise serializers.ValidationError({
+                            'delivery_manager_id': 'Selected delivery manager is not available (must be online)'
+                        })
+                else:
+                    raise serializers.ValidationError({
+                        'delivery_manager_id': 'Selected delivery manager does not have a delivery profile'
+                    })
+            except User.DoesNotExist:
+                raise serializers.ValidationError({
+                    'delivery_manager_id': 'Invalid delivery manager selected'
+                })
+        
         return data
 
 
@@ -249,9 +281,6 @@ class BorrowExtensionCreateSerializer(serializers.ModelSerializer):
         )
         
         # Update borrow request
-        borrow_request.extension_used = True
-        borrow_request.extension_date = timezone.now()
-        borrow_request.additional_days = validated_data['additional_days']
         borrow_request.status = BorrowStatusChoices.EXTENDED
         borrow_request.save()
         
@@ -363,7 +392,7 @@ class MostBorrowedBookSerializer(serializers.ModelSerializer):
             book=obj,
             status__in=[
                 BorrowStatusChoices.APPROVED,
-                BorrowStatusChoices.ON_DELIVERY,
+                BorrowStatusChoices.PENDING_DELIVERY,
                 BorrowStatusChoices.ACTIVE,
                 BorrowStatusChoices.EXTENDED
             ]
@@ -428,3 +457,39 @@ class DeliveryReadySerializer(serializers.ModelSerializer):
         if profile and profile.address:
             return f"{profile.address}, {profile.city or ''}"
         return "Address not provided"
+
+
+class DeliveryManagerSerializer(serializers.ModelSerializer):
+    """
+    Serializer for delivery manager selection in admin approval
+    """
+    full_name = serializers.CharField(source='get_full_name', read_only=True)
+    delivery_status = serializers.CharField(source='delivery_profile.delivery_status', read_only=True)
+    status_display = serializers.CharField(source='delivery_profile.get_delivery_status_display', read_only=True)
+    is_available = serializers.SerializerMethodField()
+    status_color = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = User
+        fields = [
+            'id', 'full_name', 'email', 'delivery_status', 
+            'status_display', 'is_available', 'status_color'
+        ]
+    
+    def get_is_available(self, obj):
+        """Check if delivery manager is available for assignment"""
+        if hasattr(obj, 'delivery_profile'):
+            return obj.delivery_profile.delivery_status == 'online'
+        return False
+    
+    def get_status_color(self, obj):
+        """Get color code for delivery manager status"""
+        if hasattr(obj, 'delivery_profile'):
+            status = obj.delivery_profile.delivery_status
+            if status == 'online':
+                return 'green'
+            elif status == 'busy':
+                return 'orange'
+            elif status == 'offline':
+                return 'red'
+        return 'gray'

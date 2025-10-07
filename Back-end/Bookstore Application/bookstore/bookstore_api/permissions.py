@@ -109,6 +109,13 @@ class IsOwnerOrAdmin(permissions.BasePermission):
                 request.user.user_type in ['library_admin', 'delivery_admin']
             )
         
+        # Check if the object has a recipient attribute (for notifications)
+        if hasattr(obj, 'recipient'):
+            return (
+                obj.recipient == request.user or 
+                request.user.user_type in ['library_admin', 'delivery_admin']
+            )
+        
         # Check if the object is the user itself
         if hasattr(obj, 'email'):  # User model
             return (

@@ -127,7 +127,7 @@ class DiscountCode(models.Model):
     def can_be_used_by(self, customer):
         """Check if a customer can use this discount code."""
         if not self.is_valid():
-            return False
+            return False, "This discount code is not active or has expired."
         
         # Check usage limit
         usage_count = DiscountUsage.objects.filter(
@@ -135,21 +135,29 @@ class DiscountCode(models.Model):
             customer=customer
         ).count()
         
-        return usage_count < self.usage_limit_per_customer
+        if usage_count >= self.usage_limit_per_customer:
+            return False, f"You have already used this discount code the maximum number of times ({self.usage_limit_per_customer})."
+        
+        return True, "Discount code can be used."
     
     def get_discount_amount(self, order_total):
         """Calculate the discount amount for a given order total."""
+        from decimal import Decimal
+        order_total = Decimal(str(order_total))
         return (order_total * self.discount_percentage) / 100
     
     def get_final_price(self, order_total):
         """Calculate the final price after applying the discount."""
+        from decimal import Decimal
+        order_total = Decimal(str(order_total))
         discount_amount = self.get_discount_amount(order_total)
         return order_total - discount_amount
     
     def use_by_customer(self, customer, order):
         """Record usage of this discount code by a customer."""
-        if not self.can_be_used_by(customer):
-            raise ValidationError(_("This discount code cannot be used by this customer."))
+        can_use, message = self.can_be_used_by(customer)
+        if not can_use:
+            raise ValidationError(message)
         
         usage = DiscountUsage.objects.create(
             discount_code=self,
@@ -172,8 +180,9 @@ class DiscountCode(models.Model):
         if not discount_code:
             return None, _("Invalid or expired discount code.")
         
-        if not discount_code.can_be_used_by(customer):
-            return None, _("You have already used this discount code the maximum number of times.")
+        can_use, message = discount_code.can_be_used_by(customer)
+        if not can_use:
+            return None, message
         
         return discount_code, None
 
@@ -285,11 +294,12 @@ class BookDiscountManager(models.Manager):
     def get_discount_for_book(self, book):
         """Get active discount for a specific book."""
         now = timezone.now()
+        today = now.date()
         try:
             return self.get(
                 book=book,
                 is_active=True,
-                start_date__lte=now,
+                start_date__date__lte=today,  # Use date comparison instead of datetime
                 end_date__gt=now
             )
         except BookDiscount.DoesNotExist:
@@ -433,7 +443,10 @@ class BookDiscount(models.Model):
     
     def is_not_started(self):
         """Check if the discount hasn't started yet."""
-        return timezone.now() < self.start_date
+        now = timezone.now()
+        start_date = self.start_date.date()
+        today = now.date()
+        return start_date > today
     
     def is_valid(self):
         """Check if the discount is valid (active and within date range)."""
@@ -587,3 +600,105 @@ class BookDiscountUsage(models.Model):
             'total_savings': total_savings,
             'popular_discounts': popular_discounts,
         }
+
+
+class AppliedDiscountCode(models.Model):
+    """
+    Model to track discount codes applied during cart validation.
+    This prevents users from applying the same code multiple times in the same session.
+    """
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='applied_discount_codes',
+        limit_choices_to={'user_type': 'customer'},
+        help_text="Customer who applied the discount code"
+    )
+    
+    discount_code = models.ForeignKey(
+        DiscountCode,
+        on_delete=models.CASCADE,
+        related_name='applied_sessions',
+        help_text="Discount code that was applied"
+    )
+    
+    applied_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When the discount code was applied to cart"
+    )
+    
+    session_id = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Session identifier for tracking"
+    )
+    
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Whether this application is still active"
+    )
+    
+    class Meta:
+        db_table = 'applied_discount_code'
+        verbose_name = 'Applied Discount Code'
+        verbose_name_plural = 'Applied Discount Codes'
+        ordering = ['-applied_at']
+        indexes = [
+            models.Index(fields=['user']),
+            models.Index(fields=['discount_code']),
+            models.Index(fields=['applied_at']),
+            models.Index(fields=['is_active']),
+        ]
+        unique_together = ['user', 'discount_code', 'is_active']  # One active application per user per code
+    
+    def __str__(self):
+        return f"{self.user.get_full_name()} applied {self.discount_code.code}"
+    
+    @classmethod
+    def is_code_applied_by_user(cls, user, discount_code):
+        """Check if a discount code is already applied by a user."""
+        return cls.objects.filter(
+            user=user,
+            discount_code=discount_code,
+            is_active=True
+        ).exists()
+    
+    @classmethod
+    def apply_code(cls, user, discount_code, session_id=''):
+        """Mark a discount code as applied by a user."""
+        # Deactivate any existing applications of this code by this user
+        cls.objects.filter(
+            user=user,
+            discount_code=discount_code,
+            is_active=True
+        ).update(is_active=False)
+        
+        # Create new application record
+        return cls.objects.create(
+            user=user,
+            discount_code=discount_code,
+            session_id=session_id
+        )
+    
+    @classmethod
+    def remove_code(cls, user, discount_code):
+        """Remove a discount code application by a user."""
+        cls.objects.filter(
+            user=user,
+            discount_code=discount_code,
+            is_active=True
+        ).update(is_active=False)
+    
+    @classmethod
+    def cleanup_expired_applications(cls, hours=24):
+        """Clean up old applied discount codes."""
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        cutoff_time = timezone.now() - timedelta(hours=hours)
+        count = cls.objects.filter(
+            applied_at__lt=cutoff_time,
+            is_active=True
+        ).update(is_active=False)
+        
+        return count

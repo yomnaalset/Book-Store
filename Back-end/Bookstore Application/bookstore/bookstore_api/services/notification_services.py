@@ -3,13 +3,14 @@ from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 from django.db.models import Q
+from django.utils import timezone
 
 from ..models import Notification, NotificationType, User, Order
 
 
 class NotificationService:
     @staticmethod
-    def create_notification(user_id, title, message, notification_type, related_order_id=None):
+    def create_notification(user_id, title, message, notification_type, related_order_id=None, prevent_duplicates=True):
         """
         Create a notification for a specific user
         """
@@ -18,13 +19,51 @@ class NotificationService:
             related_order = None
             if related_order_id:
                 related_order = Order.objects.get(id=related_order_id)
+            
+            # Handle notification_type as string name instead of instance
+            notification_type_obj = None
+            if isinstance(notification_type, str):
+                try:
+                    notification_type_obj = NotificationType.objects.get(name=notification_type)
+                except NotificationType.DoesNotExist:
+                    # Create a default notification type if it doesn't exist
+                    notification_type_obj = NotificationType.objects.create(
+                        name=notification_type,
+                        description=f"Notification type for {notification_type}",
+                        template=f"{{title}}: {{message}}"
+                    )
+            else:
+                notification_type_obj = notification_type
+            
+            # Check for duplicate notifications if prevent_duplicates is True
+            if prevent_duplicates:
+                # Check if a similar notification already exists within the last 10 minutes
+                from django.utils import timezone
+                from datetime import timedelta
+                
+                recent_time = timezone.now() - timedelta(minutes=10)
+                
+                # More flexible duplicate detection - check for same type and similar content
+                existing_notification = Notification.objects.filter(
+                    recipient=user,
+                    notification_type=notification_type_obj,
+                    created_at__gte=recent_time
+                ).filter(
+                    Q(title=title) | 
+                    Q(message__icontains=title.split()[0]) if title else Q()
+                ).first()
+                
+                if existing_notification:
+                    # Return the existing notification instead of creating a duplicate
+                    return existing_notification
                 
             notification = Notification.objects.create(
                 recipient=user,
                 title=title,
                 message=message,
-                notification_type=notification_type,
-                related_order=related_order
+                notification_type=notification_type_obj,
+                related_object_type='order' if related_order else None,
+                related_object_id=related_order.id if related_order else None,
             )
             return notification
         except User.DoesNotExist:
@@ -33,7 +72,7 @@ class NotificationService:
             raise ValueError(f"Order with ID {related_order_id} does not exist")
     
     @staticmethod
-    def get_user_notifications(user_id, is_read=None, notification_type=None):
+    def get_user_notifications(user_id, is_read=None, notification_type=None, search=None):
         """
         Get all notifications for a specific user with optional filters
         """
@@ -54,6 +93,14 @@ class NotificationService:
                 except NotificationType.DoesNotExist:
                     # If notification type doesn't exist, return empty queryset
                     notifications = notifications.none()
+            
+            if search:
+                # Search in title and message fields
+                from django.db.models import Q
+                notifications = notifications.filter(
+                    Q(title__icontains=search) |
+                    Q(message__icontains=search)
+                )
                 
             return notifications
         except User.DoesNotExist:
@@ -67,6 +114,7 @@ class NotificationService:
         try:
             notification = Notification.objects.get(id=notification_id)
             notification.status = 'read'
+            notification.read_at = timezone.now()
             notification.save()
             return notification
         except Notification.DoesNotExist:
@@ -80,8 +128,16 @@ class NotificationService:
         try:
             user = User.objects.get(id=user_id)
             notifications = Notification.objects.filter(recipient=user, status='unread')
-            notifications.update(status='read')
-            return notifications.count()
+            count = notifications.count()
+            
+            # Update notifications to read status and set read_at timestamp
+            from django.utils import timezone
+            notifications.update(
+                status='read',
+                read_at=timezone.now()
+            )
+            
+            return count
         except User.DoesNotExist:
             raise ValueError(f"User with ID {user_id} does not exist")
     

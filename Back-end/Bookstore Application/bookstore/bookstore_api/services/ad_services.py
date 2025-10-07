@@ -127,7 +127,8 @@ class AdvertisementManagementService:
             advertisement = Advertisement.objects.get(id=advertisement_id)
             
             # Check if user can delete this advertisement
-            if advertisement.created_by != user and user.user_type != 'system_admin':
+            # Library admins and system admins can delete any advertisement
+            if advertisement.created_by != user and user.user_type not in ['system_admin', 'library_admin']:
                 raise PermissionDenied("You can only delete advertisements you created.")
             
             with transaction.atomic():
@@ -164,7 +165,7 @@ class AdvertisementManagementService:
             raise ValidationError("Advertisement not found.")
     
     @staticmethod
-    def list_advertisements(user, status=None, created_by=None, search=None, ordering='-created_at'):
+    def list_advertisements(user, status=None, created_by=None, search=None, ad_type=None, ordering='-created_at'):
         """
         List advertisements with optional filtering
         
@@ -173,6 +174,7 @@ class AdvertisementManagementService:
             status (str, optional): Filter by status
             created_by (int, optional): Filter by creator ID
             search (str, optional): Search in title and content
+            ad_type (str, optional): Filter by advertisement type
             ordering (str): Ordering field
             
         Returns:
@@ -186,6 +188,9 @@ class AdvertisementManagementService:
         
         if created_by:
             queryset = queryset.filter(created_by_id=created_by)
+        
+        if ad_type:
+            queryset = queryset.filter(ad_type=ad_type)
         
         if search:
             queryset = queryset.filter(
@@ -291,8 +296,11 @@ class AdvertisementStatusService:
             # Validate status transition
             current_status = advertisement.status
             
+            # For status-only updates, prevent changing status of expired advertisements
+            # Full advertisement updates (with end_date changes) are handled in update_advertisement method
             if current_status == AdvertisementStatusChoices.EXPIRED:
-                raise ValidationError("Cannot change status of expired advertisements.")
+                if new_status != AdvertisementStatusChoices.EXPIRED:
+                    raise ValidationError("Cannot change status of expired advertisements. Use the full update endpoint to extend the end date.")
             
             # Auto-activate scheduled ads if start date has passed
             if (new_status == AdvertisementStatusChoices.SCHEDULED and 

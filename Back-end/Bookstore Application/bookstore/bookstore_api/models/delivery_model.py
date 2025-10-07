@@ -15,8 +15,11 @@ class Order(models.Model):
     """
     ORDER_STATUS_CHOICES = [
         ('pending', 'Pending'),
+        ('pending_assignment', 'Pending Assignment'),
         ('confirmed', 'Confirmed'),
+        ('in_delivery', 'In Delivery'),
         ('delivered', 'Delivered'),
+        ('cancelled', 'Cancelled'),
         ('returned', 'Returned'),  # For borrowing returns
     ]
     
@@ -47,6 +50,8 @@ class Order(models.Model):
         Payment,
         on_delete=models.CASCADE,
         related_name='order',
+        null=True,
+        blank=True,
         help_text="Associated payment for this order"
     )
     
@@ -93,6 +98,17 @@ class Order(models.Model):
         choices=ORDER_TYPE_CHOICES,
         default='purchase',
         help_text="Type of order (purchase, borrowing, or return collection)"
+    )
+    
+    # Payment method used for this order
+    payment_method = models.CharField(
+        max_length=20,
+        choices=[
+            ('cash', 'Cash on Delivery'),
+            ('mastercard', 'Mastercard'),
+        ],
+        default='cash',
+        help_text="Payment method used for this order"
     )
     
     status = models.CharField(
@@ -163,25 +179,37 @@ class Order(models.Model):
         """Restore book quantities when order is cancelled or returned."""
         for item in self.items.all():
             book = item.book
-            if book.availableCopies is not None:
-                book.availableCopies += item.quantity
+            if book.available_copies is not None:
+                book.available_copies += item.quantity
             if book.quantity is not None:
                 book.quantity += item.quantity
-            book.save(update_fields=['availableCopies', 'quantity'])
+            book.save(update_fields=['available_copies', 'quantity'])
     
     def update_book_quantities(self):
         """Update book quantities when order is confirmed."""
         for item in self.items.all():
             book = item.book
-            if book.availableCopies is not None:
-                book.availableCopies = max(0, book.availableCopies - item.quantity)
+            if book.available_copies is not None:
+                book.available_copies = max(0, book.available_copies - item.quantity)
             if book.quantity is not None:
                 book.quantity = max(0, book.quantity - item.quantity)
-            book.save(update_fields=['availableCopies', 'quantity'])
+            book.save(update_fields=['available_copies', 'quantity'])
     
     def can_be_delivered(self):
         """Check if the order can be delivered."""
         return self.status in ['pending', 'confirmed']
+    
+    def can_be_cancelled(self):
+        """Check if the order can be cancelled."""
+        return self.status in ['pending', 'confirmed']
+    
+    def get_total_items(self):
+        """Get total number of different items in the order."""
+        return self.items.count()
+    
+    def get_total_quantity(self):
+        """Get total quantity of all items in the order."""
+        return sum(item.quantity for item in self.items.all())
     
     def can_be_returned(self):
         """Check if the order can be returned (for borrowing)."""
@@ -328,6 +356,12 @@ class DeliveryAssignment(models.Model):
             return timezone.now() > self.estimated_delivery_time
         return False
     
+    def get_delivery_duration(self):
+        """Get delivery duration if completed."""
+        if self.actual_delivery_time and self.assigned_at:
+            return self.actual_delivery_time - self.assigned_at
+        return None
+    
     def mark_as_delivered(self, notes=None):
         """Mark the delivery as completed."""
         self.actual_delivery_time = timezone.now()
@@ -397,6 +431,16 @@ class DeliveryRequest(models.Model):
         related_name='delivery_requests',
         limit_choices_to={'user_type': 'customer'},
         help_text="Customer requesting delivery"
+    )
+    
+    # Optional order reference
+    order = models.ForeignKey(
+        Order,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='delivery_requests',
+        help_text="Associated order if this delivery request is for a specific order"
     )
     
     REQUEST_TYPE_CHOICES = [

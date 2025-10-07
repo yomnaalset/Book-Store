@@ -316,9 +316,6 @@ class DiscountCodeApplicationView(APIView):
             )
             
             if success:
-                # Serialize the usage record for response
-                usage_record = result['usage_record']
-                result['usage_record'] = DiscountUsageSerializer(usage_record).data
                 return Response(result, status=status.HTTP_201_CREATED)
             else:
                 return Response(result, status=status.HTTP_400_BAD_REQUEST)
@@ -332,6 +329,39 @@ class DiscountCodeApplicationView(APIView):
 
 
 
+
+
+class DiscountCodeRemovalView(APIView):
+    """
+    API view for removing applied discount codes from cart.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def post(self, request):
+        """
+        Remove any applied discount code from the user's cart.
+        """
+        # Only customers can remove discount codes
+        if request.user.user_type != 'customer':
+            return Response(
+                {'error': 'Only customers can remove discount codes.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        try:
+            success, result = DiscountValidationService.remove_discount_code(request.user)
+            
+            if success:
+                return Response(result, status=status.HTTP_200_OK)
+            else:
+                return Response(result, status=status.HTTP_400_BAD_REQUEST)
+                
+        except Exception as e:
+            logger.error(f"Error in DiscountCodeRemovalView.post: {str(e)}")
+            return Response(
+                {'error': 'An unexpected error occurred while removing the discount code.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 class DiscountCodeCleanupView(APIView):
@@ -390,7 +420,7 @@ def get_user_available_codes(request):
         available_codes = []
         
         for code in valid_codes:
-            can_use, message = code.can_be_used_by_user(request.user)
+            can_use, message = code.can_be_used_by(request.user)
             if can_use:
                 available_codes.append({
                     'code': code.code,
@@ -435,7 +465,7 @@ def quick_code_check(request):
         
         try:
             discount_code = DiscountCode.objects.get(code=code)
-            can_use, message = discount_code.can_be_used_by_user(request.user)
+            can_use, message = discount_code.can_be_used_by(request.user)
             
             return Response({
                 'valid': can_use,
@@ -946,6 +976,42 @@ def quick_book_discount_check(request):
         )
 
 
+class DiscountListActiveView(APIView):
+    """
+    API view for getting only active discount codes.
+    Used by advertisement forms to populate discount code dropdowns.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request):
+        """
+        Get all active discount codes.
+        """
+        # Check permissions
+        if not (request.user.is_authenticated and request.user.user_type == 'library_admin'):
+            return Response(
+                {'error': 'Only library administrators can access discount codes.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        try:
+            today = timezone.now().date()
+            discounts = DiscountCode.objects.filter(
+                is_active=True, 
+                expiration_date__gte=timezone.now()
+            ).order_by('-created_at')
+            
+            serializer = DiscountCodeSerializer(discounts, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error in DiscountListActiveView.get: {str(e)}")
+            return Response(
+                {'error': 'An unexpected error occurred while retrieving active discount codes.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def get_discounted_books(request):
@@ -999,11 +1065,12 @@ def get_discounted_books(request):
             
             # Determine discount status
             is_active = discount.start_date <= now and discount.end_date > now
-            is_upcoming = discount.start_date > now
+            is_upcoming = discount.start_date.date() > now.date()
             
             discounted_books.append({
                 'id': book.id,
                 'title': book.name,
+                'description': book.description,  # Add description field
                 'author': book.author.name if book.author else 'Unknown Author',
                 'category': book.category.name if book.category else 'Uncategorized',
                 'thumbnail_url': thumbnail_url,

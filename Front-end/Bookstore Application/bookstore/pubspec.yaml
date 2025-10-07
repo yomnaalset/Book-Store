@@ -41,7 +41,6 @@ dependencies:
   json_annotation: ^4.8.1
   cached_network_image: ^3.3.0
   carousel_slider: ^5.0.0
-  smooth_page_indicator: ^1.2.1 
   flutter_typeahead: ^5.2.0
   intl: ^0.20.2
   flutter_localizations:

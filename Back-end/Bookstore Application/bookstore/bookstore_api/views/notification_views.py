@@ -2,6 +2,7 @@ from rest_framework import viewsets, status, permissions
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from ..models import Notification
 from ..serializers import (
     NotificationSerializer,
@@ -47,6 +48,7 @@ class NotificationViewSet(viewsets.ModelViewSet):
         """
         is_read = request.query_params.get('is_read')
         notification_type = request.query_params.get('notification_type')
+        search = request.query_params.get('search')
         
         if is_read is not None:
             is_read = is_read.lower() == 'true'
@@ -55,7 +57,8 @@ class NotificationViewSet(viewsets.ModelViewSet):
             notifications = NotificationService.get_user_notifications(
                 user_id=request.user.id,
                 is_read=is_read,
-                notification_type=notification_type
+                notification_type=notification_type,
+                search=search
             )
             
             serializer = self.get_serializer(notifications, many=True)
@@ -70,14 +73,15 @@ class NotificationViewSet(viewsets.ModelViewSet):
         notification = self.get_object()
         
         # Mark notification as read when it's retrieved
-        if not notification.is_read:
-            notification.is_read = True
+        if notification.status == 'unread':
+            notification.status = 'read'
+            notification.read_at = timezone.now()
             notification.save()
         
         serializer = self.get_serializer(notification)
         return Response(serializer.data)
     
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=['post', 'patch'])
     def mark_as_read(self, request, pk=None):
         """
         Mark a notification as read
@@ -113,3 +117,29 @@ class NotificationViewSet(viewsets.ModelViewSet):
             return Response({"unread_count": notifications.count()})
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    
+    def destroy(self, request, pk=None):
+        """
+        Delete a notification
+        """
+        try:
+            notification = self.get_object()
+            
+            # Check if user has permission to delete this notification
+            if notification.recipient != request.user and not (request.user.is_staff or request.user.is_superuser):
+                return Response(
+                    {"error": "You don't have permission to delete this notification"}, 
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            # Delete the notification using the service
+            NotificationService.delete_notification(notification.id)
+            
+            return Response(
+                {"message": "Notification deleted successfully"}, 
+                status=status.HTTP_204_NO_CONTENT
+            )
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

@@ -7,20 +7,25 @@ from .library_model import Book
 
 
 class BorrowStatusChoices(models.TextChoices):
-    PENDING = 'pending', 'Pending'
+    PENDING = 'pending', 'Under Review'
     APPROVED = 'approved', 'Approved' 
     REJECTED = 'rejected', 'Rejected'
-    ON_DELIVERY = 'on_delivery', 'On Delivery'
+    AWAITING_PICKUP = 'awaiting_pickup', 'Awaiting Pickup'
+    PENDING_DELIVERY = 'pending_delivery', 'Pending Delivery'
+    DELIVERED = 'delivered', 'Delivered'
     ACTIVE = 'active', 'Active'
     EXTENDED = 'extended', 'Extended'
     RETURN_REQUESTED = 'return_requested', 'Return Requested'
     RETURNED = 'returned', 'Returned'
     LATE = 'late', 'Late'
+    RETURNED_AFTER_DELAY = 'returned_after_delay', 'Returned After Delay'
     CANCELLED = 'cancelled', 'Cancelled'
 
 
 class ExtensionStatusChoices(models.TextChoices):
     REQUESTED = 'requested', 'Extension Requested'
+    APPROVED = 'approved', 'Extension Approved'
+    REJECTED = 'rejected', 'Extension Rejected'
 
 
 class FineStatusChoices(models.TextChoices):
@@ -74,6 +79,14 @@ class BorrowRequest(models.Model):
     rejection_reason = models.TextField(blank=True, null=True)
     
     # Delivery details
+    delivery_address = models.TextField(
+        help_text="Delivery address for the borrowed book"
+    )
+    additional_notes = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Additional notes from customer"
+    )
     pickup_date = models.DateTimeField(null=True, blank=True)
     delivery_date = models.DateTimeField(null=True, blank=True)
     delivery_person = models.ForeignKey(
@@ -101,6 +114,28 @@ class BorrowRequest(models.Model):
         max_length=10,
         choices=FineStatusChoices.choices,
         default=FineStatusChoices.UNPAID
+    )
+    
+    # Deposit information
+    deposit_amount = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        default=0.00,
+        help_text="Security deposit amount paid by customer"
+    )
+    deposit_paid = models.BooleanField(
+        default=False,
+        help_text="Whether the deposit has been paid"
+    )
+    deposit_refunded = models.BooleanField(
+        default=False,
+        help_text="Whether the deposit has been refunded"
+    )
+    refund_amount = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        default=0.00,
+        help_text="Amount to be refunded after fine deduction"
     )
     
     # Metadata
@@ -151,6 +186,41 @@ class BorrowRequest(models.Model):
             fine_rate = 1.00
             return days_overdue * fine_rate
         return 0.00
+    
+    def set_deposit_amount(self, amount):
+        """Set the deposit amount for this borrowing."""
+        self.deposit_amount = amount
+        self.save()
+    
+    def mark_deposit_paid(self):
+        """Mark the deposit as paid."""
+        self.deposit_paid = True
+        self.save()
+    
+    def calculate_refund_amount(self):
+        """Calculate refund amount after fine deduction."""
+        if self.fine_status == FineStatusChoices.PAID:
+            refund = self.deposit_amount - self.fine_amount
+            return max(refund, 0.00)  # Ensure non-negative refund
+        return self.deposit_amount
+    
+    def process_refund(self):
+        """Process the refund after fine payment."""
+        if not self.deposit_paid:
+            raise ValueError("Deposit must be paid before processing refund")
+        
+        if self.fine_status != FineStatusChoices.PAID:
+            raise ValueError("Fine must be paid before processing refund")
+        
+        self.refund_amount = self.calculate_refund_amount()
+        self.deposit_refunded = True
+        self.save()
+        
+        return self.refund_amount
+    
+    def is_deposit_frozen(self):
+        """Check if deposit refund is frozen due to unpaid fine."""
+        return self.fine_status == FineStatusChoices.UNPAID and self.fine_amount > 0
     
     def can_be_extended(self):
         """Check if the borrow request can be extended."""
@@ -276,10 +346,23 @@ class BorrowFine(models.Model):
         related_name='fine'
     )
     
-    amount = models.DecimalField(
+    daily_rate = models.DecimalField(
         max_digits=8,
         decimal_places=2,
-        help_text="Fine amount"
+        default=1.00,
+        help_text="Daily fine rate"
+    )
+    
+    days_overdue = models.PositiveIntegerField(
+        default=0,
+        help_text="Number of days overdue"
+    )
+    
+    total_amount = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        default=0.00,
+        help_text="Total fine amount (daily_rate * days_overdue)"
     )
     
     status = models.CharField(
@@ -289,6 +372,7 @@ class BorrowFine(models.Model):
     )
     
     reason = models.TextField(
+        default="Late return",
         help_text="Reason for the fine"
     )
     
@@ -311,7 +395,18 @@ class BorrowFine(models.Model):
         ordering = ['-created_at']
     
     def __str__(self):
-        return f"Fine for {self.borrow_request} - {self.amount}"
+        return f"Fine for {self.borrow_request} - ${self.total_amount}"
+    
+    def save(self, *args, **kwargs):
+        """Override save to calculate total amount."""
+        self.total_amount = self.daily_rate * self.days_overdue
+        super().save(*args, **kwargs)
+    
+    def update_fine(self, days_overdue):
+        """Update fine based on current days overdue."""
+        self.days_overdue = days_overdue
+        self.total_amount = self.daily_rate * days_overdue
+        self.save()
     
     def mark_as_paid(self, paid_by):
         """Mark the fine as paid."""
@@ -319,6 +414,11 @@ class BorrowFine(models.Model):
         self.paid_by = paid_by
         self.paid_date = timezone.now()
         self.save()
+        
+        # Update the borrow request fine status
+        self.borrow_request.fine_status = FineStatusChoices.PAID
+        self.borrow_request.fine_amount = self.total_amount
+        self.borrow_request.save()
     
     @classmethod
     def get_unpaid_fines(cls):

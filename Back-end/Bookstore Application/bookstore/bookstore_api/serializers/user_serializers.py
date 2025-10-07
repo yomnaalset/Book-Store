@@ -379,6 +379,9 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
         Handles profile picture deletion when set to None/null.
         Only updates fields that are provided in the request.
         """
+        # Remove 'state' field if sent from frontend (not supported)
+        validated_data.pop('state', None)
+        
         # Extract profile-specific fields
         phone_number = validated_data.pop('phone_number', 'not_provided')
         address = validated_data.pop('address', 'not_provided')

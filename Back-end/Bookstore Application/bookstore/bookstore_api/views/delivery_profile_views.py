@@ -1,0 +1,382 @@
+from rest_framework import viewsets, status, permissions
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from django.shortcuts import get_object_or_404
+from django.db.models import Q
+import logging
+
+from ..models import DeliveryProfile, User
+from ..serializers import (
+    DeliveryProfileSerializer,
+    DeliveryProfileCreateSerializer,
+    DeliveryProfileUpdateSerializer,
+    DeliveryProfileLocationUpdateSerializer,
+    DeliveryProfileStatusUpdateSerializer,
+    DeliveryProfileTrackingUpdateSerializer,
+)
+from ..services import DeliveryProfileService
+from ..utils import format_error_message
+
+logger = logging.getLogger(__name__)
+
+
+class DeliveryProfileViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing delivery profiles.
+    """
+    queryset = DeliveryProfile.objects.all()
+    serializer_class = DeliveryProfileSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return DeliveryProfileCreateSerializer
+        elif self.action in ['update', 'partial_update']:
+            return DeliveryProfileUpdateSerializer
+        elif self.action == 'update_location':
+            return DeliveryProfileLocationUpdateSerializer
+        elif self.action == 'update_status':
+            return DeliveryProfileStatusUpdateSerializer
+        elif self.action == 'update_tracking':
+            return DeliveryProfileTrackingUpdateSerializer
+        return DeliveryProfileSerializer
+    
+    def get_queryset(self):
+        """
+        Filter delivery profiles based on user permissions.
+        Only shows profiles for delivery administrators.
+        """
+        user = self.request.user
+        
+        # If user is admin, they can see all delivery admin profiles
+        if user.is_staff or user.is_superuser:
+            return DeliveryProfileService.get_delivery_admin_profiles()
+        
+        # If user is delivery admin, they can see their own profile
+        if user.is_delivery_admin():
+            return DeliveryProfile.objects.filter(user=user).select_related('user')
+        
+        # Other users cannot see delivery profiles
+        return DeliveryProfile.objects.none()
+    
+    def get_object(self):
+        """
+        Get the delivery profile object.
+        """
+        user = self.request.user
+        
+        # If user is admin, they can access any profile
+        if user.is_staff or user.is_superuser:
+            return super().get_object()
+        
+        # If user is delivery admin, they can only access their own profile
+        if user.is_delivery_admin():
+            return get_object_or_404(DeliveryProfile, user=user)
+        
+        # Other users cannot access delivery profiles
+        return None
+    
+    def create(self, request, *args, **kwargs):
+        """
+        Create a new delivery profile.
+        Only delivery administrators can create profiles.
+        """
+        if not request.user.is_delivery_admin():
+            return Response({
+                'success': False,
+                'message': 'Only delivery administrators can create delivery profiles',
+                'error_code': 'PERMISSION_DENIED'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        try:
+            delivery_profile = serializer.save()
+            response_serializer = DeliveryProfileSerializer(delivery_profile)
+            
+            return Response({
+                'success': True,
+                'message': 'Delivery profile created successfully',
+                'data': response_serializer.data
+            }, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            logger.error(f"Error creating delivery profile: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to create delivery profile',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_400_BAD_REQUEST)
+    
+    def update(self, request, *args, **kwargs):
+        """
+        Update a delivery profile.
+        """
+        try:
+            delivery_profile = self.get_object()
+            if not delivery_profile:
+                return Response({
+                    'success': False,
+                    'message': 'Delivery profile not found',
+                    'error_code': 'NOT_FOUND'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            serializer = self.get_serializer(delivery_profile, data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            
+            updated_profile = serializer.save()
+            response_serializer = DeliveryProfileSerializer(updated_profile)
+            
+            return Response({
+                'success': True,
+                'message': 'Delivery profile updated successfully',
+                'data': response_serializer.data
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error updating delivery profile: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to update delivery profile',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['get'])
+    def my_profile(self, request):
+        """
+        Get the current user's delivery profile.
+        """
+        if not request.user.is_delivery_admin():
+            return Response({
+                'success': False,
+                'message': 'Only delivery administrators have delivery profiles',
+                'error_code': 'PERMISSION_DENIED'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        try:
+            delivery_profile = DeliveryProfileService.get_or_create_delivery_profile(request.user)
+            serializer = DeliveryProfileSerializer(delivery_profile)
+            
+            return Response({
+                'success': True,
+                'message': 'Delivery profile retrieved successfully',
+                'data': serializer.data
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error retrieving delivery profile: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to retrieve delivery profile',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=False, methods=['post'])
+    def update_location(self, request):
+        """
+        Update the current user's location.
+        """
+        if not request.user.is_delivery_admin():
+            return Response({
+                'success': False,
+                'message': 'Only delivery administrators can update location',
+                'error_code': 'PERMISSION_DENIED'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        try:
+            serializer = DeliveryProfileLocationUpdateSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            
+            delivery_profile = DeliveryProfileService.update_location(
+                user=request.user,
+                latitude=serializer.validated_data['latitude'],
+                longitude=serializer.validated_data['longitude'],
+                address=serializer.validated_data.get('address')
+            )
+            
+            response_serializer = DeliveryProfileSerializer(delivery_profile)
+            
+            return Response({
+                'success': True,
+                'message': 'Location updated successfully',
+                'data': response_serializer.data
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error updating location: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to update location',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['post'])
+    def update_status(self, request):
+        """
+        Update the current user's delivery status.
+        """
+        if not request.user.is_delivery_admin():
+            return Response({
+                'success': False,
+                'message': 'Only delivery administrators can update status',
+                'error_code': 'PERMISSION_DENIED'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        try:
+            serializer = DeliveryProfileStatusUpdateSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            
+            delivery_profile = DeliveryProfileService.update_delivery_status(
+                user=request.user,
+                status=serializer.validated_data['delivery_status']
+            )
+            
+            response_serializer = DeliveryProfileSerializer(delivery_profile)
+            
+            return Response({
+                'success': True,
+                'message': 'Delivery status updated successfully',
+                'data': response_serializer.data
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error updating delivery status: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to update delivery status',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['post'])
+    def update_tracking(self, request):
+        """
+        Update the current user's tracking status.
+        """
+        if not request.user.is_delivery_admin():
+            return Response({
+                'success': False,
+                'message': 'Only delivery administrators can update tracking',
+                'error_code': 'PERMISSION_DENIED'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        try:
+            serializer = DeliveryProfileTrackingUpdateSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            
+            delivery_profile = DeliveryProfileService.update_tracking_status(
+                user=request.user,
+                is_tracking_active=serializer.validated_data['is_tracking_active']
+            )
+            
+            response_serializer = DeliveryProfileSerializer(delivery_profile)
+            
+            return Response({
+                'success': True,
+                'message': 'Tracking status updated successfully',
+                'data': response_serializer.data
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error updating tracking status: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to update tracking status',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['get'])
+    def online_managers(self, request):
+        """
+        Get all online delivery managers.
+        """
+        if not (request.user.is_staff or request.user.is_superuser):
+            return Response({
+                'success': False,
+                'message': 'Only administrators can view online managers',
+                'error_code': 'PERMISSION_DENIED'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        try:
+            # Get all delivery admin profiles first, then filter for online ones
+            delivery_admin_profiles = DeliveryProfileService.get_delivery_admin_profiles()
+            online_managers = delivery_admin_profiles.filter(
+                delivery_status='online',
+                is_tracking_active=True
+            )
+            serializer = DeliveryProfileSerializer(online_managers, many=True)
+            
+            return Response({
+                'success': True,
+                'message': 'Online delivery managers retrieved successfully',
+                'data': serializer.data,
+                'count': len(serializer.data)
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error retrieving online managers: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to retrieve online managers',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=False, methods=['get'])
+    def available_managers(self, request):
+        """
+        Get all available delivery managers.
+        """
+        if not (request.user.is_staff or request.user.is_superuser):
+            return Response({
+                'success': False,
+                'message': 'Only administrators can view available managers',
+                'error_code': 'PERMISSION_DENIED'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        try:
+            # Get all active delivery managers
+            delivery_managers = User.objects.filter(
+                is_active=True,
+                user_type='delivery_admin'
+            ).order_by('first_name', 'last_name')
+            
+            # Format data to match frontend DeliveryAgent model expectations
+            response_data = []
+            for manager in delivery_managers:
+                manager_data = {
+                    'id': manager.id,
+                    'name': manager.get_full_name(),
+                    'email': manager.email,
+                    'phone': manager.profile.phone_number if hasattr(manager, 'profile') and manager.profile.phone_number else '',
+                    'address': None,
+                    'vehicleType': None,
+                    'vehicleNumber': None,
+                    'status': 'online',  # Set to online to make manager available
+                    'rating': None,
+                    'totalDeliveries': 0,
+                    'completedDeliveries': 0,
+                    'activeDeliveries': 0,
+                    'createdAt': manager.date_joined.isoformat(),
+                    'updatedAt': manager.last_updated.isoformat() if hasattr(manager, 'last_updated') else manager.date_joined.isoformat(),
+                    'isAvailable': True,
+                    'latitude': None,
+                    'longitude': None,
+                    'profileImage': None,
+                    'notes': None,
+                }
+                response_data.append(manager_data)
+            
+            return Response({
+                'success': True,
+                'message': 'Available delivery managers retrieved successfully',
+                'data': response_data,
+                'count': len(response_data)
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error retrieving available managers: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to retrieve available managers',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

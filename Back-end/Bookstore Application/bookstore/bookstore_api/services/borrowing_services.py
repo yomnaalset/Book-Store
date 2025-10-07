@@ -17,7 +17,7 @@ class BorrowingService:
     """
     
     @staticmethod
-    def create_borrow_request(customer: User, book: Book, borrow_period_days: int) -> BorrowRequest:
+    def create_borrow_request(customer: User, book: Book, borrow_period_days: int, delivery_address: str, additional_notes: str = "") -> BorrowRequest:
         """
         Create a new borrow request
         """
@@ -25,6 +25,8 @@ class BorrowingService:
             customer=customer,
             book=book,
             borrow_period_days=borrow_period_days,
+            delivery_address=delivery_address,
+            additional_notes=additional_notes,
             expected_return_date=timezone.now() + timedelta(days=borrow_period_days)
         )
         
@@ -41,35 +43,62 @@ class BorrowingService:
         return borrow_request
     
     @staticmethod
-    def approve_borrow_request(borrow_request: BorrowRequest, approved_by: User) -> BorrowRequest:
+    def approve_borrow_request(borrow_request: BorrowRequest, approved_by: User, delivery_manager: User = None) -> BorrowRequest:
         """
-        Approve a borrow request and reserve a copy
+        Approve a borrow request and assign to delivery manager
         """
         # Reserve a copy of the book
-        if not borrow_request.book.reserve_copy():
+        if not borrow_request.book.borrow_copy():
             raise ValueError("No copies available for borrowing")
         
         borrow_request.status = BorrowStatusChoices.APPROVED
         borrow_request.approved_by = approved_by
         borrow_request.approved_date = timezone.now()
+        
+        # Assign delivery manager if provided
+        if delivery_manager:
+            borrow_request.delivery_person = delivery_manager
+            
+            # Update delivery manager status to busy
+            if hasattr(delivery_manager, 'delivery_profile'):
+                delivery_manager.delivery_profile.delivery_status = 'busy'
+                delivery_manager.delivery_profile.save()
+        
         borrow_request.save()
+        
+        # Create delivery order as specified in requirements
+        from ..services.delivery_services import BorrowingDeliveryService
+        delivery_order = BorrowingDeliveryService.create_delivery_for_borrow(borrow_request)
         
         # Send notification to customer
         NotificationService.create_notification(
             user_id=borrow_request.customer.id,
             title="Borrowing Request Approved",
-            message=f"Your borrowing request for '{borrow_request.book.name}' has been approved",
+            message=f"Your request to borrow '{borrow_request.book.name}' has been approved and assigned to delivery manager {delivery_manager.get_full_name() if delivery_manager else 'TBD'}.",
             notification_type="borrow_approved"
         )
         
-        # Send notification to delivery managers
-        delivery_managers = User.objects.filter(user_type='delivery_admin', is_active=True)
-        for manager in delivery_managers:
+        # Send notification to assigned delivery manager
+        if delivery_manager:
+            NotificationService.create_notification(
+                user_id=delivery_manager.id,
+                title="New Delivery Assignment",
+                message=f"You have been assigned to deliver '{borrow_request.book.name}' to {borrow_request.customer.get_full_name()} at {borrow_request.delivery_address}.",
+                notification_type="delivery_assignment"
+            )
+        
+        # Send notification to other delivery managers
+        other_delivery_managers = User.objects.filter(
+            user_type='delivery_admin', 
+            is_active=True
+        ).exclude(id=delivery_manager.id if delivery_manager else None)
+        
+        for manager in other_delivery_managers:
             NotificationService.create_notification(
                 user_id=manager.id,
-                title="Book Ready for Delivery",
-                message=f"Book '{borrow_request.book.name}' is ready for delivery to {borrow_request.customer.get_full_name()}",
-                notification_type="delivery_ready"
+                title="New Delivery Task Available",
+                message=f"New Request: Deliver the book '{borrow_request.book.name}' to {borrow_request.customer.get_full_name()} at address {borrow_request.delivery_address}.",
+                notification_type="delivery_task_created"
             )
         
         return borrow_request
@@ -96,9 +125,9 @@ class BorrowingService:
     @staticmethod
     def start_delivery(borrow_request: BorrowRequest, delivery_person: User) -> BorrowRequest:
         """
-        Mark book as picked up for delivery
+        Mark book as picked up from library (Step 5: Pick up the book from the library)
         """
-        borrow_request.status = BorrowStatusChoices.ON_DELIVERY
+        borrow_request.status = BorrowStatusChoices.PENDING_DELIVERY
         borrow_request.pickup_date = timezone.now()
         borrow_request.delivery_person = delivery_person
         borrow_request.save()
@@ -106,8 +135,8 @@ class BorrowingService:
         # Send notification to customer
         NotificationService.create_notification(
             user_id=borrow_request.customer.id,
-            title="Book On Delivery",
-            message=f"Your book '{borrow_request.book.name}' is now on delivery",
+            title="Book Picked Up",
+            message=f"Your book '{borrow_request.book.name}' has been picked up from the library and is on its way to you.",
             notification_type="delivery_started"
         )
         
@@ -116,18 +145,24 @@ class BorrowingService:
     @staticmethod
     def mark_delivered(borrow_request: BorrowRequest, delivery_notes: str = "") -> BorrowRequest:
         """
-        Mark book as delivered to customer and increment borrow count
+        Mark book as delivered to customer (Step 5: When the book is delivered to the customer)
         """
         borrow_request.status = BorrowStatusChoices.ACTIVE
         borrow_request.delivery_date = timezone.now()
         borrow_request.delivery_notes = delivery_notes
         
-        # Calculate final return date including any pre-approved extensions
-        borrow_request.final_return_date = borrow_request.expected_return_date + timedelta(days=borrow_request.additional_days)
+        # Set final return date
+        borrow_request.final_return_date = borrow_request.expected_return_date
         borrow_request.save()
         
+        # Update delivery manager status back to online
+        if borrow_request.delivery_person and hasattr(borrow_request.delivery_person, 'delivery_profile'):
+            from ..services.delivery_profile_services import DeliveryProfileService
+            DeliveryProfileService.update_delivery_status(borrow_request.delivery_person, 'online')
+        
         # Increment borrow count when book is successfully delivered
-        borrow_request.book.increment_borrow_count()
+        borrow_request.book.borrow_count += 1
+        borrow_request.book.save()
         
         # Update book statistics
         BorrowingService.update_book_statistics(borrow_request.book)
@@ -135,7 +170,7 @@ class BorrowingService:
         # Send notification to customer
         NotificationService.create_notification(
             user_id=borrow_request.customer.id,
-            title="Book Delivered",
+            title="Book Delivered Successfully",
             message=f"Your book '{borrow_request.book.name}' has been delivered. Return date: {borrow_request.final_return_date.strftime('%Y-%m-%d')}",
             notification_type="delivery_completed"
         )
@@ -192,22 +227,34 @@ class BorrowingService:
     @staticmethod
     def request_early_return(borrow_request: BorrowRequest, return_reason: str = "") -> BorrowRequest:
         """
-        Request early return of a book
+        Request early return of a book (Step 7: Return Process)
         """
-        borrow_request.early_return_requested = True
-        borrow_request.early_return_date = timezone.now()
-        borrow_request.return_reason = return_reason
         borrow_request.status = BorrowStatusChoices.RETURN_REQUESTED
         borrow_request.save()
+        
+        # Create return delivery task for delivery manager
+        from ..models.delivery_model import DeliveryRequest
+        delivery_request = DeliveryRequest.objects.create(
+            customer=borrow_request.customer,
+            request_type='return',
+            pickup_address=getattr(borrow_request.customer, 'address', 'Address not provided'),
+            delivery_address="Main Library",
+            pickup_city=getattr(borrow_request.customer, 'city', 'Customer City'),
+            delivery_city="Library City",
+            preferred_pickup_time=timezone.now() + timedelta(hours=1),
+            preferred_delivery_time=timezone.now() + timedelta(hours=4),
+            notes=f"Collect book '{borrow_request.book.name}' from {borrow_request.customer.get_full_name()} for return",
+            status='pending'
+        )
         
         # Send notification to delivery managers
         delivery_managers = User.objects.filter(user_type='delivery_admin', is_active=True)
         for manager in delivery_managers:
             NotificationService.create_notification(
                 user_id=manager.id,
-                title="Early Return Requested",
-                message=f"Early return requested for '{borrow_request.book.name}' by {borrow_request.customer.get_full_name()}",
-                notification_type="early_return_request"
+                title="Book Return Request",
+                message=f"New Request: Collect the book '{borrow_request.book.name}' from {borrow_request.customer.get_full_name()} and return it to the library.",
+                notification_type="return_task_created"
             )
         
         return borrow_request
@@ -215,17 +262,14 @@ class BorrowingService:
     @staticmethod
     def complete_return(borrow_request: BorrowRequest, collection_notes: str = "") -> BorrowRequest:
         """
-        Complete book return and release copy back to available pool
+        Complete book return and release copy back to available pool (Step 7: Upon return)
         """
         borrow_request.status = BorrowStatusChoices.RETURNED
         borrow_request.actual_return_date = timezone.now()
         borrow_request.save()
         
         # Release copy back to available pool
-        borrow_request.book.release_copy()
-        
-        # Process refund
-        BorrowingPaymentService.process_return_refund(borrow_request)
+        borrow_request.book.return_copy()
         
         # Update book statistics
         BorrowingService.update_book_statistics(borrow_request.book)
@@ -234,9 +278,19 @@ class BorrowingService:
         NotificationService.create_notification(
             user_id=borrow_request.customer.id,
             title="Book Return Confirmed",
-            message=f"Return of '{borrow_request.book.name}' has been confirmed. Thank you for using our service!",
+            message=f"Return of '{borrow_request.book.name}' has been confirmed. Thank you for using our library!",
             notification_type="return_confirmed"
         )
+        
+        # Send notification to library manager
+        library_managers = User.objects.filter(user_type='library_admin', is_active=True)
+        for manager in library_managers:
+            NotificationService.create_notification(
+                user_id=manager.id,
+                title="Book Returned Successfully",
+                message=f"Book '{borrow_request.book.name}' has been successfully returned by {borrow_request.customer.get_full_name()}",
+                notification_type="book_returned"
+            )
         
         return borrow_request
     
@@ -379,6 +433,52 @@ class BorrowingService:
         return queryset.order_by('-request_date')
     
     @staticmethod
+    def get_all_borrowing_requests(status: Optional[str] = None, search: Optional[str] = None) -> List[BorrowRequest]:
+        """
+        Get all borrowing requests with optional status filter and search
+        
+        Args:
+            status: Optional status filter (e.g., 'pending', 'approved', 'active', etc.)
+            search: Optional search query for customer name, book title, or request ID
+            
+        Returns:
+            List of borrowing requests
+        """
+        queryset = BorrowRequest.objects.select_related('customer', 'book').order_by('-request_date')
+        
+        # Add status filter if provided
+        if status and status.lower() != 'all':
+            # Map frontend status names to backend status values
+            status_mapping = {
+                'pending': BorrowStatusChoices.PENDING,
+                'under review': BorrowStatusChoices.PENDING,
+                'approved': BorrowStatusChoices.APPROVED,
+                'rejected': BorrowStatusChoices.REJECTED,
+                'active': BorrowStatusChoices.ACTIVE,
+                'delivered': BorrowStatusChoices.ACTIVE,  # Delivered books are active
+                'returned': BorrowStatusChoices.RETURNED,
+                'overdue': BorrowStatusChoices.LATE,
+            }
+            
+            backend_status = status_mapping.get(status.lower())
+            if backend_status:
+                queryset = queryset.filter(status=backend_status)
+        
+        # Add search filter if provided
+        if search and search.strip():
+            search_query = search.strip()
+            queryset = queryset.filter(
+                Q(customer__full_name__icontains=search_query) |
+                Q(customer__email__icontains=search_query) |
+                Q(book__title__icontains=search_query) |
+                Q(book__isbn__icontains=search_query) |
+                Q(id__icontains=search_query) |
+                Q(notes__icontains=search_query)
+            )
+        
+        return queryset
+    
+    @staticmethod
     def get_pending_requests(search: Optional[str] = None) -> List[BorrowRequest]:
         """
         Get pending borrow requests for library manager with optional search
@@ -462,6 +562,20 @@ class BorrowingService:
             stats.last_borrowed = last_borrow.delivery_date
         
         stats.save()
+    
+    @staticmethod
+    def get_available_delivery_managers() -> List[User]:
+        """
+        Get all delivery managers with their status for admin selection
+        """
+        from ..models import DeliveryProfile
+        
+        delivery_managers = User.objects.filter(
+            user_type='delivery_admin',
+            is_active=True
+        ).select_related('delivery_profile').order_by('first_name', 'last_name')
+        
+        return delivery_managers
 
 
 class BorrowingNotificationService:
@@ -472,7 +586,7 @@ class BorrowingNotificationService:
     @staticmethod
     def send_return_reminders():
         """
-        Send return reminders 2 days before due date
+        Send return reminders 2 days before due date (Step 6: Two days before the return date)
         """
         reminder_date = timezone.now() + timedelta(days=2)
         
@@ -485,14 +599,14 @@ class BorrowingNotificationService:
             NotificationService.create_notification(
                 user_id=borrowing.customer.id,
                 title="Return Reminder",
-                message=f"There are 2 days left until the return date for the book: {borrowing.book.name}, please return it by: {borrowing.final_return_date.strftime('%Y-%m-%d')}",
+                message=f"Reminder: The due date for return of '{borrowing.book.name}' is {borrowing.final_return_date.strftime('%m/%d/%Y')}.",
                 notification_type="return_reminder"
             )
     
     @staticmethod
     def process_overdue_borrowings():
         """
-        Process overdue borrowings and create fines
+        Process overdue borrowings and create fines as specified in requirements
         """
         overdue_borrowings = BorrowingService.get_overdue_borrowings()
         
@@ -502,29 +616,280 @@ class BorrowingNotificationService:
                 borrowing.status = BorrowStatusChoices.LATE
                 borrowing.save()
                 
-                # Create or update fine
+                # Create or update fine as specified in requirements
                 fine, created = BorrowFine.objects.get_or_create(
                     borrow_request=borrowing,
                     defaults={
-                        'daily_rate': Decimal('4.00'),
-                        'days_overdue': borrowing.days_overdue,
-                        'total_amount': Decimal('4.00') * borrowing.days_overdue
+                        'daily_rate': Decimal('1.00'),  # $1 per day as specified
+                        'days_overdue': borrowing.get_days_overdue(),
+                        'total_amount': Decimal('1.00') * borrowing.get_days_overdue(),
+                        'reason': "Delayed Return"
                     }
                 )
                 
                 if not created:
                     # Update existing fine
-                    fine.days_overdue = borrowing.days_overdue
-                    fine.total_amount = fine.daily_rate * borrowing.days_overdue
+                    fine.days_overdue = borrowing.get_days_overdue()
+                    fine.total_amount = fine.daily_rate * borrowing.get_days_overdue()
                     fine.save()
                 
-                # Send notification to customer
+                # Update borrow request fine information
+                borrowing.fine_amount = fine.total_amount
+                borrowing.fine_status = FineStatusChoices.UNPAID
+                borrowing.save()
+                
+                # Send notification to customer as specified
                 NotificationService.create_notification(
                     user_id=borrowing.customer.id,
                     title="Book Overdue - Fine Applied",
-                    message=f"Your book '{borrowing.book.name}' is overdue by {borrowing.days_overdue} days. A fine of ${fine.total_amount} has been applied.",
+                    message=f"A penalty of ${fine.total_amount} has been imposed due to late return of the book '{borrowing.book.name}'.",
                     notification_type="overdue_fine"
                 )
+                
+                # Send notification to library manager
+                library_admins = User.objects.filter(user_type='library_admin')
+                for admin in library_admins:
+                    NotificationService.create_notification(
+                        user_id=admin.id,
+                        title="Overdue Book Alert",
+                        message=f"Customer {borrowing.customer.get_full_name()} has been late returning book '{borrowing.book.name}' for {borrowing.get_days_overdue()} days. Fine: ${fine.total_amount}",
+                        notification_type="overdue_alert"
+                    )
+
+
+class LateReturnService:
+    """
+    Comprehensive service for handling late book returns, fines, and deposit refunds
+    """
+    
+    @staticmethod
+    def process_late_return_scenario(borrow_request):
+        """
+        Process the complete late return scenario as described in the requirements
+        """
+        try:
+            # Step 1: Check if book is overdue
+            if not borrow_request.is_overdue():
+                raise ValueError("Book is not overdue")
+            
+            # Step 2: Update status to late if not already
+            if borrow_request.status != BorrowStatusChoices.LATE:
+                borrow_request.status = BorrowStatusChoices.LATE
+                borrow_request.save()
+            
+            # Step 3: Create or update fine
+            fine = LateReturnService.create_or_update_fine(borrow_request)
+            
+            # Step 4: Send notifications to all stakeholders
+            LateReturnService.send_late_return_notifications(borrow_request, fine)
+            
+            # Step 5: Freeze deposit refund
+            LateReturnService.freeze_deposit_refund(borrow_request)
+            
+            return {
+                'success': True,
+                'message': 'Late return scenario processed successfully',
+                'fine_amount': fine.total_amount,
+                'days_overdue': fine.days_overdue
+            }
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'message': f'Failed to process late return: {str(e)}'
+            }
+    
+    @staticmethod
+    def create_or_update_fine(borrow_request):
+        """Create or update fine for overdue borrowing"""
+        days_overdue = borrow_request.get_days_overdue()
+        daily_rate = Decimal('1.00')  # $1 per day as per requirements
+        
+        fine, created = BorrowFine.objects.get_or_create(
+            borrow_request=borrow_request,
+            defaults={
+                'daily_rate': daily_rate,
+                'days_overdue': days_overdue,
+                'total_amount': daily_rate * days_overdue,
+                'reason': f"Late return - {days_overdue} days overdue"
+            }
+        )
+        
+        if not created:
+            # Update existing fine
+            fine.update_fine(days_overdue)
+        
+        # Update borrow request fine information
+        borrow_request.fine_amount = fine.total_amount
+        borrow_request.fine_status = FineStatusChoices.UNPAID
+        borrow_request.save()
+        
+        return fine
+    
+    @staticmethod
+    def send_late_return_notifications(borrow_request, fine):
+        """Send notifications to all stakeholders about late return"""
+        
+        # Customer notification
+        NotificationService.create_notification(
+            user_id=borrow_request.customer.id,
+            title="Book Return Overdue",
+            message=f"You are late in returning '{borrow_request.book.name}'. Please return to avoid additional penalty. Current fine: ${fine.total_amount}",
+            notification_type="late_return_customer"
+        )
+        
+        # Library manager notification
+        library_admins = User.objects.filter(user_type='library_admin')
+        for admin in library_admins:
+            NotificationService.create_notification(
+                user_id=admin.id,
+                title="Customer Late Return Alert",
+                message=f"Customer {borrow_request.customer.get_full_name()} has been late returning book '{borrow_request.book.name}' for {fine.days_overdue} days. Fine: ${fine.total_amount}",
+                notification_type="late_return_admin"
+            )
+    
+    @staticmethod
+    def freeze_deposit_refund(borrow_request):
+        """Freeze deposit refund until fine is paid"""
+        if borrow_request.deposit_paid and not borrow_request.deposit_refunded:
+            # Deposit refund is automatically frozen due to unpaid fine
+            # This is handled by the is_deposit_frozen() method
+            pass
+    
+    @staticmethod
+    def process_book_return_with_fine(borrow_request, delivery_manager):
+        """
+        Process book return when customer returns overdue book
+        """
+        try:
+            # Step 1: Update delivery status
+            borrow_request.actual_return_date = timezone.now()
+            borrow_request.status = BorrowStatusChoices.RETURNED_AFTER_DELAY
+            borrow_request.save()
+            
+            # Step 2: Update book availability
+            book = borrow_request.book
+            book.copies_available += 1
+            book.save()
+            
+            # Step 3: Send return confirmation notifications
+            LateReturnService.send_return_confirmation_notifications(borrow_request, delivery_manager)
+            
+            return {
+                'success': True,
+                'message': 'Book returned successfully',
+                'fine_amount': borrow_request.fine_amount,
+                'deposit_frozen': borrow_request.is_deposit_frozen()
+            }
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'message': f'Failed to process book return: {str(e)}'
+            }
+    
+    @staticmethod
+    def send_return_confirmation_notifications(borrow_request, delivery_manager):
+        """Send notifications confirming book return"""
+        
+        # Delivery manager notification
+        NotificationService.create_notification(
+            user_id=delivery_manager.id,
+            title="Book Return Completed",
+            message=f"Book '{borrow_request.book.name}' has been successfully returned by {borrow_request.customer.get_full_name()}",
+            notification_type="return_completed"
+        )
+        
+        # Library manager notification
+        library_admins = User.objects.filter(user_type='library_admin')
+        for admin in library_admins:
+            NotificationService.create_notification(
+                user_id=admin.id,
+                title="Book Returned with Fine",
+                message=f"Book '{borrow_request.book.name}' has been received from customer {borrow_request.customer.get_full_name()} with ${borrow_request.fine_amount} late fee applied",
+                notification_type="return_with_fine"
+            )
+    
+    @staticmethod
+    def process_fine_payment(borrow_request, payment_method='wallet'):
+        """
+        Process fine payment and enable deposit refund
+        """
+        try:
+            if borrow_request.fine_status == FineStatusChoices.PAID:
+                raise ValueError("Fine has already been paid")
+            
+            # Step 1: Process fine payment (simplified - in real implementation, integrate with payment gateway)
+            fine = borrow_request.fine
+            fine.mark_as_paid(borrow_request.customer)
+            
+            # Step 2: Calculate and process refund
+            refund_amount = borrow_request.process_refund()
+            
+            # Step 3: Send payment confirmation notifications
+            LateReturnService.send_payment_confirmation_notifications(borrow_request, refund_amount)
+            
+            return {
+                'success': True,
+                'message': 'Fine paid successfully',
+                'fine_amount': fine.total_amount,
+                'refund_amount': refund_amount,
+                'deposit_refunded': borrow_request.deposit_refunded
+            }
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'message': f'Failed to process fine payment: {str(e)}'
+            }
+    
+    @staticmethod
+    def send_payment_confirmation_notifications(borrow_request, refund_amount):
+        """Send notifications confirming fine payment and refund"""
+        
+        # Customer notification
+        NotificationService.create_notification(
+            user_id=borrow_request.customer.id,
+            title="Fine Paid - Refund Processed",
+            message=f"Your deposit has been refunded ${refund_amount} less a late fee (${borrow_request.fine_amount}). Thank you!",
+            notification_type="refund_processed"
+        )
+        
+        # Library manager notification
+        library_admins = User.objects.filter(user_type='library_admin')
+        for admin in library_admins:
+            NotificationService.create_notification(
+                user_id=admin.id,
+                title="Fine Payment Completed",
+                message=f"Customer {borrow_request.customer.get_full_name()} has paid the fine for '{borrow_request.book.name}'. Refund amount: ${refund_amount}",
+                notification_type="fine_payment_completed"
+            )
+    
+    @staticmethod
+    def get_late_return_summary(borrow_request):
+        """Get comprehensive summary of late return status"""
+        fine = getattr(borrow_request, 'fine', None)
+        
+        return {
+            'borrow_request_id': borrow_request.id,
+            'customer_name': borrow_request.customer.get_full_name(),
+            'book_name': borrow_request.book.name,
+            'status': borrow_request.status,
+            'days_overdue': borrow_request.get_days_overdue(),
+            'deposit_amount': borrow_request.deposit_amount,
+            'deposit_paid': borrow_request.deposit_paid,
+            'deposit_refunded': borrow_request.deposit_refunded,
+            'deposit_frozen': borrow_request.is_deposit_frozen(),
+            'fine_amount': borrow_request.fine_amount,
+            'fine_status': borrow_request.fine_status,
+            'refund_amount': borrow_request.refund_amount,
+            'fine_details': {
+                'daily_rate': fine.daily_rate if fine else 0,
+                'days_overdue': fine.days_overdue if fine else 0,
+                'total_amount': fine.total_amount if fine else 0,
+                'paid_date': fine.paid_date if fine else None
+            } if fine else None
+        }
 
 
 class BorrowingReportService:

@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.core.exceptions import ValidationError
-from ..models import Library, User, Book, BookImage, Category, Author, BookEvaluation, Favorite
+from ..models import Library, User, Book, BookImage, Category, Author, BookEvaluation, Favorite, ReviewLike, ReviewReply, ReplyLike
 
 
 class BookSerializer(serializers.ModelSerializer):
@@ -656,6 +656,14 @@ class BookDetailSerializer(serializers.ModelSerializer):
     can_borrow = serializers.BooleanField(read_only=True)
     can_purchase = serializers.BooleanField(read_only=True)
     borrowing_options = serializers.DictField(source='get_borrowing_options', read_only=True)
+    availability_status = serializers.CharField(source='get_availability_status', read_only=True)
+    
+    # Discount fields
+    has_active_discount = serializers.SerializerMethodField()
+    original_price = serializers.SerializerMethodField()
+    discounted_price = serializers.SerializerMethodField()
+    discount_amount = serializers.SerializerMethodField()
+    discount_percentage = serializers.SerializerMethodField()
     
     class Meta:
         model = Book
@@ -666,7 +674,9 @@ class BookDetailSerializer(serializers.ModelSerializer):
             'library', 'library_name', 'category', 'category_id', 'category_name',
             'images', 'primary_image_url', 'image_count',
             'average_rating', 'evaluations_count',
-            'can_borrow', 'can_purchase', 'borrowing_options',
+            'can_borrow', 'can_purchase', 'borrowing_options', 'availability_status',
+            'has_active_discount', 'original_price', 'discounted_price', 
+            'discount_amount', 'discount_percentage',
             'created_by', 'created_by_name', 'created_by_email',
             'last_updated_by', 'last_updated_by_name', 'last_updated_by_email',
             'created_at', 'updated_at'
@@ -675,11 +685,46 @@ class BookDetailSerializer(serializers.ModelSerializer):
             'id', 'library', 'created_by', 'created_at', 'updated_at', 'last_updated_by',
             'borrow_count', 'can_borrow', 'can_purchase', 'borrowing_options'
         ]
+    
+    def get_has_active_discount(self, obj):
+        """Check if the book has an active discount."""
+        from ..models.discount_model import BookDiscount
+        discount = BookDiscount.objects.get_discount_for_book(obj)
+        return discount is not None and discount.is_valid()
+    
+    def get_original_price(self, obj):
+        """Get the original price of the book."""
+        return float(obj.price) if obj.price else None
+    
+    def get_discounted_price(self, obj):
+        """Get the discounted price if there's an active discount."""
+        from ..models.discount_model import BookDiscount
+        discount = BookDiscount.objects.get_discount_for_book(obj)
+        if discount and discount.is_valid():
+            return float(discount.discounted_price)
+        return None
+    
+    def get_discount_amount(self, obj):
+        """Get the discount amount if there's an active discount."""
+        from ..models.discount_model import BookDiscount
+        discount = BookDiscount.objects.get_discount_for_book(obj)
+        if discount and discount.is_valid() and obj.price:
+            return float(discount.get_discount_amount(obj.price))
+        return None
+    
+    def get_discount_percentage(self, obj):
+        """Get the discount percentage if there's an active discount."""
+        from ..models.discount_model import BookDiscount
+        discount = BookDiscount.objects.get_discount_for_book(obj)
+        if discount and discount.is_valid() and obj.price:
+            discount_amount = discount.get_discount_amount(obj.price)
+            return float((discount_amount / obj.price) * 100) if obj.price > 0 else None
+        return None
 
 
 class BookListSerializer(serializers.ModelSerializer):
     """
-    Simplified serializer for listing books.
+    Simplified serializer for listing books with discount information.
     """
     
     library_name = serializers.CharField(source='library.name', read_only=True)
@@ -691,18 +736,63 @@ class BookListSerializer(serializers.ModelSerializer):
     image_count = serializers.IntegerField(source='get_image_count', read_only=True)
     can_borrow = serializers.BooleanField(read_only=True)
     can_purchase = serializers.BooleanField(read_only=True)
+    availability_status = serializers.CharField(source='get_availability_status', read_only=True)
+    
+    # Discount fields
+    has_active_discount = serializers.SerializerMethodField()
+    original_price = serializers.SerializerMethodField()
+    discounted_price = serializers.SerializerMethodField()
+    discount_amount = serializers.SerializerMethodField()
+    discount_percentage = serializers.SerializerMethodField()
     
     class Meta:
         model = Book
         fields = [
-            'id', 'name', 'author_id', 'author_name', 
+            'id', 'name', 'description', 'author_id', 'author_name', 
             'price', 'borrow_price', 'is_available', 'is_available_for_borrow', 'is_new',
             'quantity', 'available_copies', 'borrow_count',
             'library_name', 'category_id', 'category_name', 
             'primary_image_url', 'image_count',
-            'can_borrow', 'can_purchase',
+            'can_borrow', 'can_purchase', 'availability_status',
+            'has_active_discount', 'original_price', 'discounted_price', 
+            'discount_amount', 'discount_percentage',
             'created_at', 'updated_at'
         ]
+    
+    def get_has_active_discount(self, obj):
+        """Check if the book has an active discount."""
+        from ..models.discount_model import BookDiscount
+        discount = BookDiscount.objects.get_discount_for_book(obj)
+        return discount is not None and discount.is_valid()
+    
+    def get_original_price(self, obj):
+        """Get the original price of the book."""
+        return float(obj.price) if obj.price else None
+    
+    def get_discounted_price(self, obj):
+        """Get the discounted price if there's an active discount."""
+        from ..models.discount_model import BookDiscount
+        discount = BookDiscount.objects.get_discount_for_book(obj)
+        if discount and discount.is_valid():
+            return float(discount.discounted_price)
+        return None
+    
+    def get_discount_amount(self, obj):
+        """Get the discount amount if there's an active discount."""
+        from ..models.discount_model import BookDiscount
+        discount = BookDiscount.objects.get_discount_for_book(obj)
+        if discount and discount.is_valid() and obj.price:
+            return float(discount.get_discount_amount(obj.price))
+        return None
+    
+    def get_discount_percentage(self, obj):
+        """Get the discount percentage if there's an active discount."""
+        from ..models.discount_model import BookDiscount
+        discount = BookDiscount.objects.get_discount_for_book(obj)
+        if discount and discount.is_valid() and obj.price:
+            discount_amount = discount.get_discount_amount(obj.price)
+            return float((discount_amount / obj.price) * 100) if obj.price > 0 else None
+        return None
 
 
 class BookSearchSerializer(serializers.Serializer):
@@ -1319,11 +1409,15 @@ class EvaluationCreateSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = BookEvaluation
-        fields = ['book_id', 'rating']
+        fields = ['book_id', 'rating', 'comment']
         extra_kwargs = {
             'rating': {
                 'required': True,
                 'help_text': 'Rating from 1 to 5 stars'
+            },
+            'comment': {
+                'required': False,
+                'help_text': 'Optional comment or review text'
             }
         }
     
@@ -1378,11 +1472,15 @@ class EvaluationUpdateSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = BookEvaluation
-        fields = ['rating']
+        fields = ['rating', 'comment']
         extra_kwargs = {
             'rating': {
                 'required': False,
                 'help_text': 'Rating from 1 to 5 stars'
+            },
+            'comment': {
+                'required': False,
+                'help_text': 'Optional comment or review text'
             }
         }
     
@@ -1427,7 +1525,7 @@ class EvaluationDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = BookEvaluation
         fields = [
-            'id', 'rating',
+            'id', 'rating', 'comment',
             'book_id', 'book_name', 'author_name',
             'user_id', 'user_name', 'user_email',
             'created_at', 'updated_at'
@@ -1437,6 +1535,91 @@ class EvaluationDetailSerializer(serializers.ModelSerializer):
             'user_id', 'user_name', 'user_email',
             'created_at', 'updated_at'
         ]
+
+
+class ReviewLikeSerializer(serializers.ModelSerializer):
+    """
+    Serializer for review likes.
+    """
+    
+    class Meta:
+        model = ReviewLike
+        fields = ['id', 'user', 'review', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+
+class ReviewReplySerializer(serializers.ModelSerializer):
+    """
+    Serializer for review replies.
+    """
+    
+    user_name = serializers.CharField(source='user.get_full_name', read_only=True)
+    user_email = serializers.CharField(source='user.email', read_only=True)
+    likes_count = serializers.SerializerMethodField()
+    is_liked = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = ReviewReply
+        fields = ['id', 'content', 'user', 'user_name', 'user_email', 'review', 'created_at', 'updated_at', 'likes_count', 'is_liked']
+        read_only_fields = ['id', 'user', 'created_at', 'updated_at']
+    
+    def get_likes_count(self, obj):
+        """Get the number of likes for this reply."""
+        return obj.likes.count()
+    
+    def get_is_liked(self, obj):
+        """Check if the current user has liked this reply."""
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            return obj.likes.filter(user=request.user).exists()
+        return False
+    
+    def validate_content(self, value):
+        """Validate reply content."""
+        if not value or value.strip() == '':
+            raise serializers.ValidationError("Reply content cannot be empty.")
+        if len(value.strip()) < 3:
+            raise serializers.ValidationError("Reply must be at least 3 characters long.")
+        if len(value) > 1000:
+            raise serializers.ValidationError("Reply cannot exceed 1000 characters.")
+        return value.strip()
+
+
+class ReviewReplyCreateSerializer(serializers.ModelSerializer):
+    """
+    Serializer for creating review replies.
+    """
+    
+    class Meta:
+        model = ReviewReply
+        fields = ['content', 'review']
+    
+    def validate_content(self, value):
+        """Validate reply content."""
+        if not value or value.strip() == '':
+            raise serializers.ValidationError("Reply content cannot be empty.")
+        if len(value.strip()) < 3:
+            raise serializers.ValidationError("Reply must be at least 3 characters long.")
+        if len(value) > 1000:
+            raise serializers.ValidationError("Reply cannot exceed 1000 characters.")
+        return value.strip()
+    
+    def validate_review(self, value):
+        """Validate that the review exists."""
+        if not value:
+            raise serializers.ValidationError("Review is required.")
+        return value
+
+
+class ReplyLikeSerializer(serializers.ModelSerializer):
+    """
+    Serializer for reply likes.
+    """
+    
+    class Meta:
+        model = ReplyLike
+        fields = ['id', 'reply', 'user', 'created_at']
+        read_only_fields = ['id', 'created_at']
 
 
 class EvaluationListSerializer(serializers.ModelSerializer):
@@ -1450,15 +1633,35 @@ class EvaluationListSerializer(serializers.ModelSerializer):
     user_name = serializers.CharField(source='user.get_full_name', read_only=True)
     user_email = serializers.EmailField(source='user.email', read_only=True)
     user_id = serializers.IntegerField(source='user.id', read_only=True)
+    likes_count = serializers.SerializerMethodField()
+    replies_count = serializers.SerializerMethodField()
+    is_liked = serializers.SerializerMethodField()
+    replies = ReviewReplySerializer(many=True, read_only=True)
     
     class Meta:
         model = BookEvaluation
         fields = [
-            'id', 'rating',
+            'id', 'rating', 'comment',
             'book_id', 'book_name', 'author_name',
             'user_id', 'user_name', 'user_email',
+            'likes_count', 'replies_count', 'is_liked', 'replies',
             'created_at', 'updated_at'
         ]
+    
+    def get_likes_count(self, obj):
+        """Get the number of likes for this review."""
+        return obj.likes.count()
+    
+    def get_replies_count(self, obj):
+        """Get the number of replies for this review."""
+        return obj.replies.count()
+    
+    def get_is_liked(self, obj):
+        """Check if the current user has liked this review."""
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            return obj.likes.filter(user=request.user).exists()
+        return False
 
 
 class EvaluationStatsSerializer(serializers.Serializer):
@@ -1545,11 +1748,10 @@ class FavoriteAddSerializer(serializers.ModelSerializer):
         fields = ['book_id']
     
     def validate_book_id(self, value):
-        """Validate that the book exists and is available."""
+        """Validate that the book exists."""
         try:
             book = Book.objects.get(id=value)
-            if not book.is_available:
-                raise serializers.ValidationError("Cannot favorite an unavailable book.")
+            # Allow favoriting unavailable books - users might want to be notified when available
             return value
         except Book.DoesNotExist:
             raise serializers.ValidationError("Book not found.")
@@ -1678,4 +1880,5 @@ class BookIsFavoritedSerializer(serializers.Serializer):
     
     book_id = serializers.IntegerField(read_only=True)
     is_favorited = serializers.BooleanField(read_only=True)
-    favorites_count = serializers.IntegerField(read_only=True)  # Total users who favorited this book 
+    favorites_count = serializers.IntegerField(read_only=True)  # Total users who favorited this book
+

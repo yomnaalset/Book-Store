@@ -3,6 +3,7 @@ from django.utils import timezone
 from datetime import timedelta
 
 from ..models.ad_model import Advertisement, AdvertisementStatusChoices
+from ..models.discount_model import DiscountCode
 
 
 class AdvertisementCreateSerializer(serializers.ModelSerializer):
@@ -16,7 +17,7 @@ class AdvertisementCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Advertisement
         fields = [
-            'title', 'content', 'image', 'start_date', 'end_date', 'status',
+            'title', 'content', 'image', 'start_date', 'end_date', 'status', 'ad_type', 'discount_code',
             # Add camelCase fields for frontend compatibility
             'startDate', 'endDate', 'imageUrl'
         ]
@@ -32,7 +33,9 @@ class AdvertisementCreateSerializer(serializers.ModelSerializer):
             field_mapping = {
                 'startDate': 'start_date',
                 'endDate': 'end_date',
-                'imageUrl': 'image'
+                'imageUrl': 'image',
+                'adType': 'ad_type',
+                'discountCode': 'discount_code'
             }
             
             for camel_case, snake_case in field_mapping.items():
@@ -121,6 +124,29 @@ class AdvertisementCreateSerializer(serializers.ModelSerializer):
                 'end_date': 'End date must be after start date.'
             })
         
+        # Validate discount code requirement for discount code advertisements
+        ad_type = attrs.get('ad_type')
+        discount_code = attrs.get('discount_code')
+        
+        if ad_type == 'discount_code' and not discount_code:
+            raise serializers.ValidationError({
+                'discount_code': 'Discount code is required for discount code advertisements.'
+            })
+        
+        # Validate that the discount code exists and is active
+        if ad_type == 'discount_code' and discount_code:
+            try:
+                discount_code_obj = DiscountCode.objects.get(code=discount_code, is_active=True)
+                # Check if the discount code is not expired
+                if discount_code_obj.expiration_date <= timezone.now():
+                    raise serializers.ValidationError({
+                        'discount_code': 'The selected discount code has expired.'
+                    })
+            except DiscountCode.DoesNotExist:
+                raise serializers.ValidationError({
+                    'discount_code': 'The selected discount code does not exist or is not active.'
+                })
+        
         return attrs
 
 
@@ -136,6 +162,7 @@ class AdvertisementUpdateSerializer(serializers.ModelSerializer):
         model = Advertisement
         fields = [
             'title', 'content', 'image', 'start_date', 'end_date', 'status',
+            'ad_type', 'discount_code',
             # Add camelCase fields for frontend compatibility
             'startDate', 'endDate', 'imageUrl'
         ]
@@ -151,7 +178,9 @@ class AdvertisementUpdateSerializer(serializers.ModelSerializer):
             field_mapping = {
                 'startDate': 'start_date',
                 'endDate': 'end_date',
-                'imageUrl': 'image'
+                'imageUrl': 'image',
+                'adType': 'ad_type',
+                'discountCode': 'discount_code'
             }
             
             for camel_case, snake_case in field_mapping.items():
@@ -193,12 +222,17 @@ class AdvertisementUpdateSerializer(serializers.ModelSerializer):
         if self.instance:
             current_status = self.instance.status
             
-            # Only prevent changing status of expired advertisements
+            # Allow changing status of expired advertisements if end_date is being updated
+            # This allows administrators to reactivate expired ads by extending their end date
             if current_status == AdvertisementStatusChoices.EXPIRED:
-                if value != AdvertisementStatusChoices.EXPIRED:
-                    raise serializers.ValidationError(
-                        "Cannot change status of expired advertisements."
-                    )
+                # Check if end_date is being updated in the same request
+                end_date = self.initial_data.get('end_date') or self.initial_data.get('endDate')
+                if not end_date:
+                    # If no end_date update, only allow keeping as expired
+                    if value != AdvertisementStatusChoices.EXPIRED:
+                        raise serializers.ValidationError(
+                            "Cannot change status of expired advertisements without updating the end date."
+                        )
             
             # Always respect the user's status choice for all other cases
             # Remove automatic status changes to allow manual control
@@ -214,6 +248,29 @@ class AdvertisementUpdateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({
                 'end_date': 'End date must be after start date.'
             })
+        
+        # Validate discount code requirement for discount code advertisements
+        ad_type = attrs.get('ad_type')
+        discount_code = attrs.get('discount_code')
+        
+        if ad_type == 'discount_code' and not discount_code:
+            raise serializers.ValidationError({
+                'discount_code': 'Discount code is required for discount code advertisements.'
+            })
+        
+        # Validate that the discount code exists and is active
+        if ad_type == 'discount_code' and discount_code:
+            try:
+                discount_code_obj = DiscountCode.objects.get(code=discount_code, is_active=True)
+                # Check if the discount code is not expired
+                if discount_code_obj.expiration_date <= timezone.now():
+                    raise serializers.ValidationError({
+                        'discount_code': 'The selected discount code has expired.'
+                    })
+            except DiscountCode.DoesNotExist:
+                raise serializers.ValidationError({
+                    'discount_code': 'The selected discount code does not exist or is not active.'
+                })
         
         return attrs
 
@@ -234,7 +291,7 @@ class AdvertisementDetailSerializer(serializers.ModelSerializer):
         model = Advertisement
         fields = [
             'id', 'title', 'content', 'image', 'image_url', 'start_date', 'end_date',
-            'status', 'status_display', 'created_by', 'created_by_name',
+            'status', 'status_display', 'ad_type', 'discount_code', 'created_by', 'created_by_name',
             'created_at', 'updated_at', 'is_active', 'is_scheduled', 'is_expired',
             'duration_days', 'remaining_days'
         ]
@@ -264,7 +321,7 @@ class AdvertisementListSerializer(serializers.ModelSerializer):
         model = Advertisement
         fields = [
             'id', 'title', 'content', 'image', 'image_url', 'start_date', 'end_date',
-            'status', 'status_display', 'is_active', 'is_scheduled', 'is_expired',
+            'status', 'status_display', 'ad_type', 'discount_code', 'is_active', 'is_scheduled', 'is_expired',
             'remaining_days', 'created_at'
         ]
     
@@ -288,12 +345,17 @@ class AdvertisementStatusUpdateSerializer(serializers.Serializer):
         if self.instance:
             current_status = self.instance.status
             
-            # Prevent invalid status transitions
+            # Allow changing status of expired advertisements if end_date is being updated
+            # This allows administrators to reactivate expired ads by extending their end date
             if current_status == AdvertisementStatusChoices.EXPIRED:
-                if value != AdvertisementStatusChoices.EXPIRED:
-                    raise serializers.ValidationError(
-                        "Cannot change status of expired advertisements."
-                    )
+                # Check if end_date is being updated in the same request
+                end_date = self.initial_data.get('end_date')
+                if not end_date:
+                    # If no end_date update, only allow keeping as expired
+                    if value != AdvertisementStatusChoices.EXPIRED:
+                        raise serializers.ValidationError(
+                            "Cannot change status of expired advertisements without updating the end date."
+                        )
             
             # Auto-activate scheduled ads if start date has passed
             if (value == AdvertisementStatusChoices.SCHEDULED and 
@@ -327,7 +389,7 @@ class AdvertisementPublicSerializer(serializers.ModelSerializer):
         model = Advertisement
         fields = [
             'id', 'title', 'content', 'image', 'image_url', 'status', 
-            'start_date', 'end_date', 'created_at', 'updated_at'
+            'start_date', 'end_date', 'created_at', 'updated_at', 'ad_type', 'discount_code'
         ]
     
     def get_image_url(self, obj):

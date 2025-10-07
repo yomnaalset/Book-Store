@@ -4,7 +4,7 @@ from django.utils import timezone
 from typing import Dict, Any, Optional, Tuple
 import logging
 
-from ..models import DiscountCode, DiscountUsage, User, Cart, BookDiscount, BookDiscountUsage, Book
+from ..models import DiscountCode, DiscountUsage, User, Cart, BookDiscount, BookDiscountUsage, Book, AppliedDiscountCode
 from ..serializers import (
     DiscountCodeCreateSerializer,
     DiscountCodeUpdateSerializer,
@@ -321,24 +321,31 @@ class DiscountValidationService:
                     }
             
             # Check if user can use this code
-            can_use, usage_message = discount_code.can_be_used_by_user(user)
+            can_use, usage_message = discount_code.can_be_used_by(user)
             if not can_use:
                 return False, {
                     'error': 'usage_limit_exceeded',
                     'message': usage_message
                 }
             
+            # Check if this code is already applied by this user in current session
+            if AppliedDiscountCode.is_code_applied_by_user(user, discount_code):
+                return False, {
+                    'error': 'already_applied',
+                    'message': 'This discount code is already applied to your cart.'
+                }
+            
             # Calculate discount
-            discount_amount = discount_code.calculate_discount_amount(cart_total)
-            final_amount = cart_total - discount_amount
+            discount_amount = discount_code.get_discount_amount(cart_total)
+            final_amount = cart_total - float(discount_amount)
             
             return True, {
                 'discount_code': discount_code,
                 'original_amount': cart_total,
-                'discount_amount': discount_amount,
+                'discount_amount': float(discount_amount),
                 'final_amount': final_amount,
-                'discount_percentage': discount_code.discount_percentage,
-                'message': f'Discount code applied successfully! You save ${discount_amount:.2f}'
+                'discount_percentage': float(discount_code.discount_percentage),
+                'message': f'Discount code applied successfully! You save ${float(discount_amount):.2f}'
             }
             
         except Exception as e:
@@ -375,41 +382,72 @@ class DiscountValidationService:
             discount_amount = validation_data['discount_amount']
             final_amount = validation_data['final_amount']
             
-            # Create usage record
-            usage_data = {
-                'discount_code': discount_code.id,
-                'user': user.id,
-                'order_amount': order_amount,
-                'discount_amount': discount_amount,
-                'final_amount': final_amount,
-                'payment_reference': payment_reference
-            }
+            # Track this application to prevent multiple uses
+            AppliedDiscountCode.apply_code(user, discount_code)
             
-            serializer = DiscountUsageCreateSerializer(data=usage_data)
-            if serializer.is_valid():
-                with transaction.atomic():
-                    usage_record = serializer.save()
-                    logger.info(f"Discount applied: {code} by {user.email} - ${discount_amount} off")
-                    
-                    return True, {
-                        'usage_record': usage_record,
-                        'original_amount': order_amount,
-                        'discount_amount': discount_amount,
-                        'final_amount': final_amount,
-                        'discount_percentage': discount_code.discount_percentage,
-                        'message': f'Discount applied successfully! You saved ${discount_amount:.2f}'
-                    }
-            else:
-                return False, {
-                    'errors': serializer.errors,
-                    'message': 'Failed to apply discount due to validation errors.'
-                }
+            # For cart validation, we don't create usage records yet
+            # Usage records will be created when the actual order is placed
+            logger.info(f"Discount applied: {code} by {user.email} - ${discount_amount} off")
+            
+            return True, {
+                'original_amount': order_amount,
+                'discount_amount': float(discount_amount),
+                'final_amount': final_amount,
+                'discount_percentage': float(discount_code.discount_percentage),
+                'message': f'Discount applied successfully! You saved ${float(discount_amount):.2f}'
+            }
                 
         except Exception as e:
             logger.error(f"Error applying discount code: {str(e)}")
             return False, {
                 'error': str(e),
                 'message': 'An unexpected error occurred while applying the discount code.'
+            }
+    
+    @staticmethod
+    def remove_discount_code(user: User) -> Tuple[bool, Dict[str, Any]]:
+        """
+        Remove any applied discount code for cart validation.
+        This is used when user wants to remove a discount before checkout.
+        
+        Args:
+            user: The user removing the discount
+            
+        Returns:
+            Tuple of (success, result_data)
+        """
+        try:
+            # Find and remove any active applied discount codes for this user
+            active_applications = AppliedDiscountCode.objects.filter(
+                user=user,
+                is_active=True
+            )
+            
+            removed_codes = []
+            for application in active_applications:
+                removed_codes.append(application.discount_code.code)
+                application.is_active = False
+                application.save()
+            
+            if removed_codes:
+                logger.info(f"Discount codes removed for user {user.email}: {', '.join(removed_codes)}")
+                return True, {
+                    'message': f'Discount code(s) removed successfully: {", ".join(removed_codes)}',
+                    'discount_amount': 0.0,
+                    'final_amount': 0.0
+                }
+            else:
+                return True, {
+                    'message': 'No active discount codes to remove.',
+                    'discount_amount': 0.0,
+                    'final_amount': 0.0
+                }
+            
+        except Exception as e:
+            logger.error(f"Error removing discount code: {str(e)}")
+            return False, {
+                'error': str(e),
+                'message': 'An unexpected error occurred while removing the discount code.'
             }
 
 
@@ -422,7 +460,6 @@ class BookDiscountService:
     def create_book_discount(data: Dict[str, Any], created_by: User) -> Tuple[bool, Dict[str, Any]]:
         """
         Create a new book discount.
-        
         Args:
             data: Dictionary containing book discount data
             created_by: User creating the discount

@@ -1,4 +1,5 @@
-from django.urls import path
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
 from ..views.delivery_views import  (   
     # Order management views
     OrderListView,  
@@ -6,6 +7,7 @@ from ..views.delivery_views import  (
     OrderCreateFromPaymentView,
     OrderStatusUpdateView,
     OrdersReadyForDeliveryView,
+    OrderViewSet,
     
     # Delivery assignment views
     DeliveryAssignmentListView,
@@ -53,13 +55,19 @@ from ..views.delivery_views import  (
 
 app_name = 'delivery'
 
+# Create router for OrderViewSet
+router = DefaultRouter()
+router.register(r'orders', OrderViewSet, basename='order')
+
 urlpatterns = [
-    # Order management endpoints
-    path('orders/', OrderListView.as_view(), name='order-list'),
-    path('orders/<int:pk>/', OrderDetailView.as_view(), name='order-detail'),
-    path('orders/create-from-payment/', OrderCreateFromPaymentView.as_view(), name='order-create-from-payment'),
-    path('orders/<int:pk>/update-status/', OrderStatusUpdateView.as_view(), name='order-update-status'),
-    path('orders/ready-for-delivery/', OrdersReadyForDeliveryView.as_view(), name='orders-ready-for-delivery'),
+    # Include router URLs
+    path('', include(router.urls)),
+    # Order management endpoints (legacy)
+    path('orders-legacy/', OrderListView.as_view(), name='order-list'),
+    path('orders-legacy/<int:pk>/', OrderDetailView.as_view(), name='order-detail'),
+    path('orders-legacy/create-from-payment/', OrderCreateFromPaymentView.as_view(), name='order-create-from-payment'),
+    path('orders-legacy/<int:pk>/update-status/', OrderStatusUpdateView.as_view(), name='order-update-status'),
+    path('orders-legacy/ready-for-delivery/', OrdersReadyForDeliveryView.as_view(), name='orders-ready-for-delivery'),
     
     # Delivery assignment endpoints
     path('assignments/', DeliveryAssignmentListView.as_view(), name='assignment-list'),

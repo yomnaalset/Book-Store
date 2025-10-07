@@ -50,12 +50,6 @@ class User(AbstractUser):
         ('delivery_admin', 'Delivery Administrator'),
     ]
     
-    DELIVERY_STATUS_CHOICES = [
-        ('online', 'Online - Available'),
-        ('offline', 'Offline - Unavailable'),
-        ('busy', 'Busy - Currently Delivering'),
-    ]
-    
     LANGUAGE_CHOICES = [
         ('en', 'English'),
         ('ar', 'Arabic'),
@@ -72,14 +66,6 @@ class User(AbstractUser):
         help_text="Type of user account"
     )
     
-    # Delivery manager status (only relevant for delivery_admin users)
-    delivery_status = models.CharField(
-        max_length=20,
-        choices=DELIVERY_STATUS_CHOICES,
-        default='offline',
-        help_text="Current status of delivery manager (online/offline/busy)"
-    )
-    
     # Language preference
     preferred_language = models.CharField(
         max_length=5,
@@ -88,53 +74,8 @@ class User(AbstractUser):
         help_text="User's preferred language for the interface"
     )
     
-    # Location fields for delivery managers
-    latitude = models.DecimalField(
-        max_digits=10,
-        decimal_places=7,
-        null=True,
-        blank=True,
-        help_text="Latitude coordinate for delivery manager location"
-    )
-    
-    longitude = models.DecimalField(
-        max_digits=10,
-        decimal_places=7,
-        null=True,
-        blank=True,
-        help_text="Longitude coordinate for delivery manager location"
-    )
-    
-    address = models.TextField(
-        null=True,
-        blank=True,
-        help_text="Text address for delivery manager location"
-    )
-    
-    location_updated_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="When the location was last updated"
-    )
-    
-    # Real-time tracking fields
-    is_tracking_active = models.BooleanField(
-        default=False,
-        help_text="Whether real-time location tracking is currently active"
-    )
-    
-    last_tracking_update = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="Last time location was updated via tracking"
-    )
-    
-    tracking_interval = models.IntegerField(
-        default=30,
-        help_text="Tracking interval in seconds (for real-time updates)"
-    )
-    
     # Note: Contact information (phone_number, address, city) moved to UserProfile model
+    # Note: Delivery-related fields moved to DeliveryProfile model
     
     # Account status and metadata
     date_joined = models.DateTimeField(auto_now_add=True, help_text="Date when account was created")
@@ -191,40 +132,54 @@ class User(AbstractUser):
     
     def has_location(self):
         """Check if user has location data."""
-        return self.latitude is not None and self.longitude is not None
+        if hasattr(self, 'delivery_profile'):
+            return self.delivery_profile.is_location_set()
+        return False
     
     def get_location_display(self):
         """Get formatted location string."""
-        if self.address:
-            return self.address
-        elif self.has_location():
-            return f"Lat: {self.latitude}, Lng: {self.longitude}"
+        if hasattr(self, 'delivery_profile'):
+            if self.delivery_profile.address:
+                return self.delivery_profile.address
+            elif self.delivery_profile.is_location_set():
+                location = self.delivery_profile.get_location()
+                if location:
+                    return f"Lat: {location[0]}, Lng: {location[1]}"
         return "No location set"
     
     def update_location(self, latitude=None, longitude=None, address=None):
         """Update user's location data."""
-        from django.utils import timezone
+        if not self.is_delivery_admin():
+            raise ValueError("Only delivery administrators can update location")
         
-        if latitude is not None:
-            self.latitude = latitude
-        if longitude is not None:
-            self.longitude = longitude
-        if address is not None:
-            self.address = address
-        
-        self.location_updated_at = timezone.now()
-        self.save(update_fields=['latitude', 'longitude', 'address', 'location_updated_at'])
+        if hasattr(self, 'delivery_profile'):
+            self.delivery_profile.update_location(latitude, longitude, address)
+        else:
+            # Create delivery profile if it doesn't exist
+            from .delivery_profile_model import DeliveryProfile
+            delivery_profile = DeliveryProfile.create_for_user(self)
+            delivery_profile.update_location(latitude, longitude, address)
     
     def get_location_dict(self):
         """Get location as dictionary."""
+        if hasattr(self, 'delivery_profile'):
+            return {
+                'latitude': float(self.delivery_profile.latitude) if self.delivery_profile.latitude else None,
+                'longitude': float(self.delivery_profile.longitude) if self.delivery_profile.longitude else None,
+                'address': self.delivery_profile.address,
+                'location_updated_at': self.delivery_profile.location_updated_at,
+                'has_location': self.delivery_profile.is_location_set(),
+                'is_tracking_active': self.delivery_profile.is_tracking_active,
+                'last_tracking_update': self.delivery_profile.last_tracking_update,
+            }
         return {
-            'latitude': float(self.latitude) if self.latitude else None,
-            'longitude': float(self.longitude) if self.longitude else None,
-            'address': self.address,
-            'location_updated_at': self.location_updated_at,
-            'has_location': self.has_location(),
-            'is_tracking_active': self.is_tracking_active,
-            'last_tracking_update': self.last_tracking_update,
+            'latitude': None,
+            'longitude': None,
+            'address': None,
+            'location_updated_at': None,
+            'has_location': False,
+            'is_tracking_active': False,
+            'last_tracking_update': None,
         }
     
     def start_real_time_tracking(self, interval_seconds=30):
@@ -232,16 +187,20 @@ class User(AbstractUser):
         if not self.is_delivery_admin():
             return False, "Only delivery managers can start real-time tracking"
         
-        self.is_tracking_active = True
-        self.tracking_interval = interval_seconds
-        self.save(update_fields=['is_tracking_active', 'tracking_interval'])
+        if hasattr(self, 'delivery_profile'):
+            self.delivery_profile.set_tracking_active(True)
+        else:
+            # Create delivery profile if it doesn't exist
+            from .delivery_profile_model import DeliveryProfile
+            delivery_profile = DeliveryProfile.create_for_user(self)
+            delivery_profile.set_tracking_active(True)
         
         return True, "Real-time tracking started"
     
     def stop_real_time_tracking(self):
         """Stop real-time location tracking."""
-        self.is_tracking_active = False
-        self.save(update_fields=['is_tracking_active'])
+        if hasattr(self, 'delivery_profile'):
+            self.delivery_profile.set_tracking_active(False)
         
         return True, "Real-time tracking stopped"
     
@@ -256,8 +215,9 @@ class User(AbstractUser):
         self.update_location(latitude, longitude, address)
         
         # Update tracking timestamp
-        self.last_tracking_update = timezone.now()
-        self.save(update_fields=['last_tracking_update'])
+        if hasattr(self, 'delivery_profile'):
+            self.delivery_profile.last_tracking_update = timezone.now()
+            self.delivery_profile.save(update_fields=['last_tracking_update'])
         
         # Create location history entry
         LocationHistory.objects.create(

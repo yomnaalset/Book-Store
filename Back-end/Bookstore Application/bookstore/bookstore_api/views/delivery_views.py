@@ -1,5 +1,6 @@
-from rest_framework import generics, status, permissions
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework import generics, status, permissions, viewsets
+from bookstore_api.authentication import CustomJWTAuthentication
+from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.pagination import PageNumberPagination
@@ -11,19 +12,25 @@ from django.core.paginator import Paginator
 import logging
 from datetime import datetime
 
-from ..models import User, DeliveryRequest, Order, DeliveryAssignment, DeliveryStatusHistory
+from ..models import User, DeliveryRequest, Order, DeliveryAssignment, DeliveryStatusHistory, OrderItem, CartItem
+from ..models.library_model import Book
 from ..services import NotificationService
 from ..serializers.delivery_serializers import (
     OrderListSerializer, OrderDetailSerializer, OrderStatusUpdateSerializer,
     DeliveryRequestCreateSerializer,
     DeliveryRequestListSerializer,
     DeliveryRequestDetailSerializer,
+    BorrowingOrderSerializer,
     DeliveryRequestAssignSerializer,
     DeliveryRequestStatusUpdateSerializer,
     DeliveryAssignmentBasicSerializer,
     OrderCreateFromPaymentSerializer,
+    OrderCreateSerializer,
     DeliveryRequestWithAvailableManagersSerializer,
-
+    OrderApprovalSerializer,
+    DeliveryManagerAssignmentSerializer,
+    DeliveryStartSerializer,
+    DeliveryCompletionSerializer,
 )   
 
 from ..permissions import IsLibraryAdminReadOnly, IsDeliveryAdmin, IsDeliveryAdminOrLibraryAdmin, IsLibraryAdmin
@@ -212,17 +219,25 @@ class LibraryAdminRequestListView(generics.ListAPIView):
     List all delivery requests for library admins with available delivery managers.
     Library admins can see which delivery managers are available to deliver each request.
     """
-    serializer_class = DeliveryRequestWithAvailableManagersSerializer
+    serializer_class = DeliveryRequestListSerializer
     permission_classes = [permissions.IsAuthenticated, IsLibraryAdmin]
     pagination_class = PageNumberPagination
     
     def get_queryset(self):
-        queryset = DeliveryRequest.objects.select_related('customer', 'delivery_manager', 'assigned_by').all()
+        # Get delivery requests with order information
+        queryset = DeliveryRequest.objects.select_related('customer', 'delivery_manager', 'assigned_by', 'order', 'order__customer', 'order__payment').prefetch_related('order__items__book').all()
         
         # Filter by status
         status_filter = self.request.query_params.get('status')
         if status_filter:
-            queryset = queryset.filter(status=status_filter)
+            if status_filter == 'pending':
+                queryset = queryset.filter(status='pending')
+            elif status_filter == 'assigned':
+                queryset = queryset.filter(status='assigned')
+            elif status_filter == 'in_progress':
+                queryset = queryset.filter(status='in_progress')
+            elif status_filter == 'completed':
+                queryset = queryset.filter(status='completed')
         
         # Filter by customer
         customer_id = self.request.query_params.get('customer_id')
@@ -363,15 +378,8 @@ class OrderListView(generics.ListAPIView):
         Override the default list method to ensure consistent response format.
         """
         queryset = self.get_queryset()
-        
-        # Apply pagination
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-        
-        # If no pagination, return the data directly
         serializer = self.get_serializer(queryset, many=True)
+        
         return Response({
             'results': serializer.data,
             'count': queryset.count(),
@@ -395,6 +403,617 @@ class OrderDetailView(generics.RetrieveAPIView):
             self.permission_denied(self.request, message="You don't have permission to view this order.")
         
         return order
+
+
+class OrderViewSet(viewsets.ModelViewSet):
+    """
+    Complete Order management system for the purchase flow.
+    Handles order creation, approval, assignment, and tracking.
+    """
+    queryset = Order.objects.select_related('customer', 'payment').prefetch_related('items__book')
+    permission_classes = [permissions.IsAuthenticated]
+    authentication_classes = [CustomJWTAuthentication]
+    
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return OrderCreateFromPaymentSerializer
+        elif self.action in ['update', 'partial_update']:
+            return OrderStatusUpdateSerializer
+        elif self.action == 'approve':
+            return OrderApprovalSerializer
+        elif self.action == 'assign_delivery_manager':
+            return DeliveryManagerAssignmentSerializer
+        elif self.action == 'start_delivery':
+            return DeliveryStartSerializer
+        elif self.action == 'complete_delivery':
+            return DeliveryCompletionSerializer
+        return OrderDetailSerializer
+    
+    def get_queryset(self):
+        user = self.request.user
+        
+        # Base queryset
+        queryset = Order.objects.select_related('customer', 'payment').prefetch_related('items__book')
+        
+        # Apply user-based filtering
+        if user.is_customer():
+            queryset = queryset.filter(customer=user)
+        elif user.is_delivery_admin():
+            # Delivery managers can see orders assigned to them
+            queryset = queryset.filter(
+                Q(delivery_assignments__delivery_manager=user) |
+                Q(status='pending_assignment')
+            ).distinct()
+        elif user.is_library_admin() or user.is_staff:
+            # Library admins and staff can see all orders
+            pass
+        else:
+            return Order.objects.none()
+        
+        # Apply additional filters
+        # Filter by status
+        status_filter = self.request.query_params.get('status')
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        
+        # Filter by customer
+        customer_id = self.request.query_params.get('customer_id')
+        if customer_id:
+            queryset = queryset.filter(customer_id=customer_id)
+        
+        # Filter by date range
+        start_date = self.request.query_params.get('start_date')
+        end_date = self.request.query_params.get('end_date')
+        if start_date:
+            queryset = queryset.filter(created_at__date__gte=start_date)
+        if end_date:
+            queryset = queryset.filter(created_at__date__lte=end_date)
+        
+        # Search by order number, customer name, email, or delivery address
+        search = self.request.query_params.get('search')
+        if search:
+            queryset = queryset.filter(
+                Q(order_number__icontains=search) |
+                Q(customer__first_name__icontains=search) |
+                Q(customer__last_name__icontains=search) |
+                Q(customer__email__icontains=search) |
+                Q(delivery_address__icontains=search) |
+                Q(delivery_city__icontains=search) |
+                Q(delivery_notes__icontains=search) |
+                Q(items__book__name__icontains=search) |
+                Q(items__book__author__name__icontains=search)
+            ).distinct()
+        
+        return queryset.order_by('-created_at')
+    
+    def create(self, request):
+        """
+        Create a new order from cart items.
+        This handles the customer purchase flow.
+        """
+        try:
+            user = request.user
+            
+            # Debug authentication
+            logger.info(f"Request user: {user}")
+            logger.info(f"Request user type: {type(user)}")
+            logger.info(f"Request user ID: {user.id if user else 'None'}")
+            logger.info(f"Request user is_authenticated: {user.is_authenticated if user else 'None'}")
+            logger.info(f"Request headers: {dict(request.headers)}")
+            logger.info(f"Request META: {dict(request.META)}")
+            
+            if not user:
+                return Response({
+                    'error': 'Authentication required. Please log in to place an order.'
+                }, status=status.HTTP_401_UNAUTHORIZED)
+            
+            if not user.is_customer():
+                return Response({
+                    'error': 'Only customers can create orders'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Get cart items - can be either IDs or direct item data
+            cart_items = request.data.get('cart_items', [])
+            total_price = request.data.get('total_price', 0)
+            address = request.data.get('address', '')
+            city = request.data.get('city', 'Unknown')
+            payment_method = request.data.get('payment_method', 'cash')
+            card_details = request.data.get('card_details')
+            
+            if not cart_items:
+                return Response({
+                    'error': 'Cart is empty'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Validate payment method and card details
+            if payment_method == 'mastercard':
+                if not card_details:
+                    return Response({
+                        'error': 'Card details are required for Mastercard payment'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                # Validate required card fields
+                required_fields = ['card_number', 'cardholder_name', 'expiry_date', 'cvv']
+                for field in required_fields:
+                    if not card_details.get(field):
+                        return Response({
+                            'error': f'Card {field.replace("_", " ")} is required'
+                        }, status=status.HTTP_400_BAD_REQUEST)
+                
+                # Basic card number validation
+                card_number = card_details.get('card_number', '').replace(' ', '').replace('-', '')
+                if len(card_number) < 13 or len(card_number) > 19:
+                    return Response({
+                        'error': 'Invalid card number format'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                
+                # Basic CVV validation
+                cvv = card_details.get('cvv', '')
+                if not cvv.isdigit() or len(cvv) < 3 or len(cvv) > 4:
+                    return Response({
+                        'error': 'Invalid CVV format'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+            
+            logger.info(f"User object: {user}")
+            logger.info(f"User ID: {user.id}")
+            logger.info(f"User ID type: {type(user.id)}")
+            
+            # Create order with pending status
+            order_data = {
+                'customer': user.id,
+                'total_amount': total_price,
+                'delivery_address': address,
+                'delivery_city': city,
+                'status': 'pending',
+                'order_type': 'purchase'
+            }
+            
+            logger.info(f"Order data: {order_data}")
+            logger.info(f"Customer in order_data: {order_data.get('customer')}")
+            logger.info(f"Customer type: {type(order_data.get('customer'))}")
+            
+            # Create order directly without serializer
+            order = Order.objects.create(
+                customer=user,
+                total_amount=total_price,
+                delivery_address=address,
+                delivery_city=city,
+                status='pending',
+                order_type='purchase',
+                payment_method=payment_method
+            )
+            
+            # Create order items from cart
+            for item_data in cart_items:
+                    try:
+                        # Handle both ID-based and direct data cart items
+                        if isinstance(item_data, dict):
+                            # Direct cart item data from frontend
+                            book_id = item_data.get('book_id')
+                            quantity = item_data.get('quantity', 1)
+                            price = item_data.get('price', 0)
+                            
+                            if book_id:
+                                try:
+                                    book = Book.objects.get(id=book_id)
+                                    OrderItem.objects.create(
+                                        order=order,
+                                        book=book,
+                                        quantity=quantity,
+                                        unit_price=price,
+                                        total_price=price * quantity
+                                    )
+                                except Book.DoesNotExist:
+                                    continue
+                        else:
+                            # ID-based cart item (existing behavior)
+                            cart_item = CartItem.objects.get(id=item_data, cart__customer=user)
+                            OrderItem.objects.create(
+                                order=order,
+                                book=cart_item.book,
+                                quantity=cart_item.quantity,
+                                unit_price=cart_item.book.price,
+                                total_price=cart_item.book.price * cart_item.quantity
+                            )
+                    except CartItem.DoesNotExist:
+                        continue
+            
+            # Send notification to admin
+            NotificationService.create_notification(
+                user_id=1,  # Admin user ID
+                title="New Order Pending Approval",
+                message=f"Customer {user.get_full_name()} has placed a new order (#{order.order_number})",
+                notification_type="order_pending",
+                related_order_id=order.id
+            )
+            
+            # Clear cart after successful order creation
+            user.cart.clear()
+            
+            return Response({
+                    'success': True,
+                    'message': 'Order created successfully',
+                    'order': OrderDetailSerializer(order).data
+                }, status=status.HTTP_201_CREATED)
+            
+            return Response({
+                'error': 'Invalid order data',
+                'details': serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        except Exception as e:
+            logger.error(f"Error creating order: {str(e)}")
+            logger.error(f"Exception type: {type(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return Response({
+                'error': 'An error occurred while creating the order',
+                'details': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=True, methods=['patch'])
+    def approve(self, request, pk=None):
+        """
+        Approve an order and assign delivery manager.
+        Accessible by library admins and system admins.
+        """
+        try:
+            order = self.get_object()
+            user = request.user
+            
+            if not (user.is_library_admin() or user.is_staff):
+                return Response({
+                    'error': 'Only administrators can approve orders'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            if order.status != 'pending':
+                return Response({
+                    'error': 'Order is not in pending status'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            delivery_manager_id = request.data.get('delivery_manager_id')
+            if not delivery_manager_id:
+                return Response({
+                    'error': 'Delivery manager ID is required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            try:
+                delivery_manager = User.objects.get(
+                    id=delivery_manager_id,
+                    user_type='delivery_admin'
+                )
+            except User.DoesNotExist:
+                return Response({
+                    'error': 'Invalid delivery manager'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Check if delivery manager is available
+            if hasattr(delivery_manager, 'delivery_profile'):
+                if delivery_manager.delivery_profile.status not in ['online', 'available']:
+                    return Response({
+                        'error': 'Selected delivery manager is not available'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Update order status
+            order.status = 'confirmed'
+            order.save()
+            
+            # Create delivery assignment
+            delivery_assignment = DeliveryAssignment.objects.create(
+                order=order,
+                delivery_manager=delivery_manager,
+                status='assigned',
+                assigned_by=user
+            )
+            
+            # Send notifications
+            NotificationService.create_notification(
+                user_id=order.customer.id,
+                title="Order Approved",
+                message=f"Your order #{order.order_number} has been approved and assigned for delivery",
+                notification_type="order_approved",
+                related_order_id=order.id
+            )
+            
+            NotificationService.create_notification(
+                user_id=delivery_manager.id,
+                title="New Delivery Assignment",
+                message=f"You have been assigned order #{order.order_number} for delivery",
+                notification_type="delivery_assigned",
+                related_order_id=order.id
+            )
+            
+            return Response({
+                'success': True,
+                'message': 'Order approved and delivery manager assigned',
+                'order': OrderDetailSerializer(order).data,
+                'delivery_assignment': DeliveryAssignmentBasicSerializer(delivery_assignment).data
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error approving order: {str(e)}")
+            return Response({
+                'error': 'An error occurred while approving the order'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=True, methods=['patch'])
+    def reject(self, request, pk=None):
+        """
+        Reject an order.
+        Accessible by library admins and system admins.
+        """
+        try:
+            order = self.get_object()
+            user = request.user
+            
+            if not (user.is_library_admin() or user.is_staff):
+                return Response({
+                    'error': 'Only administrators can reject orders'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            if order.status != 'pending':
+                return Response({
+                    'error': 'Order is not in pending status'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            rejection_reason = request.data.get('rejection_reason', 'No reason provided')
+            
+            # Update order status
+            order.status = 'cancelled'
+            # Restore book quantities when order is cancelled
+            order.restore_book_quantities()
+            order.save()
+            
+            # Send notification to customer
+            try:
+                NotificationService.create_notification(
+                    user_id=order.customer.id,
+                    title="Order Rejected",
+                    message=f"Your order #{order.order_number} has been rejected. Reason: {rejection_reason}",
+                    notification_type="order_rejected",
+                    related_order_id=order.id
+                )
+            except Exception as notification_error:
+                logger.warning(f"Failed to create notification for order rejection: {str(notification_error)}")
+                # Continue with the response even if notification fails
+            
+            # Try to serialize the order, but don't fail if it doesn't work
+            try:
+                order_data = OrderDetailSerializer(order).data
+            except Exception as serializer_error:
+                logger.warning(f"Failed to serialize order data: {str(serializer_error)}")
+                order_data = {
+                    'id': order.id,
+                    'order_number': order.order_number,
+                    'status': order.status,
+                    'total_amount': str(order.total_amount),
+                }
+            
+            return Response({
+                'success': True,
+                'message': 'Order rejected successfully',
+                'order': order_data
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error rejecting order: {str(e)}")
+            return Response({
+                'error': 'An error occurred while rejecting the order'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=True, methods=['patch'])
+    def start_delivery(self, request, pk=None):
+        """
+        Start delivery tracking for an assigned order.
+        Accessible by assigned delivery managers.
+        """
+        try:
+            order = self.get_object()
+            user = request.user
+            
+            if not user.is_delivery_admin():
+                return Response({
+                    'error': 'Only delivery managers can start delivery'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Check if order is assigned to this delivery manager
+            delivery_assignment = DeliveryAssignment.objects.filter(
+                order=order,
+                delivery_manager=user,
+                status='assigned'
+            ).first()
+            
+            if not delivery_assignment:
+                return Response({
+                    'error': 'Order is not assigned to you'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Update order status
+            order.status = 'in_delivery'
+            order.save()
+            
+            # Update delivery assignment
+            delivery_assignment.status = 'in_progress'
+            delivery_assignment.started_at = timezone.now()
+            delivery_assignment.save()
+            
+            # Start real-time tracking
+            if hasattr(user, 'real_time_tracking'):
+                user.real_time_tracking.is_tracking_enabled = True
+                user.real_time_tracking.is_delivering = True
+                user.real_time_tracking.current_delivery_assignment = delivery_assignment
+                user.real_time_tracking.save()
+            
+            # Send notifications
+            NotificationService.create_notification(
+                user_id=order.customer.id,
+                title="Delivery Started",
+                message=f"Your order #{order.order_number} is now out for delivery",
+                notification_type="delivery_started",
+                related_order_id=order.id
+            )
+            
+            return Response({
+                'success': True,
+                'message': 'Delivery started successfully',
+                'order': OrderDetailSerializer(order).data,
+                'tracking_enabled': True
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error starting delivery: {str(e)}")
+            return Response({
+                'error': 'An error occurred while starting delivery'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=True, methods=['patch'])
+    def complete_delivery(self, request, pk=None):
+        """
+        Complete delivery and mark order as delivered.
+        Accessible by assigned delivery managers.
+        """
+        try:
+            order = self.get_object()
+            user = request.user
+            
+            if not user.is_delivery_admin():
+                return Response({
+                    'error': 'Only delivery managers can complete delivery'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Check if order is assigned to this delivery manager
+            delivery_assignment = DeliveryAssignment.objects.filter(
+                order=order,
+                delivery_manager=user,
+                status='in_progress'
+            ).first()
+            
+            if not delivery_assignment:
+                return Response({
+                    'error': 'Order is not in progress for you'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Update order status
+            order.status = 'delivered'
+            order.save()
+            
+            # Update delivery assignment
+            delivery_assignment.status = 'completed'
+            delivery_assignment.completed_at = timezone.now()
+            delivery_assignment.save()
+            
+            # Stop real-time tracking
+            if hasattr(user, 'real_time_tracking'):
+                user.real_time_tracking.is_tracking_enabled = False
+                user.real_time_tracking.is_delivering = False
+                user.real_time_tracking.current_delivery_assignment = None
+                user.real_time_tracking.save()
+            
+            # Send notifications
+            NotificationService.create_notification(
+                user_id=order.customer.id,
+                title="Order Delivered",
+                message=f"Your order #{order.order_number} has been successfully delivered! 🎉",
+                notification_type="order_delivered",
+                related_order_id=order.id
+            )
+            
+            # Notify admins
+            admin_users = User.objects.filter(
+                user_type__in=['library_admin', 'system_admin']
+            )
+            for admin in admin_users:
+                NotificationService.create_notification(
+                    user_id=admin.id,
+                    title="Order Delivered",
+                    message=f"Order #{order.order_number} has been successfully delivered by {user.get_full_name()}",
+                    notification_type="order_delivered_admin",
+                    related_order_id=order.id
+                )
+            
+            return Response({
+                'success': True,
+                'message': 'Delivery completed successfully',
+                'order': OrderDetailSerializer(order).data
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error completing delivery: {str(e)}")
+            return Response({
+                'error': 'An error occurred while completing delivery'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=False, methods=['get'])
+    def pending_approval(self, request):
+        """
+        Get orders pending approval.
+        Accessible by library admins and system admins.
+        """
+        try:
+            user = request.user
+            
+            if not (user.is_library_admin() or user.is_staff):
+                return Response({
+                    'error': 'Only administrators can view pending orders'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            pending_orders = Order.objects.filter(status='pending').order_by('-created_at')
+            serializer = OrderListSerializer(pending_orders, many=True)
+            
+            return Response({
+                'success': True,
+                'orders': serializer.data,
+                'count': pending_orders.count()
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error getting pending orders: {str(e)}")
+            return Response({
+                'error': 'An error occurred while retrieving pending orders'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=False, methods=['get'])
+    def available_delivery_managers(self, request):
+        """
+        Get available delivery managers for assignment.
+        Accessible by library admins and system admins.
+        """
+        try:
+            user = request.user
+            
+            if not (user.is_library_admin() or user.is_staff):
+                return Response({
+                    'error': 'Only administrators can view delivery managers'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Get delivery managers with their status
+            delivery_managers = User.objects.filter(user_type='delivery_admin').select_related('delivery_profile')
+            
+            managers_data = []
+            for manager in delivery_managers:
+                delivery_status = 'offline'
+                if hasattr(manager, 'delivery_profile'):
+                    delivery_status = manager.delivery_profile.delivery_status
+                
+                managers_data.append({
+                    'id': manager.id,
+                    'name': manager.get_full_name(),
+                    'email': manager.email,
+                    'phone': manager.profile.phone_number if hasattr(manager, 'profile') and manager.profile.phone_number else '',
+                    'status': delivery_status,
+                    'is_available': delivery_status in ['online', 'available']
+                })
+            
+            return Response({
+                'success': True,
+                'delivery_managers': managers_data
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error getting delivery managers: {str(e)}")
+            return Response({
+                'error': 'An error occurred while retrieving delivery managers'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class OrderCreateFromPaymentView(generics.CreateAPIView):
@@ -906,25 +1525,10 @@ def customer_orders_view(request):
     
     orders = orders.order_by('-created_at')
     
-    # Pagination
-    page_size = int(request.query_params.get('page_size', 10))
-    page_number = int(request.query_params.get('page', 1))
-    
-    paginator = Paginator(orders, page_size)
-    page = paginator.get_page(page_number)
-    
-    serializer = OrderListSerializer(page.object_list, many=True)
+    serializer = OrderListSerializer(orders, many=True)
     
     return Response({
         'orders': serializer.data,
-        'pagination': {
-            'page': page_number,
-            'page_size': page_size,
-            'total_pages': paginator.num_pages,
-            'total_count': paginator.count,
-            'has_next': page.has_next(),
-            'has_previous': page.has_previous()
-        }
     }, status=status.HTTP_200_OK)
 
 

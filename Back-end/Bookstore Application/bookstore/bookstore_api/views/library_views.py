@@ -6,7 +6,7 @@ from django.core.exceptions import PermissionDenied
 from django.db import IntegrityError
 from django.utils.translation import gettext as _
 import logging
-from ..models import Library, Book, BookImage, Category, Author, BookEvaluation, Favorite
+from ..models import Library, Book, BookImage, Category, Author, BookEvaluation, Favorite, ReviewLike, ReviewReply, ReplyLike
 from ..serializers import (
     LibraryCreateSerializer,
     LibraryUpdateSerializer,
@@ -47,6 +47,10 @@ from ..serializers import (
     FavoriteDetailSerializer,
     FavoriteListSerializer,
     BookIsFavoritedSerializer,
+    # Review like and reply serializers
+    ReviewLikeSerializer,
+    ReviewReplySerializer,
+    ReviewReplyCreateSerializer,
 )
 from ..services import LibraryManagementService, LibraryAccessService, BookManagementService, BookAccessService, EvaluationManagementService, EvaluationAccessService, FavoriteManagementService, FavoriteAccessService
 from ..utils import format_error_message
@@ -3044,6 +3048,186 @@ class BookFavoriteStatusView(APIView):
             return Response({
                 'success': False,
                 'message': 'Failed to get favorite status',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class ReviewLikeView(APIView):
+    """
+    API view for liking/unliking reviews.
+    Available to all authenticated users.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def post(self, request, review_id):
+        """Like or unlike a review."""
+        try:
+            review = get_object_or_404(BookEvaluation, id=review_id)
+            
+            # Check if user already liked this review
+            like, created = ReviewLike.objects.get_or_create(
+                review=review,
+                user=request.user
+            )
+            
+            if created:
+                message = 'Review liked successfully'
+                action = 'liked'
+            else:
+                # Unlike the review
+                like.delete()
+                message = 'Review unliked successfully'
+                action = 'unliked'
+            
+            # Get updated like count
+            likes_count = review.likes.count()
+            
+            return Response({
+                'success': True,
+                'message': message,
+                'data': {
+                    'action': action,
+                    'likes_count': likes_count,
+                    'is_liked': action == 'liked'
+                }
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error toggling review like: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to toggle like',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class ReviewReplyCreateView(generics.CreateAPIView):
+    """
+    API view for creating replies to reviews.
+    Available to all authenticated users.
+    """
+    serializer_class = ReviewReplyCreateSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def create(self, request, *args, **kwargs):
+        """Create a new reply to a review."""
+        try:
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            
+            # Add the user to the validated data
+            serializer.save(user=request.user)
+            
+            # Get the created reply with full details
+            reply_serializer = ReviewReplySerializer(serializer.instance)
+            
+            logger.info(f"Reply created for review {serializer.instance.review.id} by {request.user.email}")
+            
+            return Response({
+                'success': True,
+                'message': 'Reply created successfully',
+                'data': reply_serializer.data
+            }, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            logger.error(f"Error creating reply: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to create reply',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ReviewReplyListView(generics.ListAPIView):
+    """
+    API view for listing replies to a specific review.
+    Available to all authenticated users.
+    """
+    serializer_class = ReviewReplySerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        """Get replies for the specified review."""
+        review_id = self.kwargs.get('review_id')
+        return ReviewReply.objects.filter(
+            review_id=review_id
+        ).select_related('user').prefetch_related('likes').order_by('created_at')
+    
+    def list(self, request, *args, **kwargs):
+        """List replies for a review."""
+        try:
+            review_id = self.kwargs.get('review_id')
+            
+            # Check if review exists
+            review = get_object_or_404(BookEvaluation, id=review_id)
+            
+            queryset = self.get_queryset()
+            serializer = self.get_serializer(queryset, many=True, context={'request': request})
+            
+            return Response({
+                'success': True,
+                'message': 'Replies retrieved successfully',
+                'data': {
+                    'review_id': review_id,
+                    'replies': serializer.data,
+                    'count': queryset.count()
+                }
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error retrieving replies: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to retrieve replies',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class ReplyLikeView(APIView):
+    """
+    API view for liking/unliking replies.
+    Available to all authenticated users.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def post(self, request, reply_id):
+        """Like or unlike a reply."""
+        try:
+            reply = get_object_or_404(ReviewReply, id=reply_id)
+            
+            # Check if user already liked this reply
+            like, created = ReplyLike.objects.get_or_create(
+                reply=reply,
+                user=request.user
+            )
+            
+            if created:
+                message = 'Reply liked successfully'
+                action = 'liked'
+            else:
+                # Unlike the reply
+                like.delete()
+                message = 'Reply unliked successfully'
+                action = 'unliked'
+            
+            # Get updated like count
+            likes_count = reply.likes.count()
+            
+            return Response({
+                'success': True,
+                'message': message,
+                'data': {
+                    'action': action,
+                    'likes_count': likes_count,
+                    'is_liked': action == 'liked'
+                }
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error toggling reply like: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to toggle like',
                 'errors': format_error_message(str(e))
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 

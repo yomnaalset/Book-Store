@@ -945,6 +945,47 @@ class BorrowingDeliveryService:
     """
     
     @staticmethod
+    def create_delivery_for_borrow(borrow_request):
+        """
+        Create a delivery order for a borrowing request as specified in requirements
+        """
+        from ..models.delivery_model import Order, OrderItem
+        
+        delivery_order = Order.objects.create(
+            order_number=f"BR{borrow_request.id:06d}",
+            customer=borrow_request.customer,
+            payment=None,  # Borrowing doesn't require payment upfront
+            total_amount=0.00,
+            order_type='borrowing',
+            borrow_request=borrow_request,
+            delivery_address=borrow_request.delivery_address,
+            delivery_city="Customer City",  # Could be extracted from address
+            delivery_notes=borrow_request.additional_notes or "",
+            status='assigned_to_delivery' if borrow_request.delivery_person else 'pending_assignment'
+        )
+        
+        # Create order item for the borrowed book
+        OrderItem.objects.create(
+            order=delivery_order,
+            book=borrow_request.book,
+            quantity=1,
+            unit_price=0.00,
+            total_price=0.00
+        )
+        
+        # If delivery manager is assigned to borrow request, create delivery assignment
+        if borrow_request.delivery_person:
+            from ..models.delivery_model import DeliveryAssignment
+            DeliveryAssignment.objects.create(
+                order=delivery_order,
+                delivery_person=borrow_request.delivery_person,
+                estimated_delivery_time=borrow_request.expected_return_date,  # Use expected return date as estimated delivery
+                delivery_notes=f"Borrowing delivery for {borrow_request.book.name}"
+            )
+        
+        return delivery_order
+    
+    @staticmethod
     @transaction.atomic
     def create_borrowing_delivery_order(borrow_request: BorrowRequest, payment: Payment) -> Dict[str, Any]:
         """

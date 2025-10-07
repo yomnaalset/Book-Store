@@ -290,8 +290,7 @@ class DiscountUsageCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = DiscountUsage
         fields = [
-            'discount_code', 'user', 'order_amount', 'discount_amount',
-            'final_amount', 'payment_reference'
+            'discount_code', 'customer', 'order', 'discount_amount'
         ]
     
     # Removed validation since it's already done in the service layer

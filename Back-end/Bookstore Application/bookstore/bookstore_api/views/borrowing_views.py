@@ -5,6 +5,7 @@ from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
 from django.db.models import Q
 from django.utils import timezone, translation
+from decimal import Decimal
 
 from ..models import (
     BorrowRequest, BorrowExtension, BorrowFine, BorrowStatistics,
@@ -15,11 +16,12 @@ from ..serializers.borrowing_serializers import (
     BorrowApprovalSerializer, BorrowExtensionCreateSerializer, BorrowExtensionSerializer,
     BorrowFineSerializer, BorrowRatingSerializer, EarlyReturnSerializer,
     DeliveryUpdateSerializer, MostBorrowedBookSerializer, BorrowingReportSerializer,
-    PendingRequestsSerializer, DeliveryReadySerializer
+    PendingRequestsSerializer, DeliveryReadySerializer, DeliveryManagerSerializer
 )
 from ..services.borrowing_services import (
-    BorrowingService, BorrowingNotificationService, BorrowingReportService
+    BorrowingService, BorrowingNotificationService, BorrowingReportService, LateReturnService
 )
+from ..services.notification_services import NotificationService
 from ..permissions import IsCustomer, IsLibraryAdmin, IsDeliveryAdmin, IsAnyAdmin, CustomerOrAdmin
 from ..utils import format_error_message
 import logging
@@ -82,7 +84,9 @@ class BorrowRequestCreateView(generics.CreateAPIView):
             borrow_request = BorrowingService.create_borrow_request(
                 customer=request.user,
                 book=book,
-                borrow_period_days=serializer.validated_data['borrow_period_days']
+                borrow_period_days=serializer.validated_data['borrow_period_days'],
+                delivery_address=serializer.validated_data['delivery_address'],
+                additional_notes=serializer.validated_data.get('additional_notes', '')
             )
             
             response_serializer = BorrowRequestDetailSerializer(borrow_request)
@@ -238,9 +242,16 @@ class BorrowApprovalView(APIView):
             action = serializer.validated_data['action']
             
             if action == 'approve':
+                delivery_manager_id = serializer.validated_data.get('delivery_manager_id')
+                delivery_manager = None
+                
+                if delivery_manager_id:
+                    delivery_manager = get_object_or_404(User, id=delivery_manager_id)
+                
                 borrow_request = BorrowingService.approve_borrow_request(
                     borrow_request=borrow_request,
-                    approved_by=request.user
+                    approved_by=request.user,
+                    delivery_manager=delivery_manager
                 )
                 message = 'Borrowing request approved successfully'
             else:
@@ -266,6 +277,37 @@ class BorrowApprovalView(APIView):
                 'message': 'Failed to process request',
                 'errors': format_error_message(str(e))
             }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class DeliveryManagerSelectionView(generics.ListAPIView):
+    """
+    API view for library admins to get available delivery managers for assignment
+    """
+    serializer_class = DeliveryManagerSerializer
+    permission_classes = [permissions.IsAuthenticated, IsLibraryAdmin]
+    
+    def get_queryset(self):
+        """Get all delivery managers with their status"""
+        return BorrowingService.get_available_delivery_managers()
+    
+    def list(self, request, *args, **kwargs):
+        try:
+            queryset = self.get_queryset()
+            serializer = self.get_serializer(queryset, many=True)
+            
+            return Response({
+                'success': True,
+                'message': 'Delivery managers retrieved successfully',
+                'data': serializer.data
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error retrieving delivery managers: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to retrieve delivery managers',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class DeliveryReadyView(generics.ListAPIView):
@@ -338,38 +380,137 @@ class DeliveryPickupView(APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
 
 
-class DeliveryCompleteView(APIView):
+class BorrowingDeliveryOrdersView(generics.ListAPIView):
     """
-    API view for delivery managers to mark books as delivered
+    API view for delivery managers to view borrowing delivery orders
+    """
+    serializer_class = BorrowRequestListSerializer
+    permission_classes = [permissions.IsAuthenticated, IsDeliveryAdmin]
+    
+    def get_queryset(self):
+        """Get borrowing delivery orders"""
+        from ..models.delivery_model import Order
+        return Order.objects.filter(
+            order_type='borrowing',
+            status='pending_assignment'
+        ).select_related('borrow_request', 'borrow_request__book', 'borrow_request__customer')
+    
+    def list(self, request, *args, **kwargs):
+        try:
+            queryset = self.get_queryset()
+            serializer = self.get_serializer(queryset, many=True)
+            
+            return Response({
+                'success': True,
+                'message': 'Borrowing delivery orders retrieved successfully',
+                'data': serializer.data
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error retrieving borrowing delivery orders: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to retrieve delivery orders',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class StartDeliveryView(APIView):
+    """
+    API view for delivery managers to start delivery
     """
     permission_classes = [permissions.IsAuthenticated, IsDeliveryAdmin]
     
-    def patch(self, request, pk):
+    def patch(self, request, order_id):
         try:
-            borrow_request = get_object_or_404(BorrowRequest, id=pk)
+            from ..models.delivery_model import Order
+            order = get_object_or_404(Order, id=order_id, order_type='borrowing')
             
-            if borrow_request.status != BorrowStatusChoices.ON_DELIVERY:
+            if order.status != 'pending_assignment':
                 return Response({
                     'success': False,
-                    'message': 'Only books on delivery can be marked as delivered',
-                    'errors': {'status': ['Book is not on delivery']}
+                    'message': 'Order is not ready for delivery',
+                    'errors': {'status': ['Order status is not pending_assignment']}
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            serializer = DeliveryUpdateSerializer(data=request.data)
-            serializer.is_valid(raise_exception=True)
+            # Update order status to in_delivery
+            order.status = 'in_delivery'
+            order.save()
             
-            delivery_notes = serializer.validated_data.get('delivery_notes', '')
+            # Update borrow request status
+            borrow_request = order.borrow_request
+            borrow_request.status = BorrowStatusChoices.PENDING_DELIVERY
+            borrow_request.delivery_person = request.user
+            borrow_request.pickup_date = timezone.now()
+            borrow_request.save()
             
-            borrow_request = BorrowingService.mark_delivered(
-                borrow_request=borrow_request,
-                delivery_notes=delivery_notes
+            # Send notification to customer
+            NotificationService.create_notification(
+                user_id=borrow_request.customer.id,
+                title="Delivery Started",
+                message=f"Your book '{borrow_request.book.name}' is now being delivered to you.",
+                notification_type="delivery_started"
             )
             
             response_serializer = BorrowRequestDetailSerializer(borrow_request)
             
             return Response({
                 'success': True,
-                'message': 'Book delivered successfully',
+                'message': 'Delivery started successfully',
+                'data': response_serializer.data
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error starting delivery: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to start delivery',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class CompleteDeliveryView(APIView):
+    """
+    API view for delivery managers to complete delivery
+    """
+    permission_classes = [permissions.IsAuthenticated, IsDeliveryAdmin]
+    
+    def patch(self, request, order_id):
+        try:
+            from ..models.delivery_model import Order
+            order = get_object_or_404(Order, id=order_id, order_type='borrowing')
+            
+            if order.status != 'in_delivery':
+                return Response({
+                    'success': False,
+                    'message': 'Order is not in delivery',
+                    'errors': {'status': ['Order status is not in_delivery']}
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Update order status to delivered
+            order.status = 'delivered'
+            order.save()
+            
+            # Update borrow request status
+            borrow_request = order.borrow_request
+            borrow_request.status = BorrowStatusChoices.ACTIVE
+            borrow_request.delivery_date = timezone.now()
+            borrow_request.final_return_date = borrow_request.expected_return_date
+            borrow_request.save()
+            
+            # Send notification to customer
+            NotificationService.create_notification(
+                user_id=borrow_request.customer.id,
+                title="Book Delivered Successfully",
+                message=f"Your book '{borrow_request.book.name}' has been delivered. Loan period starts today. Return date: {borrow_request.final_return_date.strftime('%Y-%m-%d')}",
+                notification_type="delivery_completed"
+            )
+            
+            response_serializer = BorrowRequestDetailSerializer(borrow_request)
+            
+            return Response({
+                'success': True,
+                'message': 'Delivery completed successfully',
                 'data': response_serializer.data
             }, status=status.HTTP_200_OK)
             
@@ -592,6 +733,39 @@ class BorrowCancelView(APIView):
                 'message': 'Failed to cancel request',
                 'errors': format_error_message(str(e))
             }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class AllBorrowingRequestsView(generics.ListAPIView):
+    """
+    API view for library managers to view all borrowing requests with proper nested structure
+    """
+    serializer_class = BorrowRequestListSerializer
+    permission_classes = [permissions.IsAuthenticated, IsLibraryAdmin]
+    
+    def get_queryset(self):
+        """Get all borrowing requests with optional status filter and search"""
+        status_filter = self.request.query_params.get('status', None)
+        search_query = self.request.query_params.get('search', None)
+        return BorrowingService.get_all_borrowing_requests(status=status_filter, search=search_query)
+    
+    def list(self, request, *args, **kwargs):
+        try:
+            queryset = self.get_queryset()
+            serializer = self.get_serializer(queryset, many=True)
+            
+            return Response({
+                'success': True,
+                'message': 'All borrowing requests retrieved successfully',
+                'data': serializer.data
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error retrieving all borrowing requests: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to retrieve borrowing requests',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class OverdueBorrowingsView(generics.ListAPIView):
@@ -878,5 +1052,316 @@ class BorrowFinesListView(generics.ListAPIView):
             return Response({
                 'success': False,
                 'message': 'Failed to retrieve borrowing fines',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class LateReturnProcessView(APIView):
+    """
+    API view for processing late return scenarios
+    """
+    permission_classes = [permissions.IsAuthenticated, IsLibraryAdmin]
+    
+    def post(self, request, borrow_request_id):
+        """
+        Process late return scenario for a specific borrowing
+        """
+        try:
+            borrow_request = BorrowRequest.objects.get(id=borrow_request_id)
+            
+            # Process the late return scenario
+            result = LateReturnService.process_late_return_scenario(borrow_request)
+            
+            if result['success']:
+                return Response({
+                    'success': True,
+                    'message': result['message'],
+                    'data': {
+                        'fine_amount': result['fine_amount'],
+                        'days_overdue': result['days_overdue'],
+                        'status': borrow_request.status
+                    }
+                }, status=status.HTTP_200_OK)
+            else:
+                return Response({
+                    'success': False,
+                    'message': result['message']
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+        except BorrowRequest.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'Borrow request not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error processing late return: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to process late return',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class BookReturnWithFineView(APIView):
+    """
+    API view for processing book returns with fines
+    """
+    permission_classes = [permissions.IsAuthenticated, IsDeliveryAdmin]
+    
+    def post(self, request, borrow_request_id):
+        """
+        Process book return when customer returns overdue book
+        """
+        try:
+            borrow_request = BorrowRequest.objects.get(id=borrow_request_id)
+            delivery_manager = request.user
+            
+            # Process the book return
+            result = LateReturnService.process_book_return_with_fine(borrow_request, delivery_manager)
+            
+            if result['success']:
+                return Response({
+                    'success': True,
+                    'message': result['message'],
+                    'data': {
+                        'fine_amount': result['fine_amount'],
+                        'deposit_frozen': result['deposit_frozen'],
+                        'status': borrow_request.status
+                    }
+                }, status=status.HTTP_200_OK)
+            else:
+                return Response({
+                    'success': False,
+                    'message': result['message']
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+        except BorrowRequest.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'Borrow request not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error processing book return: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to process book return',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class FinePaymentView(APIView):
+    """
+    API view for processing fine payments
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def post(self, request, borrow_request_id):
+        """
+        Process fine payment for overdue borrowing
+        """
+        try:
+            borrow_request = BorrowRequest.objects.get(id=borrow_request_id)
+            
+            # Check if user owns this borrowing request
+            if borrow_request.customer != request.user:
+                return Response({
+                    'success': False,
+                    'message': 'You can only pay fines for your own borrowings'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            payment_method = request.data.get('payment_method', 'wallet')
+            
+            # Process the fine payment
+            result = LateReturnService.process_fine_payment(borrow_request, payment_method)
+            
+            if result['success']:
+                return Response({
+                    'success': True,
+                    'message': result['message'],
+                    'data': {
+                        'fine_amount': result['fine_amount'],
+                        'refund_amount': result['refund_amount'],
+                        'deposit_refunded': result['deposit_refunded']
+                    }
+                }, status=status.HTTP_200_OK)
+            else:
+                return Response({
+                    'success': False,
+                    'message': result['message']
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+        except BorrowRequest.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'Borrow request not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error processing fine payment: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to process fine payment',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class LateReturnSummaryView(APIView):
+    """
+    API view for getting late return summary
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request, borrow_request_id):
+        """
+        Get comprehensive summary of late return status
+        """
+        try:
+            borrow_request = BorrowRequest.objects.get(id=borrow_request_id)
+            
+            # Check permissions
+            if borrow_request.customer != request.user and request.user.user_type not in ['library_admin', 'delivery_admin']:
+                return Response({
+                    'success': False,
+                    'message': 'You do not have permission to view this information'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Get late return summary
+            summary = LateReturnService.get_late_return_summary(borrow_request)
+            
+            return Response({
+                'success': True,
+                'message': 'Late return summary retrieved successfully',
+                'data': summary
+            }, status=status.HTTP_200_OK)
+                
+        except BorrowRequest.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'Borrow request not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error retrieving late return summary: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to retrieve late return summary',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class ProcessOverdueBorrowingsView(APIView):
+    """
+    API view for library managers to manually process overdue borrowings
+    """
+    permission_classes = [permissions.IsAuthenticated, IsLibraryAdmin]
+    
+    def post(self, request):
+        try:
+            # Process overdue borrowings and create fines
+            BorrowingNotificationService.process_overdue_borrowings()
+            
+            # Send return reminders
+            BorrowingNotificationService.send_return_reminders()
+            
+            return Response({
+                'success': True,
+                'message': 'Overdue borrowings processed successfully'
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error processing overdue borrowings: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to process overdue borrowings',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class DepositManagementView(APIView):
+    """
+    API view for managing deposits
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def post(self, request, borrow_request_id):
+        """
+        Set deposit amount for a borrowing request
+        """
+        try:
+            borrow_request = BorrowRequest.objects.get(id=borrow_request_id)
+            
+            # Only library admins can set deposit amounts
+            if request.user.user_type != 'library_admin':
+                return Response({
+                    'success': False,
+                    'message': 'Only library administrators can set deposit amounts'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            deposit_amount = request.data.get('deposit_amount')
+            if not deposit_amount:
+                return Response({
+                    'success': False,
+                    'message': 'Deposit amount is required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Set deposit amount
+            borrow_request.set_deposit_amount(Decimal(deposit_amount))
+            
+            return Response({
+                'success': True,
+                'message': 'Deposit amount set successfully',
+                'data': {
+                    'deposit_amount': borrow_request.deposit_amount,
+                    'deposit_paid': borrow_request.deposit_paid
+                }
+            }, status=status.HTTP_200_OK)
+                
+        except BorrowRequest.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'Borrow request not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error setting deposit amount: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to set deposit amount',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def patch(self, request, borrow_request_id):
+        """
+        Mark deposit as paid
+        """
+        try:
+            borrow_request = BorrowRequest.objects.get(id=borrow_request_id)
+            
+            # Check if user owns this borrowing request
+            if borrow_request.customer != request.user:
+                return Response({
+                    'success': False,
+                    'message': 'You can only pay deposits for your own borrowings'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Mark deposit as paid
+            borrow_request.mark_deposit_paid()
+            
+            return Response({
+                'success': True,
+                'message': 'Deposit marked as paid successfully',
+                'data': {
+                    'deposit_amount': borrow_request.deposit_amount,
+                    'deposit_paid': borrow_request.deposit_paid
+                }
+            }, status=status.HTTP_200_OK)
+                
+        except BorrowRequest.DoesNotExist:
+            return Response({
+                'success': False,
+                'message': 'Borrow request not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error marking deposit as paid: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to mark deposit as paid',
                 'errors': format_error_message(str(e))
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

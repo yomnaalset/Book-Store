@@ -1324,7 +1324,8 @@ class EvaluationManagementService:
             evaluation = BookEvaluation.objects.create(
                 book=book,
                 user=user,
-                rating=evaluation_data.get('rating')
+                rating=evaluation_data.get('rating'),
+                comment=evaluation_data.get('comment', '')
             )
             
             logger.info(f"Evaluation created for book '{book.name}' by {user.email}")
@@ -1414,7 +1415,7 @@ class EvaluationManagementService:
             
             # Update evaluation fields
             for field, value in update_data.items():
-                if hasattr(evaluation, field) and field in ['rating']:
+                if hasattr(evaluation, field) and field in ['rating', 'comment']:
                     setattr(evaluation, field, value)
             
             evaluation.save()
@@ -1771,7 +1772,7 @@ class FavoriteManagementService:
             if not validation_result['success']:
                 return validation_result
             
-            # Check if book exists and is available
+            # Check if book exists
             try:
                 book = Book.objects.get(id=book_id)
             except Book.DoesNotExist:
@@ -1781,12 +1782,7 @@ class FavoriteManagementService:
                     'error_code': 'BOOK_NOT_FOUND'
                 }
             
-            if not book.is_available:
-                return {
-                    'success': False,
-                    'message': 'Cannot favorite an unavailable book',
-                    'error_code': 'BOOK_NOT_AVAILABLE'
-                }
+            # Allow favoriting unavailable books - users might want to be notified when available
             
             # Check if already favorited
             if Favorite.objects.filter(user=user, book=book).exists():

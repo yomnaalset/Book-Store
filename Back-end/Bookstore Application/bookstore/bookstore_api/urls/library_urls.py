@@ -19,7 +19,9 @@ from bookstore_api.views.library_views import (
     EvaluationDeleteView, BookEvaluationsView, UserEvaluationsView, EvaluationManagementView,
     # Favorites views
     FavoriteAddView, FavoriteListView, FavoriteDetailView, FavoriteDeleteView,
-    BookFavoriteStatusView
+    BookFavoriteStatusView,
+    # Review like and reply views
+    ReviewLikeView, ReviewReplyCreateView, ReviewReplyListView, ReplyLikeView
 )
 
 # Library URLs configuration
@@ -99,6 +101,13 @@ library_urls = [
     path('books/<int:book_id>/reviews/', BookEvaluationsView.as_view(), name='book_reviews_for_book'),
     # User-specific review endpoints (Authenticated users)
     path('my-book-reviews/', UserEvaluationsView.as_view(), name='user_book_reviews'),
+    # Review like endpoints (All authenticated users)
+    path('book-reviews/<int:review_id>/like/', ReviewLikeView.as_view(), name='review_like'),
+    # Review reply endpoints (All authenticated users)
+    path('book-reviews/<int:review_id>/replies/', ReviewReplyListView.as_view(), name='review_replies_list'),
+    path('book-reviews/replies/create/', ReviewReplyCreateView.as_view(), name='review_reply_create'),
+    # Reply like endpoints (All authenticated users)
+    path('book-reviews/replies/<int:reply_id>/like/', ReplyLikeView.as_view(), name='reply_like'),
     # =====================================
     # FAVORITES ENDPOINTS
     # =====================================

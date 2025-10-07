@@ -8,7 +8,7 @@ class CartItemSerializer(serializers.ModelSerializer):
     """
     book_details = BookSerializer(source='book', read_only=True)
     subtotal = serializers.DecimalField(
-        source='get_subtotal',
+        source='get_total_price',
         read_only=True,
         max_digits=10,
         decimal_places=2
@@ -47,11 +47,11 @@ class CartSerializer(serializers.ModelSerializer):
         decimal_places=2
     )
     item_count = serializers.IntegerField(
-        source='get_item_count',
+        source='get_total_items',
         read_only=True
     )
     total_quantity = serializers.IntegerField(
-        source='get_total_quantity',
+        source='get_total_items',
         read_only=True
     )
     

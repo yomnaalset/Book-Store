@@ -30,6 +30,26 @@ class Advertisement(models.Model):
         help_text="Content/description of the advertisement"
     )
     
+    # Advertisement type
+    AD_TYPE_CHOICES = [
+        ('general', 'General Advertisement'),
+        ('discount_code', 'Discount Code Advertisement'),
+    ]
+    
+    ad_type = models.CharField(
+        max_length=20,
+        choices=AD_TYPE_CHOICES,
+        default='general',
+        help_text="Type of advertisement: general or discount code"
+    )
+    
+    # Optional discount code for special offers
+    discount_code = models.CharField(
+        max_length=50,
+        null=True,
+        blank=True,
+        help_text="Optional discount code for special offers"
+    )
     
     # Image field for advertisement banner
     image = models.ImageField(
@@ -132,7 +152,7 @@ class Advertisement(models.Model):
         status_explicitly_set = 'status' in kwargs or hasattr(self, '_status_explicitly_set')
         
         # Only auto-set status if it wasn't explicitly set by the user
-        if not status_explicitly_set and self.status != AdvertisementStatusChoices.EXPIRED:
+        if not status_explicitly_set:
             # Ensure dates are timezone-aware for comparison
             now = timezone.now()
             start_date = self.start_date

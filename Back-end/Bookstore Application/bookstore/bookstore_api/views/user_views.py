@@ -501,7 +501,7 @@ class UserProfileView(generics.RetrieveUpdateAPIView):
             # Filter out empty strings and convert them to None for optional fields
             filtered_data = {}
             for key, value in request.data.items():
-                if value == '' and key in ['phone_number', 'address', 'city', 'state', 'zip_code', 'country']:
+                if value == '' and key in ['phone_number', 'address', 'city', 'zip_code', 'country']:
                     filtered_data[key] = None  # Convert empty strings to None for optional fields
                 elif value is not None:  # Only include non-None values
                     filtered_data[key] = value
@@ -545,7 +545,6 @@ class UserProfileView(generics.RetrieveUpdateAPIView):
                         'phone_number': updated_user.profile.phone_number,
                         'address': updated_user.profile.address,
                         'city': updated_user.profile.city,
-                        'state': updated_user.profile.state,
                         'zip_code': updated_user.profile.zip_code,
                         'country': updated_user.profile.country,
                         'profile_picture': updated_user.profile.profile_picture.url if updated_user.profile.profile_picture else None,
@@ -944,7 +943,7 @@ class LibraryManagerProfileView(APIView):
             # Filter out empty strings and convert them to None for optional fields
             filtered_data = {}
             for key, value in request.data.items():
-                if value == '' and key in ['phone_number', 'address', 'city', 'state', 'zip_code', 'country']:
+                if value == '' and key in ['phone_number', 'address', 'city', 'zip_code', 'country']:
                     filtered_data[key] = None  # Convert empty strings to None for optional fields
                 elif value is not None:  # Only include non-None values
                     filtered_data[key] = value
@@ -989,7 +988,6 @@ class LibraryManagerProfileView(APIView):
                         'phone_number': updated_user.profile.phone_number,
                         'address': updated_user.profile.address,
                         'city': updated_user.profile.city,
-                        'state': updated_user.profile.state,
                         'zip_code': updated_user.profile.zip_code,
                         'country': updated_user.profile.country,
                         'profile_picture': updated_user.profile.profile_picture.url if updated_user.profile.profile_picture else None,

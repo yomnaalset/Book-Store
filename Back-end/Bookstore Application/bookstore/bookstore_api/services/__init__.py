@@ -37,12 +37,7 @@ from .discount_services import (
 from .complaint_services import ComplaintManagementService
 from .report_services import ReportManagementService
 
-from .ad_services import (
-    AdvertisementManagementService,
-    AdvertisementStatusService,
-    AdvertisementAnalyticsService,
-    AdvertisementSchedulingService,
-)
+from .delivery_profile_services import DeliveryProfileService
 
 
 __all__ = [
@@ -80,4 +75,6 @@ __all__ = [
     'AdvertisementStatusService',
     'AdvertisementAnalyticsService',
     'AdvertisementSchedulingService',
+    # Delivery profile services
+    'DeliveryProfileService',
 ] 

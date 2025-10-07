@@ -810,7 +810,12 @@ class BookEvaluation(models.Model):
         help_text="Rating from 1 to 5 stars"
     )
     
-    # Comments removed - only ratings for books
+    # Comment/Review text
+    comment = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Optional comment or review text"
+    )
     
     # Relationships
     book = models.ForeignKey(
@@ -854,6 +859,146 @@ class BookEvaluation(models.Model):
     
     def __str__(self):
         return f"{self.user.email}'s {self.rating}-star evaluation for '{self.book.name}'"
+
+
+class ReviewLike(models.Model):
+    """
+    Model for storing likes on book reviews.
+    Users can like/unlike reviews.
+    """
+    
+    # Relationships
+    review = models.ForeignKey(
+        BookEvaluation,
+        on_delete=models.CASCADE,
+        related_name='likes',
+        help_text="Review that was liked"
+    )
+    
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='review_likes',
+        help_text="User who liked the review"
+    )
+    
+    # Metadata
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="Date and time when like was created"
+    )
+    
+    class Meta:
+        db_table = 'review_like'
+        verbose_name = 'Review Like'
+        verbose_name_plural = 'Review Likes'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['review']),
+            models.Index(fields=['user']),
+            models.Index(fields=['created_at']),
+        ]
+        # Ensure a user can only like a review once
+        unique_together = ['review', 'user']
+    
+    def __str__(self):
+        return f"{self.user.email} liked {self.review.user.email}'s review"
+
+
+class ReviewReply(models.Model):
+    """
+    Model for storing replies to book reviews.
+    Users can reply to reviews.
+    """
+    
+    # Content
+    content = models.TextField(
+        help_text="Reply content"
+    )
+    
+    # Relationships
+    review = models.ForeignKey(
+        BookEvaluation,
+        on_delete=models.CASCADE,
+        related_name='replies',
+        help_text="Review being replied to"
+    )
+    
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='review_replies',
+        help_text="User who wrote the reply"
+    )
+    
+    # Metadata
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="Date and time when reply was created"
+    )
+    
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        help_text="Date and time when reply was last updated"
+    )
+    
+    class Meta:
+        db_table = 'review_reply'
+        verbose_name = 'Review Reply'
+        verbose_name_plural = 'Review Replies'
+        ordering = ['created_at']
+        indexes = [
+            models.Index(fields=['review']),
+            models.Index(fields=['user']),
+            models.Index(fields=['created_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.user.email}'s reply to {self.review.user.email}'s review"
+
+
+class ReplyLike(models.Model):
+    """
+    Model for storing likes on review replies.
+    Users can like/unlike individual replies.
+    """
+    
+    # Relationships
+    reply = models.ForeignKey(
+        ReviewReply,
+        on_delete=models.CASCADE,
+        related_name='likes',
+        help_text="Reply that was liked"
+    )
+    
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='reply_likes',
+        help_text="User who liked the reply"
+    )
+    
+    # Metadata
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="Date and time when like was created"
+    )
+    
+    class Meta:
+        db_table = 'reply_like'
+        verbose_name = 'Reply Like'
+        verbose_name_plural = 'Reply Likes'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['reply']),
+            models.Index(fields=['user']),
+            models.Index(fields=['created_at']),
+        ]
+        # Ensure a user can only like a reply once
+        unique_together = ['reply', 'user']
+    
+    def __str__(self):
+        return f"{self.user.email} liked {self.reply.user.email}'s reply"
 
 
 class Favorite(models.Model):

@@ -32,9 +32,16 @@ from .library_views import (
     EvaluationDeleteView,
     BookEvaluationsView,
     UserEvaluationsView,
+    # Review like and reply views
+    ReviewLikeView,
+    ReviewReplyCreateView,
+    ReviewReplyListView,
+    ReplyLikeView,
 )
 
 
+
+from .delivery_profile_views import DeliveryProfileViewSet
 
 from .notification_views import NotificationViewSet
 
@@ -44,6 +51,7 @@ from .discount_views import (
     DiscountCodeValidationView,
     DiscountCodeApplicationView,
     DiscountCodeCleanupView,
+    DiscountListActiveView,
     get_user_available_codes,
     quick_code_check,
 )
@@ -65,6 +73,38 @@ from .ad_views import (
     schedule_advertisement,
     activate_advertisement,
     pause_advertisement,
+)
+
+from .borrowing_views import (
+    MostBorrowedBooksView,
+    BorrowRequestCreateView,
+    CustomerBorrowingsView,
+    BorrowRequestDetailView,
+    PendingRequestsView,
+    BorrowApprovalView,
+    DeliveryManagerSelectionView,
+    DeliveryReadyView,
+    DeliveryPickupView,
+    BorrowingDeliveryOrdersView,
+    StartDeliveryView,
+    CompleteDeliveryView,
+    BorrowingExtensionView,
+    EarlyReturnView,
+    BookCollectionView,
+    BorrowRatingView,
+    BorrowCancelView,
+    OverdueBorrowingsView,
+    BorrowFineDetailView,
+    BorrowingReportView,
+    BorrowStatisticsView,
+    BorrowExtensionsListView,
+    BorrowFinesListView,
+    LateReturnProcessView,
+    BookReturnWithFineView,
+    FinePaymentView,
+    LateReturnSummaryView,
+    ProcessOverdueBorrowingsView,
+    DepositManagementView,
 )
 
 __all__ = [
@@ -116,6 +156,7 @@ __all__ = [
 
     # Notification views
     'NotificationViewSet',
+    'DeliveryProfileViewSet',
     # Evaluation views
     'EvaluationManagementView',
     'EvaluationCreateView',
@@ -131,6 +172,7 @@ __all__ = [
     'DiscountCodeValidationView',
     'DiscountCodeApplicationView',
     'DiscountCodeCleanupView',
+    'DiscountListActiveView',
     'get_user_available_codes',
     'quick_code_check',
     # Advertisement views
@@ -152,4 +194,34 @@ __all__ = [
     'pause_advertisement',
     'publish_advertisement',
     'unpublish_advertisement',
+    # Borrowing views
+    'MostBorrowedBooksView',
+    'BorrowRequestCreateView',
+    'CustomerBorrowingsView',
+    'BorrowRequestDetailView',
+    'PendingRequestsView',
+    'BorrowApprovalView',
+    'DeliveryManagerSelectionView',
+    'DeliveryReadyView',
+    'DeliveryPickupView',
+    'BorrowingDeliveryOrdersView',
+    'StartDeliveryView',
+    'CompleteDeliveryView',
+    'BorrowingExtensionView',
+    'EarlyReturnView',
+    'BookCollectionView',
+    'BorrowRatingView',
+    'BorrowCancelView',
+    'OverdueBorrowingsView',
+    'BorrowFineDetailView',
+    'BorrowingReportView',
+    'BorrowStatisticsView',
+    'BorrowExtensionsListView',
+    'BorrowFinesListView',
+    'LateReturnProcessView',
+    'BookReturnWithFineView',
+    'FinePaymentView',
+    'LateReturnSummaryView',
+    'ProcessOverdueBorrowingsView',
+    'DepositManagementView',
 ] 

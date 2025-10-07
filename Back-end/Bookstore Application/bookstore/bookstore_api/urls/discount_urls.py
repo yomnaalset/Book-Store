@@ -4,7 +4,9 @@ from bookstore_api.views.discount_views import (
     DiscountCodeDetailView,
     DiscountCodeValidationView,
     DiscountCodeApplicationView,
-    DiscountCodeCleanupView,    
+    DiscountCodeRemovalView,
+    DiscountCodeCleanupView,
+    DiscountListActiveView,
     get_user_available_codes,
     quick_code_check,
     # Book discount views
@@ -20,7 +22,7 @@ from bookstore_api.views.discount_views import (
 )
 
 # URL patterns for discount code management
-discount_urls = [
+urlpatterns = [
     # Admin endpoints for discount code management
     path('admin/codes/', DiscountCodeListCreateView.as_view(), name='discount_code_list_create'),
     path('admin/codes/<int:pk>/', DiscountCodeDetailView.as_view(), name='discount_code_detail'),
@@ -29,8 +31,12 @@ discount_urls = [
     # Customer endpoints for using discount codes
     path('validate/', DiscountCodeValidationView.as_view(), name='discount_code_validate'),
     path('apply/', DiscountCodeApplicationView.as_view(), name='discount_code_apply'),
+    path('remove/', DiscountCodeRemovalView.as_view(), name='discount_code_remove'),
     path('available/', get_user_available_codes, name='user_available_codes'),
     path('quick-check/', quick_code_check, name='quick_code_check'),
+    
+    # Active discount codes endpoint for advertisement forms
+    path('active/', DiscountListActiveView.as_view(), name='discount-active'),
     
     # Admin endpoints for book discount management
     path('admin/book-discounts/', BookDiscountListCreateView.as_view(), name='book_discount_list_create'),
