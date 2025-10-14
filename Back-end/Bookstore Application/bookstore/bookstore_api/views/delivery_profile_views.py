@@ -214,6 +214,54 @@ class DeliveryProfileViewSet(viewsets.ModelViewSet):
                 'errors': format_error_message(str(e))
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
+    @action(detail=False, methods=['post'])
+    def reset_status(self, request):
+        """
+        Reset delivery manager status if no active deliveries.
+        This is a safety mechanism to prevent stuck 'busy' status.
+        """
+        try:
+            user = request.user
+            
+            if not user.is_delivery_admin():
+                return Response({
+                    'success': False,
+                    'message': 'Only delivery administrators can reset status',
+                    'error_code': 'INSUFFICIENT_PERMISSIONS'
+                }, status=403)
+            
+            # Reset status if no active deliveries
+            was_reset = DeliveryProfileService.reset_status_if_no_active_deliveries(user)
+            
+            if was_reset:
+                return Response({
+                    'success': True,
+                    'message': 'Status reset to online (no active deliveries)',
+                    'data': {
+                        'delivery_status': 'online',
+                        'was_reset': True
+                    }
+                })
+            else:
+                # Get current status
+                delivery_profile = DeliveryProfileService.get_or_create_delivery_profile(user)
+                return Response({
+                    'success': True,
+                    'message': 'No reset needed',
+                    'data': {
+                        'delivery_status': delivery_profile.delivery_status,
+                        'was_reset': False
+                    }
+                })
+                
+        except Exception as e:
+            logger.error(f"Error resetting delivery status: {str(e)}")
+            return Response({
+                'success': False,
+                'message': f'Failed to reset status: {str(e)}',
+                'error_code': 'RESET_FAILED'
+            }, status=500)
+    
     @action(detail=False, methods=['get'])
     def current_status(self, request):
         """

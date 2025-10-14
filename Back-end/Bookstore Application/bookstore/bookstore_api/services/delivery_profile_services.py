@@ -537,3 +537,42 @@ class DeliveryProfileService:
         except Exception as e:
             logger.error(f"Error checking manual status change permission for user {user.id}: {str(e)}")
             return False
+    
+    @staticmethod
+    def reset_status_if_no_active_deliveries(user):
+        """
+        Reset delivery manager status to online if they have no active deliveries.
+        This is a safety mechanism to prevent stuck 'busy' status.
+        
+        Args:
+            user: User instance (must be a delivery administrator)
+            
+        Returns:
+            bool: True if status was reset, False if no reset needed
+        """
+        if not user.is_delivery_admin():
+            raise ValueError("Only delivery administrators can reset delivery status")
+        
+        try:
+            delivery_profile = DeliveryProfileService.get_or_create_delivery_profile(user)
+            
+            # Check if there are any active deliveries
+            from ..models import DeliveryAssignment
+            active_deliveries = DeliveryAssignment.objects.filter(
+                delivery_manager=user,
+                status__in=['assigned', 'in_transit']
+            )
+            
+            # If no active deliveries and status is busy, reset to online
+            if active_deliveries.count() == 0 and delivery_profile.delivery_status == 'busy':
+                delivery_profile.delivery_status = 'online'
+                delivery_profile.save(update_fields=['delivery_status'])
+                
+                logger.info(f"Reset delivery status from busy to online for user {user.id} - no active deliveries")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error resetting delivery status for user {user.id}: {str(e)}")
+            raise ValueError(f"Failed to reset delivery status: {str(e)}")

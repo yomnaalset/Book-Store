@@ -14,6 +14,7 @@ urlpatterns = [
     path('current_status/', DeliveryProfileViewSet.as_view({'get': 'current_status'}), name='current-status'),
     path('debug_status/', DeliveryProfileViewSet.as_view({'get': 'debug_status'}), name='debug-status'),
     path('update_status/', DeliveryProfileViewSet.as_view({'post': 'update_status'}), name='update-status'),
+    path('reset_status/', DeliveryProfileViewSet.as_view({'post': 'reset_status'}), name='reset-status'),
     path('update_location/', DeliveryProfileViewSet.as_view({'post': 'update_location'}), name='update-location'),
     path('update_tracking/', DeliveryProfileViewSet.as_view({'post': 'update_tracking'}), name='update-tracking'),
 ]
