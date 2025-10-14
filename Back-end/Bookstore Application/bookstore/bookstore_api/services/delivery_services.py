@@ -98,13 +98,41 @@ class OrderService:
                 OrderItem.objects.create(
                     order=order,
                     book=cart_item.book,
-                    book_name=cart_item.book.title,
-                    book_price=cart_item.book.price,
-                    quantity=cart_item.quantity
+                    quantity=cart_item.quantity,
+                    unit_price=cart_item.book.price,
+                    total_price=cart_item.book.price * cart_item.quantity
                 )
             
             # Clear cart after order creation
             cart.clear()
+            
+            # Create delivery request for the order
+            try:
+                from ..models.delivery_model import DeliveryRequest
+                from django.utils import timezone
+                from datetime import timedelta
+                
+                # Calculate preferred delivery time (24 hours from now)
+                preferred_delivery_time = timezone.now() + timedelta(hours=24)
+                
+                delivery_request = DeliveryRequest.objects.create(
+                    customer=payment.user,
+                    order=order,
+                    request_type='delivery',
+                    delivery_address=delivery_info.get('delivery_address', ''),
+                    delivery_city=delivery_info.get('delivery_city', 'Unknown'),
+                    preferred_pickup_time=timezone.now() + timedelta(hours=1),  # 1 hour from now
+                    preferred_delivery_time=preferred_delivery_time,
+                    status='pending',
+                    notes=f'Delivery request for order #{order.order_number}'
+                )
+                
+                logger.info(f"Created delivery request {delivery_request.id} for order {order.id}")
+                
+            except Exception as e:
+                logger.error(f"Failed to create delivery request for order {order.id}: {str(e)}")
+                # Don't fail the order creation if delivery request creation fails
+                pass
             
             return {
                 'success': True,
@@ -292,23 +320,8 @@ class DeliveryService:
         try:
             old_status = assignment.status
             
-            # Validate status transition
-            valid_transitions = {
-                'assigned': ['accepted', 'failed'],
-                'accepted': ['picked_up', 'failed'],
-                'picked_up': ['in_transit', 'failed'],
-                'in_transit': ['delivered', 'failed'],
-                'delivered': [],  # Final state
-                'failed': ['assigned'],  # Can be reassigned
-                'returned': [],   # Final state
-            }
-            
-            if new_status not in valid_transitions.get(old_status, []):
-                return {
-                    'success': False,
-                    'message': f"Cannot change status from '{old_status}' to '{new_status}'",
-                    'error_code': 'INVALID_STATUS_TRANSITION'
-                }
+            # Allow any status change - no validation restrictions
+            # This gives maximum flexibility to delivery managers
             
             # Validate failure reason for failed status
             if new_status == 'failed' and not failure_reason:
@@ -325,6 +338,14 @@ class DeliveryService:
                 assignment.accepted_at = timezone.now()
             elif new_status == 'picked_up':
                 assignment.picked_up_at = timezone.now()
+            elif new_status == 'in_transit':
+                assignment.started_at = timezone.now()
+                # Automatically change delivery manager status to busy when starting delivery
+                try:
+                    from ..services.delivery_profile_services import DeliveryProfileService
+                    DeliveryProfileService.start_delivery_task(assignment.delivery_manager)
+                except Exception as e:
+                    logger.warning(f"Failed to update delivery manager status to busy: {str(e)}")
             elif new_status == 'delivered':
                 assignment.delivered_at = timezone.now()
                 assignment.actual_delivery_time = timezone.now()
@@ -336,6 +357,23 @@ class DeliveryService:
                 if assignment.order.payment.payment_method == 'cash_on_delivery':
                     assignment.order.payment.status = 'completed'
                     assignment.order.payment.save()
+                # Automatically change delivery manager status to online when completing delivery
+                try:
+                    from ..services.delivery_profile_services import DeliveryProfileService
+                    DeliveryProfileService.complete_delivery_task(assignment.delivery_manager)
+                except Exception as e:
+                    logger.warning(f"Failed to update delivery manager status to online: {str(e)}")
+            elif new_status == 'completed':
+                assignment.completed_at = timezone.now()
+                # Update order status to completed
+                assignment.order.status = 'delivered'  # Keep order as delivered, completion is for delivery assignment
+                assignment.order.save()
+                # Automatically change delivery manager status to online when completing delivery
+                try:
+                    from ..services.delivery_profile_services import DeliveryProfileService
+                    DeliveryProfileService.complete_delivery_task(assignment.delivery_manager)
+                except Exception as e:
+                    logger.warning(f"Failed to update delivery manager status to online: {str(e)}")
             elif new_status == 'failed':
                 assignment.failure_reason = failure_reason
                 assignment.retry_count += 1
@@ -350,16 +388,14 @@ class DeliveryService:
             
             # Create status history
             DeliveryStatusHistory.objects.create(
-                assignment=assignment,
-                previous_status=old_status,
-                new_status=new_status,
-                updated_by=updated_by,
+                delivery_assignment=assignment,
+                status=new_status,
                 notes=notes or ''
             )
             
             # Update order status based on delivery status
             if new_status == 'in_transit':
-                assignment.order.status = 'out_for_delivery'
+                assignment.order.status = 'in_delivery'
                 assignment.order.save()
             
             return {
@@ -1012,9 +1048,37 @@ class BorrowingDeliveryService:
                 order=order,
                 book=borrow_request.book,
                 quantity=1,
-                price=borrow_request.book.borrow_price,
+                unit_price=borrow_request.book.borrow_price,
                 total_price=borrow_request.book.borrow_price
             )
+            
+            # Create delivery request for the borrowing order
+            try:
+                from ..models.delivery_model import DeliveryRequest
+                from django.utils import timezone
+                from datetime import timedelta
+                
+                # Calculate preferred delivery time (24 hours from now)
+                preferred_delivery_time = timezone.now() + timedelta(hours=24)
+                
+                delivery_request = DeliveryRequest.objects.create(
+                    customer=borrow_request.customer,
+                    order=order,
+                    request_type='delivery',
+                    delivery_address=borrow_request.customer.profile.address if hasattr(borrow_request.customer, 'profile') else '',
+                    delivery_city=borrow_request.customer.profile.city if hasattr(borrow_request.customer, 'profile') and hasattr(borrow_request.customer.profile, 'city') else 'Unknown',
+                    preferred_pickup_time=timezone.now() + timedelta(hours=1),  # 1 hour from now
+                    preferred_delivery_time=preferred_delivery_time,
+                    status='pending',
+                    notes=f'Borrowing delivery request for order #{order.order_number} - Book: {borrow_request.book.name}'
+                )
+                
+                logger.info(f"Created borrowing delivery request {delivery_request.id} for order {order.id}")
+                
+            except Exception as e:
+                logger.error(f"Failed to create delivery request for borrowing order {order.id}: {str(e)}")
+                # Don't fail the order creation if delivery request creation fails
+                pass
             
             return {
                 'success': True,
@@ -1058,7 +1122,7 @@ class BorrowingDeliveryService:
                 order=order,
                 book=borrow_request.book,
                 quantity=1,
-                price=0.00,
+                unit_price=0.00,
                 total_price=0.00
             )
             

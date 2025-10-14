@@ -17,7 +17,6 @@ from bookstore_api.urls.discount_urls import urlpatterns as discount_urls
 from bookstore_api.urls.user_preferences_urls import user_preferences_urls 
 from bookstore_api.urls.ad_urls import urlpatterns as ad_urls
 from bookstore_api.urls.delivery_profile_urls import urlpatterns as delivery_profile_urls
-from bookstore_api.test_auth_view import test_auth_view
 
 urlpatterns = [
     # User management endpoints
@@ -51,6 +50,5 @@ urlpatterns = [
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     # Direct login endpoint
     path('login/', LoginView.as_view(), name='direct_login'),
-    # Test endpoint
-    path('test-auth/', test_auth_view),
+    
 ]

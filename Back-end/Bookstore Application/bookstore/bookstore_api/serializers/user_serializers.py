@@ -475,16 +475,26 @@ class UserBasicInfoSerializer(serializers.ModelSerializer):
     full_name = serializers.CharField(source='get_full_name', read_only=True)
     user_type_display = serializers.CharField(source='get_user_type_display', read_only=True)
     location = serializers.SerializerMethodField()
+    phone_number = serializers.SerializerMethodField()
     
     class Meta:
         model = User
-        fields = ['id', 'email', 'first_name', 'last_name', 'full_name', 'user_type', 'user_type_display', 'location']
-        read_only_fields = ['id', 'email', 'first_name', 'last_name', 'full_name', 'user_type', 'user_type_display', 'location']
+        fields = ['id', 'email', 'first_name', 'last_name', 'full_name', 'user_type', 'user_type_display', 'location', 'phone_number']
+        read_only_fields = ['id', 'email', 'first_name', 'last_name', 'full_name', 'user_type', 'user_type_display', 'location', 'phone_number']
     
     def get_location(self, obj):
         """Get location data for delivery managers."""
         if obj.is_delivery_admin():
             return obj.get_location_dict()
+        return None
+        
+    def get_phone_number(self, obj):
+        """Get phone number from user profile if available"""
+        try:
+            if hasattr(obj, 'profile') and obj.profile.phone_number:
+                return obj.profile.phone_number
+        except Exception:
+            pass
         return None
 
 

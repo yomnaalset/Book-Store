@@ -177,3 +177,32 @@ class DeliveryProfile(models.Model):
             delivery_status__in=['online', 'busy'],
             is_tracking_active=True
         ).select_related('user')
+    
+    def can_change_status_manually(self):
+        """
+        Check if the delivery manager can manually change their status.
+        Returns False if currently busy (delivering), True otherwise.
+        """
+        return self.delivery_status != 'busy'
+    
+    def set_busy_for_delivery(self):
+        """
+        Automatically set status to busy when starting a delivery.
+        This should only be called by the system, not manually.
+        """
+        if self.delivery_status == 'online':
+            self.delivery_status = 'busy'
+            self.save(update_fields=['delivery_status'])
+            return True
+        return False
+    
+    def set_online_after_delivery(self):
+        """
+        Automatically set status to online when completing a delivery.
+        This should only be called by the system, not manually.
+        """
+        if self.delivery_status == 'busy':
+            self.delivery_status = 'online'
+            self.save(update_fields=['delivery_status'])
+            return True
+        return False

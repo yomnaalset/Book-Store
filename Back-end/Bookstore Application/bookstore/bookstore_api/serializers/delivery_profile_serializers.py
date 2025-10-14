@@ -169,6 +169,7 @@ class DeliveryProfileLocationUpdateSerializer(serializers.Serializer):
 class DeliveryProfileStatusUpdateSerializer(serializers.Serializer):
     """
     Serializer specifically for updating delivery status.
+    IMPORTANT: Manual status changes are not allowed when status is 'busy'.
     """
     delivery_status = serializers.ChoiceField(choices=DeliveryProfile.DELIVERY_STATUS_CHOICES)
     
@@ -178,6 +179,15 @@ class DeliveryProfileStatusUpdateSerializer(serializers.Serializer):
         if value not in valid_statuses:
             raise serializers.ValidationError(f"Invalid delivery status. Must be one of: {valid_statuses}")
         return value
+    
+    def validate(self, data):
+        """
+        Additional validation to prevent manual status changes when busy.
+        This validation should be used in conjunction with the service layer check.
+        """
+        # Note: The main validation for busy status is handled in the view layer
+        # using DeliveryProfileService.can_manually_change_status()
+        return data
 
 
 class DeliveryProfileTrackingUpdateSerializer(serializers.Serializer):
@@ -189,3 +199,15 @@ class DeliveryProfileTrackingUpdateSerializer(serializers.Serializer):
     def validate_is_tracking_active(self, value):
         """Validate tracking status."""
         return value
+
+
+class DeliveryProfileCurrentStatusSerializer(serializers.Serializer):
+    """
+    Serializer for the current status endpoint.
+    This is a read-only serializer that returns the current persistent status.
+    """
+    user_id = serializers.IntegerField(read_only=True)
+    delivery_status = serializers.CharField(read_only=True)
+    can_change_manually = serializers.BooleanField(read_only=True)
+    is_tracking_active = serializers.BooleanField(read_only=True)
+    last_updated = serializers.DateTimeField(read_only=True)

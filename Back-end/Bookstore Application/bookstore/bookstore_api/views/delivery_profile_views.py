@@ -172,6 +172,85 @@ class DeliveryProfileViewSet(viewsets.ModelViewSet):
                 'errors': format_error_message(str(e))
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
+    @action(detail=False, methods=['get'])
+    def debug_status(self, request):
+        """
+        Debug endpoint to help identify status update issues.
+        """
+        if not request.user.is_delivery_admin():
+            return Response({
+                'success': False,
+                'message': 'Only delivery administrators can access this endpoint',
+                'error_code': 'PERMISSION_DENIED'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        try:
+            delivery_profile = DeliveryProfileService.get_delivery_profile(request.user)
+            
+            debug_info = {
+                'user_id': request.user.id,
+                'user_type': request.user.user_type,
+                'is_delivery_admin': request.user.is_delivery_admin(),
+                'has_delivery_profile': delivery_profile is not None,
+                'current_status': delivery_profile.delivery_status if delivery_profile else None,
+                'can_change_manually': DeliveryProfileService.can_manually_change_status(request.user),
+                'valid_statuses': [choice[0] for choice in DeliveryProfile.DELIVERY_STATUS_CHOICES],
+                'expected_request_format': {
+                    'delivery_status': 'online'  # or 'offline' or 'busy'
+                }
+            }
+            
+            return Response({
+                'success': True,
+                'message': 'Debug information retrieved',
+                'data': debug_info
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error in debug endpoint: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to get debug information',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=False, methods=['get'])
+    def current_status(self, request):
+        """
+        Get the current user's delivery status only.
+        This endpoint is specifically designed for frontend to check status after login.
+        IMPORTANT: This endpoint does NOT modify the status - it only returns the current persistent status.
+        """
+        if not request.user.is_delivery_admin():
+            return Response({
+                'success': False,
+                'message': 'Only delivery administrators have delivery status',
+                'error_code': 'PERMISSION_DENIED'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        try:
+            delivery_profile = DeliveryProfileService.get_or_create_delivery_profile(request.user)
+            
+            return Response({
+                'success': True,
+                'message': 'Delivery status retrieved successfully',
+                'data': {
+                    'user_id': request.user.id,
+                    'delivery_status': delivery_profile.delivery_status,
+                    'can_change_manually': delivery_profile.can_change_status_manually(),
+                    'is_tracking_active': delivery_profile.is_tracking_active,
+                    'last_updated': delivery_profile.updated_at
+                }
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error retrieving delivery status: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to retrieve delivery status',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
     @action(detail=False, methods=['post'])
     def update_location(self, request):
         """
@@ -215,6 +294,8 @@ class DeliveryProfileViewSet(viewsets.ModelViewSet):
     def update_status(self, request):
         """
         Update the current user's delivery status.
+        IMPORTANT: Manual status changes are not allowed when status is 'busy'.
+        Only the system can change status from busy to online (after completing delivery).
         """
         if not request.user.is_delivery_admin():
             return Response({
@@ -224,8 +305,27 @@ class DeliveryProfileViewSet(viewsets.ModelViewSet):
             }, status=status.HTTP_403_FORBIDDEN)
         
         try:
+            # Log the request data for debugging
+            logger.info(f"Update status request data: {request.data}")
+            logger.info(f"User: {request.user.id}, User type: {request.user.user_type}")
+            
+            # Check if user can manually change status (not busy)
+            if not DeliveryProfileService.can_manually_change_status(request.user):
+                return Response({
+                    'success': False,
+                    'message': 'Cannot change status manually while busy. Status will automatically change to online when delivery is completed.',
+                    'error_code': 'STATUS_CHANGE_NOT_ALLOWED',
+                    'current_status': 'busy'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
             serializer = DeliveryProfileStatusUpdateSerializer(data=request.data)
-            serializer.is_valid(raise_exception=True)
+            if not serializer.is_valid():
+                logger.error(f"Serializer validation errors: {serializer.errors}")
+                return Response({
+                    'success': False,
+                    'message': 'Invalid request data',
+                    'errors': serializer.errors
+                }, status=status.HTTP_400_BAD_REQUEST)
             
             delivery_profile = DeliveryProfileService.update_delivery_status(
                 user=request.user,

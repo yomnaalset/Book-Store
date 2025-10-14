@@ -190,14 +190,14 @@ class NotificationService:
         """
         try:
             order = Order.objects.get(id=order_id)
-            user = order.user
+            user = order.customer
             
             # Create notification
             notification = NotificationService.create_notification(
                 user_id=user.id,
                 title="Order Delivered",
                 message=f"Your order #{order.id} has been delivered successfully.",
-                notification_type=NotificationType.ORDER_DELIVERED,
+                notification_type="order_delivered",
                 related_order_id=order.id
             )
             
@@ -214,14 +214,14 @@ class NotificationService:
         """
         try:
             order = Order.objects.get(id=order_id)
-            user = order.user
+            user = order.customer
             
             # Create notification
             notification = NotificationService.create_notification(
                 user_id=user.id,
                 title="Order Accepted",
                 message=f"Your order #{order.id} has been accepted and is being processed.",
-                notification_type=NotificationType.ORDER_ACCEPTED,
+                notification_type="order_accepted",
                 related_order_id=order.id
             )
             
@@ -238,7 +238,7 @@ class NotificationService:
         """
         try:
             order = Order.objects.get(id=order_id)
-            user = order.user
+            user = order.customer
             
             # Create notification with contact info if available
             message = f"A delivery representative ({delivery_rep_name}) has been assigned to your order #{order.id}."
@@ -249,7 +249,7 @@ class NotificationService:
                 user_id=user.id,
                 title="Delivery Representative Assigned",
                 message=message,
-                notification_type=NotificationType.DELIVERY_ASSIGNED,
+                notification_type="delivery_assigned",
                 related_order_id=order.id
             )
             
@@ -266,7 +266,7 @@ class NotificationService:
         """
         try:
             order = Order.objects.get(id=order_id)
-            user = order.user
+            user = order.customer
             
             # Format the delivery time
             formatted_time = estimated_delivery_time.strftime("%B %d, %Y at %I:%M %p")
@@ -276,7 +276,7 @@ class NotificationService:
                 user_id=user.id,
                 title="Delivery Time Updated",
                 message=f"The estimated delivery time for your order #{order.id} has been updated to {formatted_time}.",
-                notification_type=NotificationType.DELIVERY_TIME_UPDATED,
+                notification_type="delivery_time_updated",
                 related_order_id=order.id
             )
             

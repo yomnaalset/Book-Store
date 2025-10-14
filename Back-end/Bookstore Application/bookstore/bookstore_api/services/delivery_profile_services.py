@@ -142,7 +142,7 @@ class DeliveryProfileService:
             # Send notification about status change
             DeliveryProfileService.notify_status_change(delivery_profile, old_status, status)
             
-            logger.info(f"Updated delivery status for user {user.id} to: {status}")
+            logger.info(f"Updated delivery status for user {user.id} from {old_status} to: {status}")
             return delivery_profile
             
         except Exception as e:
@@ -443,3 +443,97 @@ class DeliveryProfileService:
         except Exception as e:
             logger.error(f"Error getting delivery admin profiles: {str(e)}")
             raise ValueError(f"Failed to get delivery admin profiles: {str(e)}")
+    
+    @staticmethod
+    def start_delivery_task(user):
+        """
+        Automatically change delivery manager status from online to busy when starting a delivery.
+        This is the ONLY automatic status change allowed in the system.
+        
+        Args:
+            user: User instance (must be a delivery administrator)
+            
+        Returns:
+            bool: True if status was changed, False if already busy or not online
+        """
+        if not user.is_delivery_admin():
+            raise ValueError("Only delivery administrators can start delivery tasks")
+        
+        try:
+            delivery_profile = DeliveryProfileService.get_or_create_delivery_profile(user)
+            success = delivery_profile.set_busy_for_delivery()
+            
+            if success:
+                logger.info(f"Automatically changed delivery status to busy for user {user.id}")
+                # Send notification about automatic status change
+                DeliveryProfileService.notify_status_change(delivery_profile, 'online', 'busy')
+            else:
+                logger.warning(f"Could not change status to busy for user {user.id} - current status: {delivery_profile.delivery_status}")
+            
+            return success
+            
+        except Exception as e:
+            logger.error(f"Error starting delivery task for user {user.id}: {str(e)}")
+            raise ValueError(f"Failed to start delivery task: {str(e)}")
+    
+    @staticmethod
+    def complete_delivery_task(user):
+        """
+        Automatically change delivery manager status from busy to online when completing a delivery.
+        This is the ONLY automatic status change allowed in the system.
+        
+        Args:
+            user: User instance (must be a delivery administrator)
+            
+        Returns:
+            bool: True if status was changed, False if not busy
+        """
+        if not user.is_delivery_admin():
+            raise ValueError("Only delivery administrators can complete delivery tasks")
+        
+        try:
+            delivery_profile = DeliveryProfileService.get_or_create_delivery_profile(user)
+            success = delivery_profile.set_online_after_delivery()
+            
+            if success:
+                logger.info(f"Automatically changed delivery status to online for user {user.id}")
+                # Send notification about automatic status change
+                DeliveryProfileService.notify_status_change(delivery_profile, 'busy', 'online')
+            else:
+                logger.warning(f"Could not change status to online for user {user.id} - current status: {delivery_profile.delivery_status}")
+            
+            return success
+            
+        except Exception as e:
+            logger.error(f"Error completing delivery task for user {user.id}: {str(e)}")
+            raise ValueError(f"Failed to complete delivery task: {str(e)}")
+    
+    @staticmethod
+    def can_manually_change_status(user):
+        """
+        Check if a delivery manager can manually change their status.
+        Returns False if currently busy (delivering), True otherwise.
+        
+        Args:
+            user: User instance
+            
+        Returns:
+            bool: True if can change status manually, False otherwise
+        """
+        if not user.is_delivery_admin():
+            return False
+        
+        try:
+            delivery_profile = DeliveryProfileService.get_delivery_profile(user)
+            logger.info(f"Delivery profile for user {user.id}: {delivery_profile}")
+            if not delivery_profile:
+                logger.info(f"No delivery profile exists for user {user.id}, allowing status change")
+                return True  # No profile exists, can create with any status
+            
+            can_change = delivery_profile.can_change_status_manually()
+            logger.info(f"User {user.id} can change status manually: {can_change}, current status: {delivery_profile.delivery_status}")
+            return can_change
+            
+        except Exception as e:
+            logger.error(f"Error checking manual status change permission for user {user.id}: {str(e)}")
+            return False

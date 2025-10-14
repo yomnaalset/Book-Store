@@ -27,7 +27,7 @@ from ..serializers import (
     EmailChangeSerializer,
     PasswordChangeSerializer,
 )
-from ..services import UserRegistrationService, UserAccountService, AuthenticationService
+from ..services import UserRegistrationService, UserAccountService, AuthenticationService, DeliveryProfileService
 from ..permissions import (
     AllowAnonymousRegistration,
     IsOwnerOrAdmin,
@@ -191,6 +191,16 @@ class LoginView(APIView):
                 refresh = RefreshToken.for_user(user)
                 access_token = refresh.access_token
                 
+                # Get delivery status for delivery administrators
+                delivery_status = None
+                if user.is_delivery_admin():
+                    try:
+                        delivery_profile = DeliveryProfileService.get_delivery_profile(user)
+                        delivery_status = delivery_profile.delivery_status if delivery_profile else 'offline'
+                    except Exception as e:
+                        logger.warning(f"Could not get delivery status for user {user.id}: {str(e)}")
+                        delivery_status = 'offline'
+                
                 return Response({
                     'success': True,
                     'message': 'Login successful',
@@ -205,6 +215,7 @@ class LoginView(APIView):
                         'profile_complete': user.has_complete_profile(),
                         'profile_completion_percentage': user.get_profile_completion_percentage(),
                         'is_library_admin': user.is_library_admin(),
+                        'delivery_status': delivery_status,
                     }
                 }, status=status.HTTP_200_OK)
             else:

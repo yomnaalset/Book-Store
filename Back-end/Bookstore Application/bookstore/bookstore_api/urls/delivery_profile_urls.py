@@ -10,6 +10,9 @@ urlpatterns = [
     # Additional endpoints for delivery profiles
     path('available_managers/', DeliveryProfileViewSet.as_view({'get': 'available_managers'}), name='available-managers'),
     path('online_managers/', DeliveryProfileViewSet.as_view({'get': 'online_managers'}), name='online-managers'),
+    path('my_profile/', DeliveryProfileViewSet.as_view({'get': 'my_profile'}), name='my-profile'),
+    path('current_status/', DeliveryProfileViewSet.as_view({'get': 'current_status'}), name='current-status'),
+    path('debug_status/', DeliveryProfileViewSet.as_view({'get': 'debug_status'}), name='debug-status'),
     path('update_status/', DeliveryProfileViewSet.as_view({'post': 'update_status'}), name='update-status'),
     path('update_location/', DeliveryProfileViewSet.as_view({'post': 'update_location'}), name='update-location'),
     path('update_tracking/', DeliveryProfileViewSet.as_view({'post': 'update_tracking'}), name='update-tracking'),

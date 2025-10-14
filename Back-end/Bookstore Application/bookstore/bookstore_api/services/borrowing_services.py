@@ -132,6 +132,13 @@ class BorrowingService:
         borrow_request.delivery_person = delivery_person
         borrow_request.save()
         
+        # Automatically change delivery manager status to busy when starting delivery
+        try:
+            from ..services.delivery_profile_services import DeliveryProfileService
+            DeliveryProfileService.start_delivery_task(delivery_person)
+        except Exception as e:
+            logger.warning(f"Failed to update delivery manager status to busy: {str(e)}")
+        
         # Send notification to customer
         NotificationService.create_notification(
             user_id=borrow_request.customer.id,
@@ -157,8 +164,11 @@ class BorrowingService:
         
         # Update delivery manager status back to online
         if borrow_request.delivery_person and hasattr(borrow_request.delivery_person, 'delivery_profile'):
-            from ..services.delivery_profile_services import DeliveryProfileService
-            DeliveryProfileService.update_delivery_status(borrow_request.delivery_person, 'online')
+            try:
+                from ..services.delivery_profile_services import DeliveryProfileService
+                DeliveryProfileService.complete_delivery_task(borrow_request.delivery_person)
+            except Exception as e:
+                logger.warning(f"Failed to update delivery manager status to online: {str(e)}")
         
         # Increment borrow count when book is successfully delivered
         borrow_request.book.borrow_count += 1
@@ -237,9 +247,7 @@ class BorrowingService:
         delivery_request = DeliveryRequest.objects.create(
             customer=borrow_request.customer,
             request_type='return',
-            pickup_address=getattr(borrow_request.customer, 'address', 'Address not provided'),
             delivery_address="Main Library",
-            pickup_city=getattr(borrow_request.customer, 'city', 'Customer City'),
             delivery_city="Library City",
             preferred_pickup_time=timezone.now() + timedelta(hours=1),
             preferred_delivery_time=timezone.now() + timedelta(hours=4),

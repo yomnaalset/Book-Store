@@ -9,8 +9,10 @@ class BookSerializer(serializers.ModelSerializer):
     Used for displaying book information in cart and order items.
     """
     
-    category_name = serializers.CharField(source='category.name', read_only=True)
+    author = serializers.SerializerMethodField()
+    category = serializers.SerializerMethodField()
     author_name = serializers.CharField(source='author.name', read_only=True)
+    category_name = serializers.CharField(source='category.name', read_only=True)
     primary_image_url = serializers.CharField(source='get_primary_image_url', read_only=True)
     
     class Meta:
@@ -20,7 +22,19 @@ class BookSerializer(serializers.ModelSerializer):
             'price', 'is_available', 'category', 'category_name',
             'primary_image_url'
         ]
-        read_only_fields = ['id', 'author']
+        read_only_fields = ['id']
+    
+    def get_author(self, obj):
+        """Return author as a nested object."""
+        if obj.author:
+            return {'id': obj.author.id, 'name': obj.author.name}
+        return None
+    
+    def get_category(self, obj):
+        """Return category as a nested object."""
+        if obj.category:
+            return {'id': obj.category.id, 'name': obj.category.name}
+        return None
 
 
 class LibraryCreateSerializer(serializers.ModelSerializer):

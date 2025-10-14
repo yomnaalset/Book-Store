@@ -144,6 +144,13 @@ class Order(models.Model):
         help_text="Additional delivery instructions"
     )
     
+    # Cancellation information
+    cancellation_reason = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Reason for order cancellation"
+    )
+    
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -308,7 +315,7 @@ class DeliveryAssignment(models.Model):
         help_text="Order to be delivered"
     )
     
-    delivery_person = models.ForeignKey(
+    delivery_manager = models.ForeignKey(
         User,
         on_delete=models.PROTECT,
         limit_choices_to={'user_type': 'delivery_admin'},
@@ -337,6 +344,71 @@ class DeliveryAssignment(models.Model):
         help_text="Notes from delivery personnel"
     )
     
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            ('assigned', 'Assigned'),
+            ('accepted', 'Accepted'),
+            ('picked_up', 'Picked Up'),
+            ('in_transit', 'In Transit'),
+            ('delivered', 'Delivered'),
+            ('completed', 'Completed'),
+            ('cancelled', 'Cancelled'),
+        ],
+        default='assigned',
+        help_text="Current status of the delivery assignment"
+    )
+    
+    assigned_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='assigned_deliveries',
+        help_text="User who assigned this delivery"
+    )
+    
+    accepted_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the delivery assignment was accepted"
+    )
+    
+    picked_up_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the items were picked up"
+    )
+    
+    delivered_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the delivery was completed"
+    )
+    
+    started_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the delivery was started"
+    )
+    
+    completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the delivery was completed"
+    )
+    
+    failure_reason = models.TextField(
+        null=True,
+        blank=True,
+        help_text="Reason for delivery failure"
+    )
+    
+    retry_count = models.PositiveIntegerField(
+        default=0,
+        help_text="Number of retry attempts"
+    )
+    
     class Meta:
         db_table = 'delivery_assignment'
         verbose_name = 'Delivery Assignment'
@@ -344,7 +416,7 @@ class DeliveryAssignment(models.Model):
         ordering = ['-assigned_at']
     
     def __str__(self):
-        return f"Delivery of {self.order} by {self.delivery_person.get_full_name()}"
+        return f"Delivery of {self.order} by {self.delivery_manager.get_full_name()}"
     
     def is_delivered(self):
         """Check if the delivery is completed."""
@@ -387,10 +459,11 @@ class DeliveryStatusHistory(models.Model):
     
     STATUS_CHOICES = [
         ('assigned', 'Assigned'),
+        ('accepted', 'Accepted'),
         ('picked_up', 'Picked Up'),
         ('in_transit', 'In Transit'),
-        ('out_for_delivery', 'Out for Delivery'),
         ('delivered', 'Delivered'),
+        ('completed', 'Completed'),
         ('failed', 'Delivery Failed'),
     ]
     
@@ -455,17 +528,8 @@ class DeliveryRequest(models.Model):
         help_text="Type of delivery request"
     )
     
-    pickup_address = models.TextField(
-        help_text="Address for pickup"
-    )
-    
     delivery_address = models.TextField(
         help_text="Address for delivery"
-    )
-    
-    pickup_city = models.CharField(
-        max_length=100,
-        help_text="City for pickup"
     )
     
     delivery_city = models.CharField(
@@ -892,3 +956,76 @@ class RealTimeTracking(models.Model):
         self.save()
         
         return True, "Tracking stopped successfully"
+
+
+class DeliveryActivity(models.Model):
+    """
+    Model to track delivery manager activities for monitoring and analytics.
+    """
+    ACTIVITY_TYPES = [
+        ('contact_customer', 'Contact Customer'),
+        ('view_route', 'View Route'),
+        ('add_notes', 'Add Notes'),
+        ('edit_notes', 'Edit Notes'),
+        ('delete_notes', 'Delete Notes'),
+        ('update_location', 'Update Location'),
+        ('start_delivery', 'Start Delivery'),
+        ('complete_delivery', 'Complete Delivery'),
+        ('update_eta', 'Update ETA'),
+    ]
+    
+    delivery_manager = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='delivery_activities',
+        limit_choices_to={'user_type': 'delivery_admin'},
+        help_text="Delivery manager who performed the activity"
+    )
+    
+    order = models.ForeignKey(
+        Order,
+        on_delete=models.CASCADE,
+        related_name='delivery_activities',
+        help_text="Order related to this activity"
+    )
+    
+    activity_type = models.CharField(
+        max_length=50,
+        choices=ACTIVITY_TYPES,
+        help_text="Type of activity performed"
+    )
+    
+    activity_data = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Additional data related to the activity"
+    )
+    
+    timestamp = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When the activity was performed"
+    )
+    
+    ip_address = models.GenericIPAddressField(
+        null=True,
+        blank=True,
+        help_text="IP address of the request"
+    )
+    
+    user_agent = models.TextField(
+        blank=True,
+        help_text="User agent string from the request"
+    )
+    
+    class Meta:
+        ordering = ['-timestamp']
+        verbose_name = 'Delivery Activity'
+        verbose_name_plural = 'Delivery Activities'
+        indexes = [
+            models.Index(fields=['delivery_manager', 'timestamp']),
+            models.Index(fields=['order', 'timestamp']),
+            models.Index(fields=['activity_type', 'timestamp']),
+        ]
+    
+    def __str__(self):
+        return f"{self.delivery_manager.email} - {self.get_activity_type_display()} - {self.order.order_number}"
