@@ -134,6 +134,39 @@ class UnifiedRegistrationSerializer(BaseUserSerializer):
         # Create user
         user = super().create(validated_data)
         
+        # Create delivery profile ONLY for delivery admin users
+        if user_type == 'delivery_admin':
+            from ..models.delivery_profile_model import DeliveryProfile
+            from django.db import transaction
+            import logging
+            logger = logging.getLogger(__name__)
+            
+            # Double-check that user is actually a delivery admin
+            if not user.is_delivery_admin():
+                logger.error(f"Attempted to create delivery profile for non-delivery-admin user {user.id} (type: {user.user_type})")
+                raise ValueError(f"Cannot create delivery profile for user type: {user.user_type}")
+            
+            # Always create delivery profile with explicit values to avoid database default issues
+            try:
+                with transaction.atomic():
+                    # Check if profile already exists (shouldn't happen during registration, but safety check)
+                    if DeliveryProfile.objects.filter(user=user).exists():
+                        logger.warning(f"Delivery profile already exists for user {user.id} during registration")
+                        delivery_profile = DeliveryProfile.objects.get(user=user)
+                    else:
+                        # Create new profile with all required fields explicitly set
+                        delivery_profile = DeliveryProfile.objects.create(
+                            user=user,
+                            delivery_status='offline',  # Explicitly set - REQUIRED
+                            is_tracking_active=False,
+                        )
+                        logger.info(f"Created delivery profile for delivery admin user {user.id}")
+            except Exception as e:
+                # Log the full error for debugging
+                logger.error(f"Failed to create delivery profile for user {user.id}: {str(e)}", exc_info=True)
+                # Re-raise to prevent silent failures
+                raise ValueError(f"Failed to create delivery profile: {str(e)}")
+        
         return user
 
 
@@ -222,6 +255,38 @@ class DeliveryAdminRegistrationSerializer(BaseUserSerializer):
         
         # Create user
         user = super().create(validated_data)
+        
+        # Create delivery profile ONLY for delivery admin users
+        from ..models.delivery_profile_model import DeliveryProfile
+        from django.db import transaction
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        # Double-check that user is actually a delivery admin
+        if not user.is_delivery_admin():
+            logger.error(f"Attempted to create delivery profile for non-delivery-admin user {user.id} (type: {user.user_type})")
+            raise ValueError(f"Cannot create delivery profile for user type: {user.user_type}")
+        
+        # Always create delivery profile with explicit values to avoid database default issues
+        try:
+            with transaction.atomic():
+                # Check if profile already exists (shouldn't happen during registration, but safety check)
+                if DeliveryProfile.objects.filter(user=user).exists():
+                    logger.warning(f"Delivery profile already exists for user {user.id} during registration")
+                    delivery_profile = DeliveryProfile.objects.get(user=user)
+                else:
+                    # Create new profile with all required fields explicitly set
+                    delivery_profile = DeliveryProfile.objects.create(
+                        user=user,
+                        delivery_status='offline',  # Explicitly set - REQUIRED
+                        is_tracking_active=False,
+                    )
+                    logger.info(f"Created delivery profile for delivery admin user {user.id}")
+        except Exception as e:
+            # Log the full error for debugging
+            logger.error(f"Failed to create delivery profile for user {user.id}: {str(e)}", exc_info=True)
+            # Re-raise to prevent silent failures
+            raise ValueError(f"Failed to create delivery profile: {str(e)}")
         
         return user
 

@@ -30,7 +30,10 @@ develop-eggs/
 downloads/
 eggs/
 .eggs/
-lib/
+test/
+web/
+ios/
+windows/
 lib64/
 parts/
 sdist/

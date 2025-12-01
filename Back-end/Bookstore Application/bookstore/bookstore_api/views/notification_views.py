@@ -88,7 +88,8 @@ class NotificationViewSet(viewsets.ModelViewSet):
         """
         try:
             notification = NotificationService.mark_notification_as_read(pk)
-            serializer = self.get_serializer(notification)
+            # Use NotificationSerializer to return full notification data with is_read field
+            serializer = NotificationSerializer(notification)
             return Response(serializer.data)
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
@@ -117,6 +118,22 @@ class NotificationViewSet(viewsets.ModelViewSet):
             return Response({"unread_count": notifications.count()})
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['delete', 'post'])
+    def delete_all(self, request):
+        """
+        Delete all notifications for the current user
+        """
+        try:
+            count = NotificationService.delete_all_notifications(request.user.id)
+            return Response({
+                "message": f"{count} notifications deleted successfully",
+                "deleted_count": count
+            }, status=status.HTTP_200_OK)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     def destroy(self, request, pk=None):
         """

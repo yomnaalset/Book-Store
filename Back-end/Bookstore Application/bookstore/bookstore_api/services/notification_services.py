@@ -154,6 +154,19 @@ class NotificationService:
             raise ValueError(f"Notification with ID {notification_id} does not exist")
     
     @staticmethod
+    def delete_all_notifications(user_id):
+        """
+        Delete all notifications for a user
+        """
+        try:
+            user = User.objects.get(id=user_id)
+            count = Notification.objects.filter(recipient=user).count()
+            Notification.objects.filter(recipient=user).delete()
+            return count
+        except User.DoesNotExist:
+            raise ValueError(f"User with ID {user_id} does not exist")
+    
+    @staticmethod
     def send_email_notification(user_email, subject, message):
         """
         Send email notification to user

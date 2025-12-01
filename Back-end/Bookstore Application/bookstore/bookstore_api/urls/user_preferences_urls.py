@@ -12,7 +12,7 @@ user_preferences_urls = [
     # Legacy notification preferences endpoints
     path('notifications/', NotificationPreferencesView.as_view(), name='notification_preferences'),
     
-    # Legacy privacy preferences endpoints
+    # Privacy preferences endpoint
     path('privacy/', PrivacyPreferencesView.as_view(), name='privacy_preferences'),
     
     # Language options endpoint (for Flutter compatibility)

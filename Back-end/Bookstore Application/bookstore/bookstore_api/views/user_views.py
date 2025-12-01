@@ -829,9 +829,10 @@ class ApplicationLanguageView(APIView):
             )
             
             # Get all translatable choices from models
+            from ..models.delivery_profile_model import DeliveryProfile
             translatable_content = {
                 'user_types': get_translated_choices(User.USER_TYPE_CHOICES),
-                'delivery_statuses': get_translated_choices(User.DELIVERY_STATUS_CHOICES),
+                'delivery_statuses': get_translated_choices(DeliveryProfile.DELIVERY_STATUS_CHOICES),
                 'languages': get_translated_choices(User.LANGUAGE_CHOICES),
                 'borrow_statuses': get_translated_choices(BorrowRequest.BorrowStatusChoices.choices),
                 'extension_statuses': get_translated_choices(BorrowRequest.ExtensionStatusChoices.choices),

@@ -4,6 +4,7 @@ from django.core.exceptions import ValidationError
 from typing import Dict, Any, List, Optional
 import logging
 from datetime import datetime, timedelta
+from decimal import Decimal
 
 from ..models import (
     Order, OrderItem, DeliveryAssignment, DeliveryStatusHistory, 
@@ -84,11 +85,25 @@ class OrderService:
                     'discount_percentage': payment.discount_percentage,
                 }
             
+            # Calculate delivery cost from payment if available, otherwise calculate from cart
+            delivery_cost = payment.delivery_cost if hasattr(payment, 'delivery_cost') and payment.delivery_cost else Decimal('0.00')
+            if delivery_cost == 0:
+                # Calculate delivery cost from cart
+                TAX_RATE = Decimal('0.08')  # 8% tax rate
+                DELIVERY_RATE = Decimal('0.04')  # 4% delivery cost rate
+                
+                subtotal = cart.get_total_price()
+                tax_amount = subtotal * TAX_RATE
+                discount_amount = payment.discount_amount if payment.discount_amount else Decimal('0.00')
+                final_invoice_value = subtotal + tax_amount - discount_amount
+                delivery_cost = final_invoice_value * DELIVERY_RATE
+            
             # Create order
             order = Order.objects.create(
                 customer=payment.user,
                 payment=payment,
                 total_amount=payment.amount,
+                delivery_cost=delivery_cost,
                 **discount_info,
                 **delivery_info
             )
@@ -297,6 +312,19 @@ class DeliveryService:
             order.status = 'assigned_to_delivery'
             order.save()
             
+            # Create notification for delivery manager
+            try:
+                from ..services.notification_services import NotificationService
+                NotificationService.create_notification(
+                    user_id=delivery_manager.id,
+                    title="New Delivery Assigned",
+                    message=f"You have been assigned to deliver order #{order.order_number} to {order.customer.get_full_name()}. Delivery address: {order.delivery_address}",
+                    notification_type="delivery_assigned",
+                    related_order_id=order.id
+                )
+            except Exception as e:
+                logger.error(f"Failed to create notification for delivery assignment: {str(e)}")
+            
             return {
                 'success': True,
                 'message': f'Order assigned to {delivery_manager.get_full_name()}',
@@ -360,7 +388,10 @@ class DeliveryService:
                 # Automatically change delivery manager status to online when completing delivery
                 try:
                     from ..services.delivery_profile_services import DeliveryProfileService
-                    DeliveryProfileService.complete_delivery_task(assignment.delivery_manager)
+                    DeliveryProfileService.complete_delivery_task(
+                        assignment.delivery_manager,
+                        completed_order_id=assignment.order.id
+                    )
                 except Exception as e:
                     logger.warning(f"Failed to update delivery manager status to online: {str(e)}")
             elif new_status == 'completed':
@@ -371,7 +402,10 @@ class DeliveryService:
                 # Automatically change delivery manager status to online when completing delivery
                 try:
                     from ..services.delivery_profile_services import DeliveryProfileService
-                    DeliveryProfileService.complete_delivery_task(assignment.delivery_manager)
+                    DeliveryProfileService.complete_delivery_task(
+                        assignment.delivery_manager,
+                        completed_order_id=assignment.order.id
+                    )
                 except Exception as e:
                     logger.warning(f"Failed to update delivery manager status to online: {str(e)}")
             elif new_status == 'failed':
@@ -397,6 +431,32 @@ class DeliveryService:
             if new_status == 'in_transit':
                 assignment.order.status = 'in_delivery'
                 assignment.order.save()
+            
+            # Create notifications for important status changes
+            try:
+                from ..services.notification_services import NotificationService
+                
+                # Notify delivery manager about status updates (if updated by admin/system)
+                if updated_by != assignment.delivery_manager:
+                    status_messages = {
+                        'accepted': f"Your delivery assignment for order #{assignment.order.order_number} has been accepted.",
+                        'picked_up': f"Order #{assignment.order.order_number} has been marked as picked up.",
+                        'in_transit': f"Delivery for order #{assignment.order.order_number} is now in transit.",
+                        'delivered': f"Order #{assignment.order.order_number} has been delivered successfully.",
+                        'completed': f"Delivery assignment for order #{assignment.order.order_number} has been completed.",
+                        'failed': f"Delivery for order #{assignment.order.order_number} has been marked as failed. Reason: {failure_reason or 'Not specified'}",
+                    }
+                    
+                    if new_status in status_messages:
+                        NotificationService.create_notification(
+                            user_id=assignment.delivery_manager.id,
+                            title=f"Delivery Status Update: {new_status.title()}",
+                            message=status_messages[new_status],
+                            notification_type="delivery_status_update",
+                            related_order_id=assignment.order.id
+                        )
+            except Exception as e:
+                logger.error(f"Failed to create notification for delivery status update: {str(e)}")
             
             return {
                 'success': True,
@@ -785,10 +845,12 @@ class LocationTrackingService:
         heading: float = None,
         battery_level: int = None,
         network_type: str = None,
-        delivery_assignment_id: int = None
+        delivery_assignment_id: int = None,
+        borrow_request_id: int = None
     ) -> Dict[str, Any]:
         """
-        Update location with real-time tracking data.
+        Step 3.3: Update location with real-time tracking data.
+        Called every 5 seconds when delivery is active.
         """
         try:
             if not delivery_manager.is_delivery_admin():
@@ -810,6 +872,21 @@ class LocationTrackingService:
                         'message': 'Delivery assignment not found',
                         'error_code': 'DELIVERY_ASSIGNMENT_NOT_FOUND'
                     }
+            
+            # If borrow_request_id is provided, try to find the delivery assignment
+            if borrow_request_id and not delivery_assignment:
+                from ..models.delivery_model import DeliveryAssignment, Order
+                from ..models.borrowing_model import BorrowRequest
+                try:
+                    borrow_request = BorrowRequest.objects.get(id=borrow_request_id)
+                    order = Order.objects.filter(
+                        borrow_request=borrow_request,
+                        order_type='borrowing'
+                    ).first()
+                    if order:
+                        delivery_assignment = DeliveryAssignment.objects.filter(order=order).first()
+                except BorrowRequest.DoesNotExist:
+                    pass
             
             # Update location with tracking data
             success, message = delivery_manager.update_tracking_location(
@@ -838,7 +915,8 @@ class LocationTrackingService:
                 return {
                     'success': True,
                     'message': 'Location updated with tracking data',
-                    'location': delivery_manager.get_location_dict()
+                    'location': delivery_manager.get_location_dict(),
+                    'timestamp': timezone.now().isoformat()
                 }
             else:
                 return {
@@ -853,6 +931,96 @@ class LocationTrackingService:
                 'success': False,
                 'message': f"Failed to update location: {str(e)}",
                 'error_code': 'LOCATION_UPDATE_ERROR'
+            }
+    
+    @staticmethod
+    def get_location_for_borrow_request(borrow_request_id: int) -> Dict[str, Any]:
+        """
+        Step 3.4: Get current location for a specific borrow request.
+        Used for real-time tracking display.
+        """
+        try:
+            from ..models.borrowing_model import BorrowRequest, BorrowStatusChoices
+            
+            borrow_request = BorrowRequest.objects.get(id=borrow_request_id)
+            
+            # Only available during OUT_FOR_DELIVERY or OUT_FOR_RETURN_PICKUP
+            if borrow_request.status not in [BorrowStatusChoices.OUT_FOR_DELIVERY, BorrowStatusChoices.OUT_FOR_RETURN_PICKUP]:
+                return {
+                    'success': False,
+                    'message': 'Location tracking not available for this request',
+                    'error_code': 'TRACKING_NOT_AVAILABLE',
+                    'current_status': borrow_request.status
+                }
+            
+            delivery_manager = borrow_request.delivery_person
+            if not delivery_manager:
+                return {
+                    'success': False,
+                    'message': 'No delivery manager assigned',
+                    'error_code': 'NO_DELIVERY_MANAGER'
+                }
+            
+            # Get location from delivery profile
+            location_data = None
+            if hasattr(delivery_manager, 'delivery_profile') and delivery_manager.delivery_profile:
+                profile = delivery_manager.delivery_profile
+                if profile.latitude is not None and profile.longitude is not None:
+                    location_data = {
+                        'latitude': float(profile.latitude),
+                        'longitude': float(profile.longitude),
+                        'address': profile.address,
+                        'last_updated': profile.location_updated_at.isoformat() if profile.location_updated_at else None,
+                        'is_tracking_active': profile.is_tracking_active
+                    }
+            
+            # Get latest location from history if profile doesn't have it
+            if not location_data:
+                from ..models.delivery_model import LocationHistory
+                latest_location = LocationHistory.objects.filter(
+                    delivery_manager=delivery_manager
+                ).order_by('-recorded_at').first()
+                
+                if latest_location:
+                    location_data = {
+                        'latitude': float(latest_location.latitude),
+                        'longitude': float(latest_location.longitude),
+                        'address': latest_location.address,
+                        'last_updated': latest_location.recorded_at.isoformat(),
+                        'is_tracking_active': True
+                    }
+            
+            if not location_data:
+                return {
+                    'success': False,
+                    'message': 'Location not available',
+                    'error_code': 'LOCATION_NOT_AVAILABLE'
+                }
+            
+            return {
+                'success': True,
+                'location': location_data,
+                'delivery_manager': {
+                    'id': delivery_manager.id,
+                    'name': delivery_manager.get_full_name(),
+                    'phone': delivery_manager.phone_number if hasattr(delivery_manager, 'phone_number') else None
+                },
+                'borrow_request_id': borrow_request_id,
+                'status': borrow_request.status
+            }
+            
+        except BorrowRequest.DoesNotExist:
+            return {
+                'success': False,
+                'message': 'Borrow request not found',
+                'error_code': 'BORROW_REQUEST_NOT_FOUND'
+            }
+        except Exception as e:
+            logger.error(f"Error getting location for borrow request: {str(e)}")
+            return {
+                'success': False,
+                'message': f"Failed to get location: {str(e)}",
+                'error_code': 'GET_LOCATION_ERROR'
             }
     
     @staticmethod
@@ -981,45 +1149,64 @@ class BorrowingDeliveryService:
     """
     
     @staticmethod
+    @transaction.atomic
     def create_delivery_for_borrow(borrow_request):
         """
         Create a delivery order for a borrowing request as specified in requirements
         """
-        from ..models.delivery_model import Order, OrderItem
+        from ..models.delivery_model import Order, OrderItem, DeliveryAssignment
         
-        delivery_order = Order.objects.create(
-            order_number=f"BR{borrow_request.id:06d}",
-            customer=borrow_request.customer,
-            payment=None,  # Borrowing doesn't require payment upfront
-            total_amount=0.00,
-            order_type='borrowing',
-            borrow_request=borrow_request,
-            delivery_address=borrow_request.delivery_address,
-            delivery_city="Customer City",  # Could be extracted from address
-            delivery_notes=borrow_request.additional_notes or "",
-            status='assigned_to_delivery' if borrow_request.delivery_person else 'pending_assignment'
-        )
-        
-        # Create order item for the borrowed book
-        OrderItem.objects.create(
-            order=delivery_order,
-            book=borrow_request.book,
-            quantity=1,
-            unit_price=0.00,
-            total_price=0.00
-        )
-        
-        # If delivery manager is assigned to borrow request, create delivery assignment
-        if borrow_request.delivery_person:
-            from ..models.delivery_model import DeliveryAssignment
-            DeliveryAssignment.objects.create(
-                order=delivery_order,
-                delivery_person=borrow_request.delivery_person,
-                estimated_delivery_time=borrow_request.expected_return_date,  # Use expected return date as estimated delivery
-                delivery_notes=f"Borrowing delivery for {borrow_request.book.name}"
+        try:
+            # Create the delivery order
+            # When delivery manager is assigned, set status to 'assigned' (not 'assigned_to_delivery')
+            # This ensures the request appears in DM's Borrowing Requests list immediately
+            delivery_order = Order.objects.create(
+                order_number=f"BR{borrow_request.id:06d}",
+                customer=borrow_request.customer,
+                payment=None,  # Borrowing doesn't require payment upfront
+                total_amount=0.00,
+                order_type='borrowing',
+                borrow_request=borrow_request,
+                delivery_address=borrow_request.delivery_address,
+                delivery_city="Customer City",  # Could be extracted from address
+                delivery_notes=borrow_request.additional_notes or "",
+                status='assigned' if borrow_request.delivery_person else 'pending_assignment'
             )
-        
-        return delivery_order
+            
+            logger.info(f"Created delivery order {delivery_order.id} for borrow request {borrow_request.id}")
+            
+            # Create order item for the borrowed book
+            OrderItem.objects.create(
+                order=delivery_order,
+                book=borrow_request.book,
+                quantity=1,
+                unit_price=0.00,
+                total_price=0.00
+            )
+            
+            # If delivery manager is assigned to borrow request, create delivery assignment
+            if borrow_request.delivery_person:
+                # Check if assignment already exists (prevent duplicates)
+                if not DeliveryAssignment.objects.filter(order=delivery_order).exists():
+                    assignment = DeliveryAssignment.objects.create(
+                        order=delivery_order,
+                        delivery_manager=borrow_request.delivery_person,
+                        estimated_delivery_time=borrow_request.expected_return_date,
+                        delivery_notes=f"Borrowing delivery for {borrow_request.book.name}",
+                        status='assigned',  # Explicitly set status
+                        assigned_by=borrow_request.approved_by  # Set who assigned it
+                    )
+                    logger.info(f"Created delivery assignment {assignment.id} for order {delivery_order.id}, assigned to manager {borrow_request.delivery_person.id}")
+                else:
+                    logger.warning(f"Delivery assignment already exists for order {delivery_order.id}")
+            else:
+                logger.info(f"No delivery manager assigned to borrow request {borrow_request.id}, order status set to pending_assignment")
+            
+            return delivery_order
+            
+        except Exception as e:
+            logger.error(f"Error creating delivery for borrow request {borrow_request.id}: {str(e)}", exc_info=True)
+            raise  # Re-raise to ensure transaction rollback
     
     @staticmethod
     @transaction.atomic

@@ -3,6 +3,7 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
+from decimal import Decimal
 from .user_model import User
 
 
@@ -57,7 +58,7 @@ class DiscountCode(models.Model):
     discount_percentage = models.DecimalField(
         max_digits=5,
         decimal_places=2,
-        validators=[MinValueValidator(0.01), MaxValueValidator(100.00)],
+        validators=[MinValueValidator(Decimal('0.01')), MaxValueValidator(Decimal('100.00'))],
         help_text="Discount percentage (1-100%)"
     )
     
@@ -352,8 +353,8 @@ class BookDiscount(models.Model):
     discounted_price = models.DecimalField(
         max_digits=10,
         decimal_places=2,
-        validators=[MinValueValidator(0.01)],
-        default=0.01,
+        validators=[MinValueValidator(Decimal('0.01'))],
+        default=Decimal('0.01'),
         help_text="Fixed discounted price for the book"
     )
     

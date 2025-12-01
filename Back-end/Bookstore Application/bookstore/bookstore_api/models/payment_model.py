@@ -130,6 +130,13 @@ class Payment(models.Model):
         help_text="Discount percentage applied"
     )
     
+    delivery_cost = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0.00,
+        help_text="Delivery cost (4% of final invoice value)"
+    )
+    
     failure_reason = models.TextField(
         blank=True,
         null=True,

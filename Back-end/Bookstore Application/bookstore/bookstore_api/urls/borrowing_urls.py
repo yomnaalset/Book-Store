@@ -5,6 +5,7 @@ from bookstore_api.views.borrowing_views import (
     
     # Customer views
     BorrowRequestCreateView,
+    ConfirmPaymentView,
     CustomerBorrowingsView,
     BorrowRequestDetailView,
     BorrowingExtensionView,
@@ -31,14 +32,20 @@ from bookstore_api.views.borrowing_views import (
     BookCollectionView,
     BorrowingDeliveryOrdersView,
     StartDeliveryView,
+    AcceptDeliveryRequestView,
+    RejectDeliveryRequestView,
+    RejectDeliveryOrderView,
+    StartDeliveryOrderView,
+    
+    # Location Tracking views
+    GetDeliveryLocationView,
     
     # Late Return Management views
     LateReturnProcessView,
-    BookReturnWithFineView,
-    FinePaymentView,
     LateReturnSummaryView,
     DepositManagementView,
     ProcessOverdueBorrowingsView,
+    
 )   
 
 # Borrowing URLs configuration
@@ -54,6 +61,7 @@ borrowing_urls = [
     # =====================================
     # Customer borrow request management
     path('requests/', BorrowRequestCreateView.as_view(), name='borrow_request_create'),
+    path('confirm-payment/<int:pk>/', ConfirmPaymentView.as_view(), name='confirm_payment'),
     path('my-borrowings/', CustomerBorrowingsView.as_view(), name='customer_borrowings'),
     path('borrowings/<int:pk>/', BorrowRequestDetailView.as_view(), name='borrow_request_detail'),
     
@@ -98,8 +106,17 @@ borrowing_urls = [
     
     # New borrowing delivery workflow
     path('delivery/orders/', BorrowingDeliveryOrdersView.as_view(), name='borrowing_delivery_orders'),
-    path('delivery/orders/<int:order_id>/start/', StartDeliveryView.as_view(), name='start_delivery'),
+    path('delivery/orders/<int:order_id>/start/', StartDeliveryOrderView.as_view(), name='start_delivery_order'),
+    path('delivery/orders/<int:order_id>/reject/', RejectDeliveryOrderView.as_view(), name='reject_delivery_order'),
     path('delivery/orders/<int:order_id>/complete/', CompleteDeliveryView.as_view(), name='complete_delivery'),
+    
+    # Step 3.1 & 3.2: New delivery workflow endpoints
+    path('borrowings/<int:borrow_id>/accept/', AcceptDeliveryRequestView.as_view(), name='accept_delivery_request'),
+    path('borrowings/<int:borrow_id>/reject/', RejectDeliveryRequestView.as_view(), name='reject_delivery_request'),
+    path('borrowings/<int:borrow_id>/start-delivery/', StartDeliveryView.as_view(), name='start_delivery'),
+    
+    # Step 3.4: Real-time location tracking endpoint
+    path('borrowings/<int:borrow_id>/delivery-location/', GetDeliveryLocationView.as_view(), name='get_delivery_location'),
     
     # =====================================
     # LATE RETURN MANAGEMENT ENDPOINTS
@@ -107,11 +124,6 @@ borrowing_urls = [
     # Late return processing (Library Manager)
     path('borrowings/<int:borrow_request_id>/late-return/', LateReturnProcessView.as_view(), name='late_return_process'),
     
-    # Book return with fine (Delivery Manager)
-    path('borrowings/<int:borrow_request_id>/return-with-fine/', BookReturnWithFineView.as_view(), name='book_return_with_fine'),
-    
-    # Fine payment (Customer)
-    path('borrowings/<int:borrow_request_id>/pay-fine/', FinePaymentView.as_view(), name='fine_payment'),
     
     # Late return summary (All authenticated users with permissions)
     path('borrowings/<int:borrow_request_id>/late-return-summary/', LateReturnSummaryView.as_view(), name='late_return_summary'),
@@ -121,6 +133,7 @@ borrowing_urls = [
     
     # Process overdue borrowings (Library Manager)
     path('process-overdue/', ProcessOverdueBorrowingsView.as_view(), name='process_overdue_borrowings'),
+    
 ]
 
 urlpatterns = borrowing_urls

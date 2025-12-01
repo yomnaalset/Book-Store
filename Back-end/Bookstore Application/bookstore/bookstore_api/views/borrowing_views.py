@@ -2,6 +2,7 @@ from rest_framework import generics, status, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.exceptions import ValidationError
 from django.shortcuts import get_object_or_404
 from django.db.models import Q
 from django.utils import timezone, translation
@@ -16,8 +17,10 @@ from ..serializers.borrowing_serializers import (
     BorrowApprovalSerializer, BorrowExtensionCreateSerializer, BorrowExtensionSerializer,
     BorrowFineSerializer, BorrowRatingSerializer, EarlyReturnSerializer,
     DeliveryUpdateSerializer, MostBorrowedBookSerializer, BorrowingReportSerializer,
-    PendingRequestsSerializer, DeliveryReadySerializer, DeliveryManagerSerializer
+    PendingRequestsSerializer, DeliveryReadySerializer, DeliveryManagerSerializer,
+    ConfirmPaymentSerializer
 )
+from ..serializers.delivery_serializers import BorrowingOrderSerializer
 from ..services.borrowing_services import (
     BorrowingService, BorrowingNotificationService, BorrowingReportService, LateReturnService
 )
@@ -97,6 +100,24 @@ class BorrowRequestCreateView(generics.CreateAPIView):
                 'data': response_serializer.data
             }, status=status.HTTP_201_CREATED)
             
+        except ValidationError as e:
+            # Handle DRF validation errors properly
+            logger.error(f"Validation error creating borrow request: {e.detail}")
+            return Response({
+                'success': False,
+                'message': 'Failed to create borrowing request',
+                'errors': e.detail  # This is already a properly formatted dict
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except ValueError as e:
+            # Handle business logic errors (like fine blocking)
+            logger.error(f"Error creating borrow request: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to create borrowing request',
+                'errors': {
+                    'non_field_errors': [str(e)]
+                }
+            }, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             logger.error(f"Error creating borrow request: {str(e)}")
             return Response({
@@ -104,6 +125,89 @@ class BorrowRequestCreateView(generics.CreateAPIView):
                 'message': 'Failed to create borrowing request',
                 'errors': format_error_message(str(e))
             }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ConfirmPaymentView(APIView):
+    """
+    API view for confirming payment for a borrowing request
+    POST /api/borrowings/confirm-payment/{id}
+    """
+    permission_classes = [permissions.IsAuthenticated, IsCustomer]
+    
+    def post(self, request, pk):
+        try:
+            # Get the borrow request
+            borrow_request = get_object_or_404(BorrowRequest, pk=pk)
+            
+            # Verify that the request belongs to the current user
+            if borrow_request.customer != request.user:
+                return Response({
+                    'success': False,
+                    'message': 'You do not have permission to confirm payment for this request'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Validate request data
+            serializer = ConfirmPaymentSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            
+            # Prepare card data if payment method is mastercard
+            card_data = None
+            if serializer.validated_data['payment_method'] == 'mastercard':
+                card_data = {
+                    'card_number': serializer.validated_data.get('card_number'),
+                    'cardholder_name': serializer.validated_data.get('cardholder_name'),
+                    'expiry_month': serializer.validated_data.get('expiry_month'),
+                    'expiry_year': serializer.validated_data.get('expiry_year'),
+                    'cvv': serializer.validated_data.get('cvv')
+                }
+            
+            # Process payment confirmation
+            result = BorrowingService.confirm_payment(
+                borrow_request=borrow_request,
+                payment_method=serializer.validated_data['payment_method'],
+                card_data=card_data
+            )
+            
+            if result['success']:
+                # Return updated borrow request
+                response_serializer = BorrowRequestDetailSerializer(borrow_request)
+                return Response({
+                    'success': True,
+                    'message': result['message'],
+                    'data': response_serializer.data,
+                    'payment_method': result.get('payment_method'),
+                    'transaction_id': result.get('transaction_id')
+                }, status=status.HTTP_200_OK)
+            else:
+                return Response({
+                    'success': False,
+                    'message': result.get('message', 'Payment confirmation failed'),
+                    'error_code': result.get('error_code')
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+        except ValidationError as e:
+            logger.error(f"Validation error confirming payment: {e.detail}")
+            return Response({
+                'success': False,
+                'message': 'Invalid payment data',
+                'errors': e.detail
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except ValueError as e:
+            logger.error(f"Error confirming payment: {str(e)}")
+            return Response({
+                'success': False,
+                'message': str(e),
+                'errors': {
+                    'non_field_errors': [str(e)]
+                }
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error(f"Error confirming payment: {str(e)}", exc_info=True)
+            return Response({
+                'success': False,
+                'message': 'Failed to confirm payment',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class CustomerBorrowingsView(generics.ListAPIView):
@@ -151,7 +255,28 @@ class BorrowRequestDetailView(generics.RetrieveAPIView):
     def get_object(self):
         """Get borrow request object with permission check"""
         borrow_id = self.kwargs.get('pk')
-        borrow_request = get_object_or_404(BorrowRequest, id=borrow_id)
+        # Optimize query by selecting related customer, profile, delivery_person, and approved_by
+        # Use select_related for ForeignKey relationships to avoid N+1 queries
+        borrow_request = get_object_or_404(
+            BorrowRequest.objects.select_related(
+                'customer', 
+                'customer__profile',
+                'delivery_person',
+                'delivery_person__profile',
+                'approved_by',
+                'approved_by__profile'
+            ).prefetch_related('customer__profile'),
+            id=borrow_id
+        )
+        
+        # Ensure customer and profile are accessible
+        if borrow_request.customer:
+            # Force access to profile to ensure it's loaded
+            try:
+                _ = borrow_request.customer.profile
+            except Exception:
+                # Profile doesn't exist, which is okay
+                pass
         
         # Check permissions
         if (borrow_request.customer != self.request.user and 
@@ -281,28 +406,78 @@ class BorrowApprovalView(APIView):
 
 class DeliveryManagerSelectionView(generics.ListAPIView):
     """
-    API view for library admins to get available delivery managers for assignment
+    API view for library admins to get ALL delivery managers for assignment.
+    Returns all delivery managers (online, busy, offline) with their status information.
+    The frontend will display all managers but only allow selection of online ones.
     """
     serializer_class = DeliveryManagerSerializer
     permission_classes = [permissions.IsAuthenticated, IsLibraryAdmin]
     
     def get_queryset(self):
-        """Get all delivery managers with their status"""
+        """Get ALL delivery managers with their status (online, busy, offline) - no filtering"""
         return BorrowingService.get_available_delivery_managers()
     
     def list(self, request, *args, **kwargs):
         try:
             queryset = self.get_queryset()
-            serializer = self.get_serializer(queryset, many=True)
             
-            return Response({
+            # Force evaluation of queryset to ensure we get all managers
+            managers_list = list(queryset)
+            logger.info(f"DeliveryManagerSelectionView: Total managers in queryset: {len(managers_list)}")
+            logger.info(f"DeliveryManagerSelectionView: Queryset count (before list): {queryset.count()}")
+            
+            # Log each manager BEFORE serialization
+            for manager in managers_list:
+                try:
+                    has_profile = hasattr(manager, 'delivery_profile')
+                    profile = manager.delivery_profile if has_profile else None
+                    delivery_status_value = profile.delivery_status if profile else None
+                    status_display = profile.get_delivery_status_display() if profile and delivery_status_value else None
+                    
+                    logger.info(
+                        f"Manager {manager.id} ({manager.get_full_name()}): "
+                        f"has_profile={has_profile}, delivery_status={delivery_status_value}, status_display={status_display}, "
+                        f"is_active={manager.is_active}, user_type={manager.user_type}"
+                    )
+                except Exception as e:
+                    logger.warning(f"Error logging manager {manager.id}: {str(e)}")
+            
+            # Serialize the managers
+            serializer = self.get_serializer(managers_list, many=True)
+            
+            # Also log the serialized data for debugging
+            logger.info(f"DeliveryManagerSelectionView: Serialized data count: {len(serializer.data)}")
+            if serializer.data:
+                logger.info(f"Serialized data sample (first item): {serializer.data[0]}")
+                # Log all delivery_status values with ALL possible fields
+                for idx, item in enumerate(serializer.data):
+                    logger.info(f"Item {idx}: id={item.get('id')}, name={item.get('name')}, full_name={item.get('full_name')}, "
+                              f"delivery_status={item.get('delivery_status')}, status={item.get('status')}, "
+                              f"delivery_status_lower={item.get('delivery_status_lower')}, "
+                              f"status_display={item.get('status_display')}, status_text={item.get('status_text')}, "
+                              f"is_available={item.get('is_available')}, status_color={item.get('status_color')}")
+                    # Log full item structure for debugging
+                    logger.debug(f"Full item {idx} structure: {item}")
+            else:
+                logger.warning("No delivery managers found in serialized data")
+            
+            # Return response with both nested and flat structure for compatibility
+            response_data = {
                 'success': True,
                 'message': 'Delivery managers retrieved successfully',
                 'data': serializer.data
-            }, status=status.HTTP_200_OK)
+            }
+            
+            # Log the full response structure
+            logger.info(f"Response structure keys: {list(response_data.keys())}")
+            logger.info(f"Response data count: {len(serializer.data)}")
+            
+            return Response(response_data, status=status.HTTP_200_OK)
             
         except Exception as e:
+            import traceback
             logger.error(f"Error retrieving delivery managers: {str(e)}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return Response({
                 'success': False,
                 'message': 'Failed to retrieve delivery managers',
@@ -383,31 +558,89 @@ class DeliveryPickupView(APIView):
 class BorrowingDeliveryOrdersView(generics.ListAPIView):
     """
     API view for delivery managers to view borrowing delivery orders
+    Returns orders assigned to the delivery manager OR unassigned pending orders
     """
-    serializer_class = BorrowRequestListSerializer
+    serializer_class = BorrowingOrderSerializer
     permission_classes = [permissions.IsAuthenticated, IsDeliveryAdmin]
     
     def get_queryset(self):
-        """Get borrowing delivery orders"""
+        """
+        Get ALL borrowing delivery orders assigned to the DM's 'Borrow Requests' list.
+        Once a request is assigned to a delivery manager, it remains visible regardless of status.
+        This ensures delivery managers can see their complete history of assigned requests.
+        """
         from ..models.delivery_model import Order
-        return Order.objects.filter(
-            order_type='borrowing',
-            status='pending_assignment'
-        ).select_related('borrow_request', 'borrow_request__book', 'borrow_request__customer')
+        from django.db.models import Q
+        
+        user = self.request.user
+        
+        logger.info(f"BorrowingDeliveryOrdersView: Getting all orders for DM {user.id}")
+        
+        # 1. Base Query: Only Borrowing type orders
+        base_queryset = Order.objects.filter(
+            order_type='borrowing'
+        )
+        
+        # 2. Filter: Orders Assigned to THIS DM (regardless of status)
+        # Once assigned to a delivery manager, requests remain visible forever
+        # This includes all statuses: pending, in-progress, delivered, active, returned, etc.
+        assigned_orders_filter = Q(
+            # Must be explicitly assigned to the current DM (using the BorrowRequest link)
+            borrow_request__delivery_person=user
+            # No status filter - show ALL assigned requests
+        )
+        
+        # 3. Final Query: Apply the assigned filter (no status restriction)
+        queryset = base_queryset.filter(
+            assigned_orders_filter
+        ).select_related(
+            'customer', 
+            'borrow_request', 
+            'borrow_request__book', 
+            'borrow_request__delivery_person'
+            # Add other necessary select_related/prefetch_related fields here
+        ).distinct()
+        
+        logger.info(f"BorrowingDeliveryOrdersView: Final queryset count for DM {user.id}: {queryset.count()}")
+        
+        # Log the actual statuses retrieved for immediate debugging
+        for order in queryset:
+            logger.info(f"Fetched Order {order.id} with BR Status: {order.borrow_request.status}")
+        
+        return queryset
     
     def list(self, request, *args, **kwargs):
         try:
             queryset = self.get_queryset()
-            serializer = self.get_serializer(queryset, many=True)
+            queryset_list = list(queryset)
+            logger.info(f"BorrowingDeliveryOrdersView: Queryset evaluated, {len(queryset_list)} orders found")
+            
+            # Try to serialize each order individually to catch any serialization errors
+            serialized_data = []
+            for order in queryset_list:
+                try:
+                    serializer = self.get_serializer(order)
+                    serialized_data.append(serializer.data)
+                except Exception as e:
+                    logger.error(f"BorrowingDeliveryOrdersView: Error serializing order {order.order_number} (ID: {order.id}): {str(e)}")
+                    import traceback
+                    logger.error(f"BorrowingDeliveryOrdersView: Traceback: {traceback.format_exc()}")
+                    # Continue with other orders even if one fails
+            
+            logger.info(f"BorrowingDeliveryOrdersView: Successfully serialized {len(serialized_data)} orders")
+            if serialized_data:
+                logger.info(f"BorrowingDeliveryOrdersView: First order sample: {serialized_data[0]}")
             
             return Response({
                 'success': True,
                 'message': 'Borrowing delivery orders retrieved successfully',
-                'data': serializer.data
+                'data': serialized_data
             }, status=status.HTTP_200_OK)
             
         except Exception as e:
             logger.error(f"Error retrieving borrowing delivery orders: {str(e)}")
+            import traceback
+            logger.error(f"BorrowingDeliveryOrdersView: Full traceback: {traceback.format_exc()}")
             return Response({
                 'success': False,
                 'message': 'Failed to retrieve delivery orders',
@@ -415,9 +648,269 @@ class BorrowingDeliveryOrdersView(generics.ListAPIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+class AcceptDeliveryRequestView(APIView):
+    """
+    Step 3.1: API view for delivery managers to accept request
+    Updates status to "Preparing"
+    """
+    permission_classes = [permissions.IsAuthenticated, IsDeliveryAdmin]
+    
+    def patch(self, request, borrow_id):
+        try:
+            borrow_request = get_object_or_404(BorrowRequest, id=borrow_id)
+            
+            if borrow_request.status != BorrowStatusChoices.ASSIGNED_TO_DELIVERY:
+                return Response({
+                    'success': False,
+                    'message': 'Request must be assigned to delivery before acceptance',
+                    'errors': {'status': ['Request is not in assigned_to_delivery status']}
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            if borrow_request.delivery_person != request.user:
+                return Response({
+                    'success': False,
+                    'message': 'Only the assigned delivery manager can accept this request',
+                    'errors': {'permission': ['You are not assigned to this request']}
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            borrow_request = BorrowingService.accept_delivery_request(
+                borrow_request=borrow_request,
+                delivery_person=request.user
+            )
+            
+            response_serializer = BorrowRequestDetailSerializer(borrow_request)
+            
+            return Response({
+                'success': True,
+                'message': 'Delivery request accepted successfully. Status: Preparing',
+                'data': response_serializer.data
+            }, status=status.HTTP_200_OK)
+            
+        except ValueError as e:
+            return Response({
+                'success': False,
+                'message': str(e),
+                'errors': {'validation': [str(e)]}
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error(f"Error accepting delivery request: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to accept delivery request',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class RejectDeliveryRequestView(APIView):
+    """
+    API view for delivery managers to reject delivery assignment
+    Unassigns the delivery manager from the request
+    """
+    permission_classes = [permissions.IsAuthenticated, IsDeliveryAdmin]
+    
+    def post(self, request, borrow_id):
+        try:
+            borrow_request = get_object_or_404(BorrowRequest, id=borrow_id)
+            
+            if borrow_request.status != BorrowStatusChoices.ASSIGNED_TO_DELIVERY:
+                return Response({
+                    'success': False,
+                    'message': 'Request must be assigned to delivery before rejection',
+                    'errors': {'status': ['Request is not in assigned_to_delivery status']}
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            if borrow_request.delivery_person != request.user:
+                return Response({
+                    'success': False,
+                    'message': 'Only the assigned delivery manager can reject this request',
+                    'errors': {'permission': ['You are not assigned to this request']}
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Get rejection reason from request
+            rejection_reason = request.data.get('rejection_reason', 'No reason provided')
+            if not rejection_reason or rejection_reason.strip() == '':
+                return Response({
+                    'success': False,
+                    'message': 'Rejection reason is required',
+                    'errors': {'rejection_reason': ['Please provide a reason for rejection']}
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            borrow_request = BorrowingService.reject_delivery_request(
+                borrow_request=borrow_request,
+                delivery_person=request.user,
+                rejection_reason=rejection_reason.strip()
+            )
+            
+            response_serializer = BorrowRequestDetailSerializer(borrow_request)
+            
+            return Response({
+                'success': True,
+                'message': 'Delivery request rejected successfully. The request has been unassigned and will be reassigned to another delivery manager.',
+                'data': response_serializer.data
+            }, status=status.HTTP_200_OK)
+            
+        except ValueError as e:
+            return Response({
+                'success': False,
+                'message': str(e),
+                'errors': {'validation': [str(e)]}
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error(f"Error rejecting delivery request: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to reject delivery request',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
 class StartDeliveryView(APIView):
     """
-    API view for delivery managers to start delivery
+    Step 3.2: API view for delivery managers to start delivery
+    Updates status to "Out for Delivery"
+    """
+    permission_classes = [permissions.IsAuthenticated, IsDeliveryAdmin]
+    
+    def patch(self, request, borrow_id):
+        try:
+            borrow_request = get_object_or_404(BorrowRequest, id=borrow_id)
+            
+            if borrow_request.status != BorrowStatusChoices.PREPARING:
+                return Response({
+                    'success': False,
+                    'message': 'Request must be in Preparing status before starting delivery',
+                    'errors': {'status': ['Request is not in preparing status']}
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            if borrow_request.delivery_person != request.user:
+                return Response({
+                    'success': False,
+                    'message': 'Only the assigned delivery manager can start delivery',
+                    'errors': {'permission': ['You are not assigned to this request']}
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            borrow_request = BorrowingService.start_delivery(
+                borrow_request=borrow_request,
+                delivery_person=request.user
+            )
+            
+            response_serializer = BorrowRequestDetailSerializer(borrow_request)
+            
+            return Response({
+                'success': True,
+                'message': 'Delivery started successfully. Status: Out for Delivery. Location tracking is now active.',
+                'data': response_serializer.data
+            }, status=status.HTTP_200_OK)
+            
+        except ValueError as e:
+            return Response({
+                'success': False,
+                'message': str(e),
+                'errors': {'validation': [str(e)]}
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error(f"Error starting delivery: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to start delivery',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class RejectDeliveryOrderView(APIView):
+    """
+    API view for delivery managers to reject delivery assignment (via order)
+    Unassigns the delivery manager from the request
+    """
+    permission_classes = [permissions.IsAuthenticated, IsDeliveryAdmin]
+    
+    def post(self, request, order_id):
+        try:
+            from ..models.delivery_model import Order
+            order = get_object_or_404(Order, id=order_id, order_type='borrowing')
+            
+            # Get borrow request
+            borrow_request = order.borrow_request
+            if not borrow_request:
+                return Response({
+                    'success': False,
+                    'message': 'Borrow request not found for this order',
+                    'errors': {'order': ['This order does not have an associated borrow request']}
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            if borrow_request.status != BorrowStatusChoices.ASSIGNED_TO_DELIVERY:
+                return Response({
+                    'success': False,
+                    'message': 'Request must be assigned to delivery before rejection',
+                    'errors': {'status': ['Request is not in assigned_to_delivery status']}
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Check if the request is assigned to this delivery manager
+            # If delivery_person is None, it means it was previously rejected and unassigned
+            if borrow_request.delivery_person is None:
+                logger.warning(
+                    f"RejectDeliveryOrderView: Order {order_id} (BR {borrow_request.id}) "
+                    f"has no delivery_person assigned. Current user: {request.user.id}"
+                )
+                return Response({
+                    'success': False,
+                    'message': 'This request is not currently assigned to any delivery manager',
+                    'errors': {'assignment': ['The request has already been unassigned']}
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            if borrow_request.delivery_person != request.user:
+                logger.warning(
+                    f"RejectDeliveryOrderView: Order {order_id} (BR {borrow_request.id}) "
+                    f"is assigned to delivery_person {borrow_request.delivery_person.id}, "
+                    f"but current user is {request.user.id}"
+                )
+                return Response({
+                    'success': False,
+                    'message': 'Only the assigned delivery manager can reject this request',
+                    'errors': {'permission': ['You are not assigned to this request']}
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Get rejection reason from request
+            rejection_reason = request.data.get('rejection_reason', '')
+            if not rejection_reason or rejection_reason.strip() == '':
+                return Response({
+                    'success': False,
+                    'message': 'Rejection reason is required',
+                    'errors': {'rejection_reason': ['Please provide a reason for rejection']}
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            borrow_request = BorrowingService.reject_delivery_request(
+                borrow_request=borrow_request,
+                delivery_person=request.user,
+                rejection_reason=rejection_reason.strip()
+            )
+            
+            response_serializer = BorrowRequestDetailSerializer(borrow_request)
+            
+            return Response({
+                'success': True,
+                'message': 'Delivery request rejected successfully. The request has been unassigned and will be reassigned to another delivery manager.',
+                'data': response_serializer.data
+            }, status=status.HTTP_200_OK)
+            
+        except ValueError as e:
+            return Response({
+                'success': False,
+                'message': str(e),
+                'errors': {'validation': [str(e)]}
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error(f"Error rejecting delivery request: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to reject delivery request',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class StartDeliveryOrderView(APIView):
+    """
+    Legacy API view for delivery managers to start delivery (via order)
     """
     permission_classes = [permissions.IsAuthenticated, IsDeliveryAdmin]
     
@@ -426,23 +919,104 @@ class StartDeliveryView(APIView):
             from ..models.delivery_model import Order
             order = get_object_or_404(Order, id=order_id, order_type='borrowing')
             
-            if order.status != 'pending_assignment':
+            # Get borrow request to check actual status
+            borrow_request = order.borrow_request
+            if not borrow_request:
+                return Response({
+                    'success': False,
+                    'message': 'Borrow request not found for this order',
+                    'errors': {'order': ['This order does not have an associated borrow request']}
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Check borrow_request status (this is the source of truth)
+            # Accept orders that are ready for delivery to start
+            # out_for_delivery means "ready to start" - delivery manager can begin actual delivery
+            valid_statuses = [
+                BorrowStatusChoices.ASSIGNED_TO_DELIVERY,
+                BorrowStatusChoices.PENDING_DELIVERY,
+                BorrowStatusChoices.PREPARING,
+                BorrowStatusChoices.OUT_FOR_DELIVERY,  # Allow starting delivery when status is out_for_delivery
+                'pending',
+                'confirmed',
+                'assigned',
+                'assigned_to_delivery',
+                'out_for_delivery',  # String version for compatibility
+            ]
+            
+            if borrow_request.status not in valid_statuses:
                 return Response({
                     'success': False,
                     'message': 'Order is not ready for delivery',
-                    'errors': {'status': ['Order status is not pending_assignment']}
+                    'errors': {'status': [f'Borrow request status must be one of: {", ".join(valid_statuses)}. Current status: {borrow_request.status}']}
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # Update order status to in_delivery
-            order.status = 'in_delivery'
+            # Update order status to delivered (indicates delivery has started, awaiting final confirmation)
+            order.status = 'delivered'
             order.save()
             
             # Update borrow request status
-            borrow_request = order.borrow_request
-            borrow_request.status = BorrowStatusChoices.PENDING_DELIVERY
+            # If already out_for_delivery, keep it as out_for_delivery (delivery has started)
+            # Otherwise, set to OUT_FOR_DELIVERY (first time starting delivery)
+            if borrow_request.status != BorrowStatusChoices.OUT_FOR_DELIVERY and borrow_request.status != 'out_for_delivery':
+                # First time starting delivery - set to OUT_FOR_DELIVERY
+                borrow_request.status = BorrowStatusChoices.OUT_FOR_DELIVERY
+            
+            # If already out_for_delivery, keep it as is (delivery is now actively in progress)
+            # The order status 'in_delivery' indicates active delivery
+            
             borrow_request.delivery_person = request.user
-            borrow_request.pickup_date = timezone.now()
+            if not borrow_request.pickup_date:
+                borrow_request.pickup_date = timezone.now()
             borrow_request.save()
+            
+            # Update delivery manager status to busy when they start delivery
+            # This is critical - always update status when starting delivery
+            # Do this BEFORE saving the order/borrow_request to ensure status is set
+            try:
+                from ..services.delivery_profile_services import DeliveryProfileService
+                from ..models.delivery_profile_model import DeliveryProfile
+                
+                logger.info(f"Attempting to update delivery manager {request.user.id} status to busy...")
+                
+                # Get or create delivery profile first
+                delivery_profile = DeliveryProfileService.get_or_create_delivery_profile(request.user)
+                old_status = delivery_profile.delivery_status
+                logger.info(f"Delivery manager {request.user.id} current status: {old_status}")
+                
+                # Update status to busy
+                result = DeliveryProfileService.start_delivery_task(request.user)
+                logger.info(f"DeliveryProfileService.start_delivery_task returned: {result} for user {request.user.id}")
+                
+                # Force refresh from database to get actual status
+                delivery_profile.refresh_from_db()
+                actual_status = delivery_profile.delivery_status
+                logger.info(f"Verified delivery manager {request.user.id} status after update: {actual_status}")
+                
+                # If status is still not busy, force it
+                if actual_status != 'busy':
+                    logger.error(f"CRITICAL: Delivery manager {request.user.id} status is NOT 'busy' after start_delivery_task! Current status: {actual_status}")
+                    # Force update using direct database update to ensure it happens
+                    DeliveryProfile.objects.filter(user=request.user).update(delivery_status='busy')
+                    delivery_profile.refresh_from_db()
+                    if delivery_profile.delivery_status == 'busy':
+                        logger.info(f"Successfully force-updated delivery manager {request.user.id} status to 'busy'")
+                    else:
+                        logger.error(f"FAILED to force-update status for user {request.user.id}")
+                else:
+                    logger.info(f"Successfully updated delivery manager {request.user.id} status from '{old_status}' to 'busy'")
+                    
+            except Exception as e:
+                # Log error with full traceback
+                import traceback
+                logger.error(f"Failed to update delivery manager {request.user.id} status to busy: {str(e)}")
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                # Try to force update status directly as last resort
+                try:
+                    from ..models.delivery_profile_model import DeliveryProfile
+                    updated = DeliveryProfile.objects.filter(user=request.user).update(delivery_status='busy')
+                    logger.info(f"Force-updated delivery manager {request.user.id} status to 'busy' via direct DB update (rows updated: {updated})")
+                except Exception as e2:
+                    logger.error(f"CRITICAL: Failed to force-update status via direct DB update: {str(e2)}")
             
             # Send notification to customer
             NotificationService.create_notification(
@@ -454,10 +1028,21 @@ class StartDeliveryView(APIView):
             
             response_serializer = BorrowRequestDetailSerializer(borrow_request)
             
+            # Get the actual delivery manager status for the response
+            delivery_manager_status = 'online'
+            try:
+                if hasattr(request.user, 'delivery_profile'):
+                    request.user.delivery_profile.refresh_from_db()
+                    delivery_manager_status = request.user.delivery_profile.delivery_status
+            except Exception as e:
+                logger.warning(f"Could not get delivery manager status for response: {str(e)}")
+            
             return Response({
                 'success': True,
                 'message': 'Delivery started successfully',
-                'data': response_serializer.data
+                'data': response_serializer.data,
+                'delivery_manager_status': delivery_manager_status,
+                'order_status': order.status
             }, status=status.HTTP_200_OK)
             
         except Exception as e:
@@ -467,6 +1052,113 @@ class StartDeliveryView(APIView):
                 'message': 'Failed to start delivery',
                 'errors': format_error_message(str(e))
             }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class GetDeliveryLocationView(APIView):
+    """
+    Step 3.4: API view to get current delivery manager location for real-time tracking
+    GET /api/borrowings/{borrow_id}/delivery-location/
+    Visible only during OUT_FOR_DELIVERY or OUT_FOR_RETURN_PICKUP status
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request, borrow_id):
+        try:
+            borrow_request = get_object_or_404(BorrowRequest, id=borrow_id)
+            
+            # Check permissions - customer can see their own, admin can see all
+            if (borrow_request.customer != request.user and 
+                not request.user.is_library_admin() and 
+                not request.user.is_delivery_admin()):
+                return Response({
+                    'success': False,
+                    'message': 'Permission denied',
+                    'errors': {'permission': ['You do not have permission to view this location']}
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Step 3.4: Location button is VISIBLE only during OUT_FOR_DELIVERY or OUT_FOR_RETURN_PICKUP
+            if borrow_request.status not in [BorrowStatusChoices.OUT_FOR_DELIVERY, BorrowStatusChoices.OUT_FOR_RETURN_PICKUP]:
+                return Response({
+                    'success': False,
+                    'message': 'Location tracking is not available for this request',
+                    'errors': {'status': ['Location tracking is only available when delivery is in progress']},
+                    'current_status': borrow_request.status,
+                    'tracking_available': False
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Get delivery manager
+            delivery_manager = borrow_request.delivery_person
+            if not delivery_manager:
+                return Response({
+                    'success': False,
+                    'message': 'No delivery manager assigned',
+                    'errors': {'delivery_manager': ['Delivery manager not assigned']}
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            # Get current location from delivery profile
+            location_data = None
+            if hasattr(delivery_manager, 'delivery_profile') and delivery_manager.delivery_profile:
+                profile = delivery_manager.delivery_profile
+                if profile.latitude is not None and profile.longitude is not None:
+                    location_data = {
+                        'latitude': float(profile.latitude),
+                        'longitude': float(profile.longitude),
+                        'address': profile.address,
+                        'last_updated': profile.location_updated_at.isoformat() if profile.location_updated_at else None,
+                        'is_tracking_active': profile.is_tracking_active
+                    }
+            
+            # Get latest location from history if profile doesn't have it
+            if not location_data:
+                from ..models.delivery_model import LocationHistory
+                latest_location = LocationHistory.objects.filter(
+                    delivery_manager=delivery_manager
+                ).order_by('-recorded_at').first()
+                
+                if latest_location:
+                    location_data = {
+                        'latitude': float(latest_location.latitude),
+                        'longitude': float(latest_location.longitude),
+                        'address': latest_location.address,
+                        'last_updated': latest_location.recorded_at.isoformat(),
+                        'is_tracking_active': True
+                    }
+            
+            if not location_data:
+                return Response({
+                    'success': False,
+                    'message': 'Location not available',
+                    'errors': {'location': ['Delivery manager location is not available']}
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            # Get delivery manager details (Step 2.3: DM Details Display)
+            delivery_manager_info = {
+                'id': delivery_manager.id,
+                'name': delivery_manager.get_full_name(),
+                'phone': delivery_manager.phone_number if hasattr(delivery_manager, 'phone_number') else None,
+                'email': delivery_manager.email
+            }
+            
+            return Response({
+                'success': True,
+                'message': 'Delivery location retrieved successfully',
+                'data': {
+                    'borrow_request_id': borrow_request.id,
+                    'status': borrow_request.status,
+                    'delivery_manager': delivery_manager_info,
+                    'location': location_data,
+                    'tracking_enabled': True,
+                    'tracking_interval_seconds': 5  # Step 3.3: Every 5 seconds
+                }
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error getting delivery location: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to get delivery location',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class CompleteDeliveryView(APIView):
@@ -480,11 +1172,12 @@ class CompleteDeliveryView(APIView):
             from ..models.delivery_model import Order
             order = get_object_or_404(Order, id=order_id, order_type='borrowing')
             
-            if order.status != 'in_delivery':
+            # Allow completing delivery when status is 'delivered' (after start delivery) or 'in_delivery'
+            if order.status not in ['in_delivery', 'delivered']:
                 return Response({
                     'success': False,
-                    'message': 'Order is not in delivery',
-                    'errors': {'status': ['Order status is not in_delivery']}
+                    'message': 'Order is not ready for completion',
+                    'errors': {'status': ['Order status must be in_delivery or delivered']}
                 }, status=status.HTTP_400_BAD_REQUEST)
             
             # Update order status to delivered
@@ -497,6 +1190,30 @@ class CompleteDeliveryView(APIView):
             borrow_request.delivery_date = timezone.now()
             borrow_request.final_return_date = borrow_request.expected_return_date
             borrow_request.save()
+            
+            # Set delivery manager status back to Online when delivery is completed
+            # This is critical - always update status when completing delivery
+            if borrow_request.delivery_person:
+                try:
+                    from ..services.delivery_profile_services import DeliveryProfileService
+                    DeliveryProfileService.complete_delivery_task(borrow_request.delivery_person, completed_order_id=order.id)
+                    logger.info(f"Updated delivery manager {borrow_request.delivery_person.id} status to online after completing delivery")
+                except Exception as e:
+                    # Log error but don't fail the request - status update is important but shouldn't block completion
+                    logger.error(f"Failed to update delivery manager {borrow_request.delivery_person.id} status to online: {str(e)}")
+                    # Still continue with the delivery completion process
+            
+            # Stop location tracking when delivery is completed
+            try:
+                from ..models.delivery_model import RealTimeTracking
+                tracking = RealTimeTracking.objects.filter(delivery_manager=borrow_request.delivery_person).first()
+                if tracking:
+                    tracking.is_delivering = False
+                    tracking.current_delivery_assignment = None
+                    tracking.save()
+                    logger.info(f"Stopped location tracking for delivery manager {borrow_request.delivery_person.id}")
+            except Exception as e:
+                logger.warning(f"Failed to stop location tracking: {str(e)}")
             
             # Send notification to customer
             NotificationService.create_notification(
@@ -1102,108 +1819,6 @@ class LateReturnProcessView(APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class BookReturnWithFineView(APIView):
-    """
-    API view for processing book returns with fines
-    """
-    permission_classes = [permissions.IsAuthenticated, IsDeliveryAdmin]
-    
-    def post(self, request, borrow_request_id):
-        """
-        Process book return when customer returns overdue book
-        """
-        try:
-            borrow_request = BorrowRequest.objects.get(id=borrow_request_id)
-            delivery_manager = request.user
-            
-            # Process the book return
-            result = LateReturnService.process_book_return_with_fine(borrow_request, delivery_manager)
-            
-            if result['success']:
-                return Response({
-                    'success': True,
-                    'message': result['message'],
-                    'data': {
-                        'fine_amount': result['fine_amount'],
-                        'deposit_frozen': result['deposit_frozen'],
-                        'status': borrow_request.status
-                    }
-                }, status=status.HTTP_200_OK)
-            else:
-                return Response({
-                    'success': False,
-                    'message': result['message']
-                }, status=status.HTTP_400_BAD_REQUEST)
-                
-        except BorrowRequest.DoesNotExist:
-            return Response({
-                'success': False,
-                'message': 'Borrow request not found'
-            }, status=status.HTTP_404_NOT_FOUND)
-        except Exception as e:
-            logger.error(f"Error processing book return: {str(e)}")
-            return Response({
-                'success': False,
-                'message': 'Failed to process book return',
-                'errors': format_error_message(str(e))
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-class FinePaymentView(APIView):
-    """
-    API view for processing fine payments
-    """
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def post(self, request, borrow_request_id):
-        """
-        Process fine payment for overdue borrowing
-        """
-        try:
-            borrow_request = BorrowRequest.objects.get(id=borrow_request_id)
-            
-            # Check if user owns this borrowing request
-            if borrow_request.customer != request.user:
-                return Response({
-                    'success': False,
-                    'message': 'You can only pay fines for your own borrowings'
-                }, status=status.HTTP_403_FORBIDDEN)
-            
-            payment_method = request.data.get('payment_method', 'wallet')
-            
-            # Process the fine payment
-            result = LateReturnService.process_fine_payment(borrow_request, payment_method)
-            
-            if result['success']:
-                return Response({
-                    'success': True,
-                    'message': result['message'],
-                    'data': {
-                        'fine_amount': result['fine_amount'],
-                        'refund_amount': result['refund_amount'],
-                        'deposit_refunded': result['deposit_refunded']
-                    }
-                }, status=status.HTTP_200_OK)
-            else:
-                return Response({
-                    'success': False,
-                    'message': result['message']
-                }, status=status.HTTP_400_BAD_REQUEST)
-                
-        except BorrowRequest.DoesNotExist:
-            return Response({
-                'success': False,
-                'message': 'Borrow request not found'
-            }, status=status.HTTP_404_NOT_FOUND)
-        except Exception as e:
-            logger.error(f"Error processing fine payment: {str(e)}")
-            return Response({
-                'success': False,
-                'message': 'Failed to process fine payment',
-                'errors': format_error_message(str(e))
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
 class LateReturnSummaryView(APIView):
     """
     API view for getting late return summary
@@ -1365,3 +1980,4 @@ class DepositManagementView(APIView):
                 'message': 'Failed to mark deposit as paid',
                 'errors': format_error_message(str(e))
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+

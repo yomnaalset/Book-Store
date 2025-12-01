@@ -120,6 +120,23 @@ class DeliveryRequestAssignView(APIView):
             delivery_request.assigned_at = timezone.now()
             delivery_request.save()
             
+            # Create notification for delivery manager
+            try:
+                from ..services.notification_services import NotificationService
+                request_type = delivery_request.request_type.title()
+                order_info = ""
+                if delivery_request.order:
+                    order_info = f" for order #{delivery_request.order.order_number}"
+                NotificationService.create_notification(
+                    user_id=delivery_manager.id,
+                    title=f"New {request_type} Request Assigned",
+                    message=f"You have been assigned a {delivery_request.request_type} request{order_info}. Delivery address: {delivery_request.delivery_address}.",
+                    notification_type="delivery_request_assigned",
+                    related_order_id=delivery_request.order.id if delivery_request.order else None
+                )
+            except Exception as e:
+                logger.error(f"Failed to create notification for delivery request assignment: {str(e)}")
+            
             response_serializer = DeliveryRequestDetailSerializer(delivery_request)
             return Response(response_serializer.data, status=status.HTTP_200_OK)
         
@@ -175,10 +192,13 @@ class DeliveryRequestStatusUpdateView(APIView):
             # Set delivered_at timestamp if delivered
             if new_status == 'delivered':
                 delivery_request.delivered_at = timezone.now()
-                # Update delivery manager status back to online
+                # Set delivery manager status back to Online when delivery is completed
                 if delivery_request.delivery_manager:
-                    delivery_request.delivery_manager.delivery_status = 'online'
-                    delivery_request.delivery_manager.save()
+                    try:
+                        from ..services.delivery_profile_services import DeliveryProfileService
+                        DeliveryProfileService.complete_delivery_task(delivery_request.delivery_manager)
+                    except Exception as e:
+                        logger.warning(f"Failed to update delivery manager status to online: {str(e)}")
             
             delivery_request.save()
             
@@ -292,12 +312,17 @@ class LibraryAdminAssignManagerView(APIView):
             
             # Check if delivery manager is available (simplified check)
             # Basic availability: active delivery admin not currently delivering
-            if delivery_manager.delivery_status == 'busy':
-                active_requests_count = delivery_manager.assigned_requests.filter(status='in_operation').count()
-                if active_requests_count > 0:
-                    return Response({
-                        'error': 'Selected delivery manager is currently busy with another delivery'
-                    }, status=status.HTTP_400_BAD_REQUEST)
+            from ..models.delivery_profile_model import DeliveryProfile
+            try:
+                delivery_profile = DeliveryProfile.objects.get(user=delivery_manager)
+                if delivery_profile.delivery_status == 'busy':
+                    active_requests_count = delivery_manager.assigned_requests.filter(status='in_operation').count()
+                    if active_requests_count > 0:
+                        return Response({
+                            'error': 'Selected delivery manager is currently busy with another delivery'
+                        }, status=status.HTTP_400_BAD_REQUEST)
+            except DeliveryProfile.DoesNotExist:
+                pass  # No profile exists, allow assignment
             
             # Update request
             delivery_request.delivery_manager = delivery_manager
@@ -310,9 +335,25 @@ class LibraryAdminAssignManagerView(APIView):
             # Save the delivery request
             delivery_request.save()
             
-            # Update delivery manager status to busy
-            delivery_manager.delivery_status = 'busy'
-            delivery_manager.save()
+            # Do not change delivery_manager.delivery_status here
+            # Keep the manager "Online" until they accept the task
+            
+            # Create notification for delivery manager
+            try:
+                from ..services.notification_services import NotificationService
+                request_type = delivery_request.request_type.title()
+                order_info = ""
+                if delivery_request.order:
+                    order_info = f" for order #{delivery_request.order.order_number}"
+                NotificationService.create_notification(
+                    user_id=delivery_manager.id,
+                    title=f"New {request_type} Request Assigned",
+                    message=f"You have been assigned a {delivery_request.request_type} request{order_info}. Delivery address: {delivery_request.delivery_address}. Notes: {delivery_request.notes or 'None'}",
+                    notification_type="delivery_request_assigned",
+                    related_order_id=delivery_request.order.id if delivery_request.order else None
+                )
+            except Exception as e:
+                logger.error(f"Failed to create notification for delivery request assignment: {str(e)}")
             
             # Return updated request
             response_serializer = DeliveryRequestDetailSerializer(delivery_request)
@@ -337,9 +378,15 @@ class OrderListView(generics.ListAPIView):
         queryset = Order.objects.select_related('customer', 'payment').prefetch_related('items__book')
         
         # Filter by order type (purchase, borrowing, return_collection)
+        # Default to 'purchase' for admin views to avoid mixing purchase and borrowing orders
         order_type = self.request.query_params.get('order_type')
         if order_type:
             queryset = queryset.filter(order_type=order_type)
+        else:
+            # Default to purchase orders for admin/delivery manager views
+            user = self.request.user
+            if user.is_library_admin() or user.is_staff or user.is_delivery_admin():
+                queryset = queryset.filter(order_type='purchase')
         
         # Filter by status
         status_filter = self.request.query_params.get('status')
@@ -395,7 +442,7 @@ class OrderDetailView(generics.RetrieveAPIView):
     permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
-        return Order.objects.select_related('customer', 'payment').prefetch_related('items__book')
+        return Order.objects.select_related('customer', 'payment').prefetch_related('items__book', 'notes__author')
     
     def get_object(self):
         order = super().get_object()
@@ -406,6 +453,12 @@ class OrderDetailView(generics.RetrieveAPIView):
             self.permission_denied(self.request, message="You don't have permission to view this order.")
         
         return order
+    
+    def get_serializer_context(self):
+        """Ensure request context is passed to serializer"""
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
 
 
 class OrderViewSet(viewsets.ModelViewSet):
@@ -413,9 +466,15 @@ class OrderViewSet(viewsets.ModelViewSet):
     Complete Order management system for the purchase flow.
     Handles order creation, approval, assignment, and tracking.
     """
-    queryset = Order.objects.select_related('customer', 'payment').prefetch_related('items__book')
+    queryset = Order.objects.select_related('customer', 'payment').prefetch_related('items__book', 'notes__author')
     permission_classes = [permissions.IsAuthenticated]
     authentication_classes = [CustomJWTAuthentication]
+    
+    def get_serializer_context(self):
+        """Ensure request context is passed to serializer"""
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
     
     def get_serializer_class(self):
         if self.action == 'create':
@@ -435,17 +494,23 @@ class OrderViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         
-        # Base queryset
-        queryset = Order.objects.select_related('customer', 'payment').prefetch_related('items__book')
+        # Base queryset - prefetch notes with authors for efficient loading
+        queryset = Order.objects.select_related('customer', 'payment').prefetch_related('items__book', 'notes__author')
         
         # Apply user-based filtering
         if user.is_customer():
             queryset = queryset.filter(customer=user)
         elif user.is_delivery_admin():
             # Delivery managers can see orders assigned to them
+            # Include 'waiting_for_delivery_manager' status so they can see new orders waiting for their confirmation
             queryset = queryset.filter(
-                Q(delivery_assignment__delivery_manager=user) |
-                Q(status='pending_assignment')
+                Q(delivery_assignment__delivery_manager=user, status='waiting_for_delivery_manager') |
+                Q(delivery_assignment__delivery_manager=user, status='assigned_to_delivery') |
+                Q(delivery_assignment__delivery_manager=user, status='in_delivery') |
+                Q(delivery_assignment__delivery_manager=user, status='delivery_in_progress') |
+                Q(delivery_assignment__delivery_manager=user, status='in_progress') |
+                Q(delivery_assignment__delivery_manager=user, status='delivered') |
+                Q(delivery_assignment__delivery_manager=user, status='completed')
             ).distinct()
         elif user.is_library_admin() or user.is_staff:
             # Library admins and staff can see all orders
@@ -455,9 +520,14 @@ class OrderViewSet(viewsets.ModelViewSet):
         
         # Apply additional filters
         # Filter by order type (purchase, borrowing, return_collection)
+        # Default to 'purchase' for admin and delivery manager views to avoid mixing purchase and borrowing orders
         order_type = self.request.query_params.get('order_type')
         if order_type:
             queryset = queryset.filter(order_type=order_type)
+        elif user.is_library_admin() or user.is_staff or user.is_delivery_admin():
+            # For admin and delivery manager views, default to purchase orders unless explicitly requesting borrowing
+            # This prevents purchase and borrowing orders from being mixed up
+            queryset = queryset.filter(order_type='purchase')
         
         # Filter by status
         status_filter = self.request.query_params.get('status')
@@ -566,6 +636,37 @@ class OrderViewSet(viewsets.ModelViewSet):
             logger.info(f"User ID: {user.id}")
             logger.info(f"User ID type: {type(user.id)}")
             
+            # Calculate subtotal, tax, and delivery cost from cart items
+            from decimal import Decimal
+            TAX_RATE = Decimal('0.08')  # 8% tax rate
+            DELIVERY_RATE = Decimal('0.04')  # 4% delivery cost rate
+            
+            subtotal = Decimal('0.00')
+            for item_data in cart_items:
+                if isinstance(item_data, dict):
+                    book_id = item_data.get('book_id')
+                    quantity = item_data.get('quantity', 1)
+                    price = Decimal(str(item_data.get('price', 0)))
+                    subtotal += price * quantity
+                else:
+                    try:
+                        cart_item = CartItem.objects.get(id=item_data, cart__customer=user)
+                        subtotal += cart_item.book.price * cart_item.quantity
+                    except CartItem.DoesNotExist:
+                        continue
+            
+            # Calculate tax
+            tax_amount = subtotal * TAX_RATE
+            
+            # Get discount amount from request if available
+            discount_amount = Decimal(str(request.data.get('discount_amount', 0)))
+            
+            # Calculate final invoice value (subtotal + tax - discount)
+            final_invoice_value = subtotal + tax_amount - discount_amount
+            
+            # Calculate delivery cost (4% of final invoice value)
+            delivery_cost = final_invoice_value * DELIVERY_RATE
+            
             # Create order with pending status
             order_data = {
                 'customer': user.id,
@@ -586,10 +687,30 @@ class OrderViewSet(viewsets.ModelViewSet):
                 total_amount=total_price,
                 delivery_address=address,
                 delivery_city=city,
-                status='pending',
+                status='pending',  # Status: "Pending Review" as per scenario
                 order_type='purchase',
-                payment_method=payment_method
+                payment_method=payment_method,
+                delivery_cost=delivery_cost,
+                discount_amount=discount_amount if discount_amount > 0 else Decimal('0.00')
             )
+            
+            # Send notification to all admins about new purchase request
+            from ..services.notification_services import NotificationService
+            admin_users = User.objects.filter(
+                user_type__in=['library_admin', 'system_admin'],
+                is_active=True
+            )
+            for admin in admin_users:
+                try:
+                    NotificationService.create_notification(
+                        user_id=admin.id,
+                        title="New Purchase Request",
+                        message=f"A new order #{order.order_number} has been placed and requires your review.",
+                        notification_type="new_order",
+                        related_order_id=order.id
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to notify admin {admin.id} about new order: {str(e)}")
             
             # Create order items from cart
             for item_data in cart_items:
@@ -702,12 +823,17 @@ class OrderViewSet(viewsets.ModelViewSet):
                     'error': 'Only administrators can approve orders'
                 }, status=status.HTTP_403_FORBIDDEN)
             
+            # Validate request data with serializer
+            serializer = self.get_serializer(data=request.data)
+            if not serializer.is_valid():
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            
             if order.status != 'pending':
                 return Response({
-                    'error': 'Order is not in pending status'
+                    'error': f'Order is not in pending status. Current status: {order.status}'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            delivery_manager_id = request.data.get('delivery_manager_id')
+            delivery_manager_id = serializer.validated_data.get('delivery_manager_id')
             if not delivery_manager_id:
                 return Response({
                     'error': 'Delivery manager ID is required'
@@ -724,29 +850,47 @@ class OrderViewSet(viewsets.ModelViewSet):
                 }, status=status.HTTP_400_BAD_REQUEST)
             
             # Check if delivery manager is available
-            if hasattr(delivery_manager, 'delivery_profile'):
-                if delivery_manager.delivery_profile.status not in ['online', 'available']:
+            if hasattr(delivery_manager, 'delivery_profile') and delivery_manager.delivery_profile:
+                if delivery_manager.delivery_profile.delivery_status != 'online':
                     return Response({
                         'error': 'Selected delivery manager is not available'
                     }, status=status.HTTP_400_BAD_REQUEST)
             
-            # Update order status
-            order.status = 'confirmed'
-            order.save()
+            # Calculate estimated delivery time (default: 24 hours from now)
+            from datetime import timedelta
+            estimated_delivery_time = timezone.now() + timedelta(hours=24)
             
-            # Create delivery assignment
-            delivery_assignment = DeliveryAssignment.objects.create(
-                order=order,
-                delivery_manager=delivery_manager,
-                status='assigned',
-                assigned_by=user
-            )
+            # Check if delivery assignment already exists for this order
+            # Since DeliveryAssignment has OneToOneField with Order, we need to handle existing assignments
+            delivery_assignment = None
+            try:
+                delivery_assignment = DeliveryAssignment.objects.get(order=order)
+                # Update existing assignment
+                delivery_assignment.delivery_manager = delivery_manager
+                delivery_assignment.status = 'assigned'
+                delivery_assignment.assigned_by = user
+                delivery_assignment.assigned_at = timezone.now()
+                delivery_assignment.estimated_delivery_time = estimated_delivery_time
+                delivery_assignment.save()
+            except DeliveryAssignment.DoesNotExist:
+                # Create new delivery assignment
+                delivery_assignment = DeliveryAssignment.objects.create(
+                    order=order,
+                    delivery_manager=delivery_manager,
+                    status='assigned',
+                    assigned_by=user,
+                    estimated_delivery_time=estimated_delivery_time
+                )
+            
+            # Update order status to 'waiting_for_delivery_manager' (as per scenario)
+            order.status = 'waiting_for_delivery_manager'
+            order.save()
             
             # Send notifications
             NotificationService.create_notification(
                 user_id=order.customer.id,
                 title="Order Approved",
-                message=f"Your order #{order.order_number} has been approved and assigned for delivery",
+                message=f"Your order #{order.order_number} has been approved by admin and is waiting for delivery manager confirmation.",
                 notification_type="order_approved",
                 related_order_id=order.id
             )
@@ -754,7 +898,7 @@ class OrderViewSet(viewsets.ModelViewSet):
             NotificationService.create_notification(
                 user_id=delivery_manager.id,
                 title="New Delivery Assignment",
-                message=f"You have been assigned order #{order.order_number} for delivery",
+                message=f"You have been assigned order #{order.order_number} for delivery. Please review and confirm.",
                 notification_type="delivery_assigned",
                 related_order_id=order.id
             )
@@ -794,9 +938,10 @@ class OrderViewSet(viewsets.ModelViewSet):
             
             rejection_reason = request.data.get('rejection_reason', 'No reason provided')
             
-            # Update order status
-            order.status = 'cancelled'
-            # Restore book quantities when order is cancelled
+            # Update order status to 'rejected_by_admin' (as per scenario)
+            order.status = 'rejected_by_admin'
+            order.cancellation_reason = rejection_reason
+            # Restore book quantities when order is rejected
             order.restore_book_quantities()
             order.save()
             
@@ -804,8 +949,8 @@ class OrderViewSet(viewsets.ModelViewSet):
             try:
                 NotificationService.create_notification(
                     user_id=order.customer.id,
-                    title="Order Rejected",
-                    message=f"Your order #{order.order_number} has been rejected. Reason: {rejection_reason}",
+                    title="Order Rejected by Admin",
+                    message=f"Your order #{order.order_number} has been rejected by admin. Reason: {rejection_reason}",
                     notification_type="order_rejected",
                     related_order_id=order.id
                 )
@@ -856,7 +1001,6 @@ class OrderViewSet(viewsets.ModelViewSet):
             delivery_assignment = DeliveryAssignment.objects.filter(
                 order=order,
                 delivery_manager=user,
-                status='assigned'
             ).first()
             
             if not delivery_assignment:
@@ -864,14 +1008,28 @@ class OrderViewSet(viewsets.ModelViewSet):
                     'error': 'Order is not assigned to you'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # Update order status
-            order.status = 'in_delivery'
-            order.save()
+            # Check if assignment is accepted (can only start delivery after acceptance)
+            if delivery_assignment.status not in ['accepted', 'assigned']:
+                return Response({
+                    'error': f'Cannot start delivery. Assignment status is {delivery_assignment.status}'
+                }, status=status.HTTP_400_BAD_REQUEST)
             
-            # Update delivery assignment
-            delivery_assignment.status = 'in_progress'
+            # Update delivery assignment status to 'in_transit'
+            delivery_assignment.status = 'in_transit'
             delivery_assignment.started_at = timezone.now()
             delivery_assignment.save()
+            
+            # Update order status to 'in_progress' when delivery starts
+            order.status = 'in_progress'
+            order.save()
+            
+            # Set delivery manager status to 'busy' when starting delivery
+            try:
+                from ..services.delivery_profile_services import DeliveryProfileService
+                DeliveryProfileService.start_delivery_task(user)
+                logger.info(f"Delivery manager {user.email} status updated to busy when starting delivery")
+            except Exception as e:
+                logger.error(f"Failed to update delivery person status: {str(e)}")
             
             # Start real-time tracking
             if hasattr(user, 'real_time_tracking'):
@@ -917,20 +1075,27 @@ class OrderViewSet(viewsets.ModelViewSet):
                     'error': 'Only delivery managers can complete delivery'
                 }, status=status.HTTP_403_FORBIDDEN)
             
+            # Check if order is in delivery status (as per scenario requirement)
+            if order.status != 'in_delivery':
+                return Response({
+                    'error': f"Order must be in 'in_delivery' status to complete delivery. Current status: {order.status}"
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
             # Check if order is assigned to this delivery manager
+            # Accept multiple statuses since assignment can be in different states
             delivery_assignment = DeliveryAssignment.objects.filter(
                 order=order,
                 delivery_manager=user,
-                status='in_progress'
+                status__in=['assigned', 'accepted', 'in_progress', 'in_transit']
             ).first()
             
             if not delivery_assignment:
                 return Response({
-                    'error': 'Order is not in progress for you'
+                    'error': 'Order is not assigned to you or not ready for completion'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # Update order status
-            order.status = 'delivered'
+            # Update order status to 'completed' (as per scenario)
+            order.status = 'completed'
             order.save()
             
             # Update delivery assignment
@@ -938,18 +1103,61 @@ class OrderViewSet(viewsets.ModelViewSet):
             delivery_assignment.completed_at = timezone.now()
             delivery_assignment.save()
             
-            # Stop real-time tracking
-            if hasattr(user, 'real_time_tracking'):
-                user.real_time_tracking.is_tracking_enabled = False
-                user.real_time_tracking.is_delivering = False
-                user.real_time_tracking.current_delivery_assignment = None
-                user.real_time_tracking.save()
+            # Reset delivery manager status to 'online' when delivery is completed
+            try:
+                from ..services.delivery_profile_services import DeliveryProfileService
+                DeliveryProfileService.complete_delivery_task(user, completed_order_id=order.id)
+                logger.info(f"Delivery manager {user.email} status updated after delivery completion")
+            except Exception as e:
+                logger.error(f"Failed to reset delivery person status: {str(e)}")
+            
+            # Stop real-time tracking immediately when delivery ends (as per scenario)
+            try:
+                if hasattr(user, 'real_time_tracking'):
+                    user.real_time_tracking.is_tracking_enabled = False
+                    user.real_time_tracking.is_delivering = False
+                    user.real_time_tracking.current_delivery_assignment = None
+                    user.real_time_tracking.save()
+                
+                # Update delivery profile - stop tracking
+                from ..models.delivery_profile_model import DeliveryProfile
+                delivery_profile = DeliveryProfile.objects.get(user=user)
+                delivery_profile.is_tracking_active = False
+                delivery_profile.save()
+                
+                # Automatically change delivery manager status from busy to online (as per scenario)
+                # Only if there are no other active deliveries
+                from ..services.delivery_profile_services import DeliveryProfileService
+                try:
+                    status_changed = DeliveryProfileService.complete_delivery_task(user, completed_order_id=order.id)
+                    if status_changed:
+                        logger.info(f"Delivery manager {user.email} status automatically changed to online after completing order {order.order_number}")
+                    else:
+                        # Fallback: Try reset_status_if_no_active_deliveries as a safety check
+                        logger.info(f"complete_delivery_task returned False, trying reset_status_if_no_active_deliveries as fallback")
+                        try:
+                            DeliveryProfileService.reset_status_if_no_active_deliveries(user)
+                            logger.info(f"Delivery manager {user.email} status reset to online via fallback method")
+                        except Exception as fallback_error:
+                            logger.warning(f"Fallback reset also failed: {str(fallback_error)}")
+                except Exception as e:
+                    logger.warning(f"Failed to change delivery manager status to online: {str(e)}")
+                    # Try fallback method
+                    try:
+                        DeliveryProfileService.reset_status_if_no_active_deliveries(user)
+                        logger.info(f"Delivery manager {user.email} status reset to online via fallback method after error")
+                    except Exception as fallback_error:
+                        logger.error(f"Fallback reset failed: {str(fallback_error)}")
+                
+                logger.info(f"GPS tracking stopped for delivery manager {user.email} after completing order {order.order_number}")
+            except Exception as e:
+                logger.error(f"Failed to stop GPS tracking: {str(e)}")
             
             # Send notifications
             NotificationService.create_notification(
                 user_id=order.customer.id,
                 title="Order Delivered",
-                message=f"Your order #{order.order_number} has been successfully delivered! 🎉",
+                message=f"Your order #{order.order_number} has been successfully delivered!",
                 notification_type="order_delivered",
                 related_order_id=order.id
             )
@@ -979,6 +1187,109 @@ class OrderViewSet(viewsets.ModelViewSet):
                 'error': 'An error occurred while completing delivery'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
+    @action(detail=True, methods=['patch'])
+    def assign_delivery_manager(self, request, pk=None):
+        """
+        Assign a delivery manager to a confirmed order that doesn't have one yet.
+        Accessible by library admins and system admins.
+        """
+        try:
+            order = self.get_object()
+            user = request.user
+            
+            if not (user.is_library_admin() or user.is_staff):
+                return Response({
+                    'error': 'Only administrators can assign delivery managers'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Validate request data with serializer
+            serializer = self.get_serializer(data=request.data)
+            if not serializer.is_valid():
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Check if order is confirmed (approved)
+            if order.status != 'confirmed':
+                return Response({
+                    'error': f'Order must be confirmed before assigning delivery manager. Current status: {order.status}'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Check if order already has a delivery assignment
+            if hasattr(order, 'delivery_assignment') and order.delivery_assignment:
+                return Response({
+                    'error': 'Order already has a delivery manager assigned'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            delivery_manager_id = serializer.validated_data.get('delivery_manager_id')
+            if not delivery_manager_id:
+                return Response({
+                    'error': 'Delivery manager ID is required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            try:
+                delivery_manager = User.objects.get(
+                    id=delivery_manager_id,
+                    user_type='delivery_admin'
+                )
+            except User.DoesNotExist:
+                return Response({
+                    'error': 'Invalid delivery manager'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Check if delivery manager is available
+            if hasattr(delivery_manager, 'delivery_profile') and delivery_manager.delivery_profile:
+                if delivery_manager.delivery_profile.delivery_status != 'online':
+                    return Response({
+                        'error': 'Selected delivery manager is not available'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Calculate estimated delivery time (default: 24 hours from now)
+            from datetime import timedelta
+            estimated_delivery_time = timezone.now() + timedelta(hours=24)
+            
+            # Create delivery assignment
+            delivery_assignment = DeliveryAssignment.objects.create(
+                order=order,
+                delivery_manager=delivery_manager,
+                status='assigned',
+                assigned_by=user,
+                estimated_delivery_time=estimated_delivery_time
+            )
+            
+            # Update order status to 'assigned_to_delivery'
+            order.status = 'assigned_to_delivery'
+            order.save()
+            
+            # Send notifications
+            NotificationService.create_notification(
+                user_id=order.customer.id,
+                title="Delivery Manager Assigned",
+                message=f"A delivery manager has been assigned to your order #{order.order_number}",
+                notification_type="delivery_assigned",
+                related_order_id=order.id
+            )
+            
+            NotificationService.create_notification(
+                user_id=delivery_manager.id,
+                title="New Delivery Assignment",
+                message=f"You have been assigned order #{order.order_number} for delivery",
+                notification_type="delivery_assigned",
+                related_order_id=order.id
+            )
+            
+            return Response({
+                'success': True,
+                'message': 'Delivery manager assigned successfully',
+                'order': OrderDetailSerializer(order).data,
+                'delivery_assignment': DeliveryAssignmentBasicSerializer(delivery_assignment).data
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error assigning delivery manager: {str(e)}")
+            return Response({
+                'error': 'An error occurred while assigning delivery manager',
+                'details': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
     @action(detail=False, methods=['get'])
     def pending_approval(self, request):
         """
@@ -993,7 +1304,11 @@ class OrderViewSet(viewsets.ModelViewSet):
                     'error': 'Only administrators can view pending orders'
                 }, status=status.HTTP_403_FORBIDDEN)
             
-            pending_orders = Order.objects.filter(status='pending').order_by('-created_at')
+            # Filter by order_type to separate purchase and borrowing orders
+            pending_orders = Order.objects.filter(
+                status='pending',
+                order_type='purchase'  # Only show purchase orders for approval
+            ).order_by('-created_at')
             serializer = OrderListSerializer(pending_orders, many=True)
             
             return Response({
@@ -1104,6 +1419,29 @@ class OrderStatusUpdateView(APIView):
                 order.update_book_quantities()
             elif new_status == 'delivered' and not order.delivered_at:
                 order.delivered_at = timezone.now()
+                # Reset delivery manager status to 'online' when order is delivered
+                try:
+                    if hasattr(order, 'delivery_assignment') and order.delivery_assignment:
+                        from ..services.delivery_profile_services import DeliveryProfileService
+                        DeliveryProfileService.complete_delivery_task(
+                            order.delivery_assignment.delivery_manager,
+                            completed_order_id=order.id
+                        )
+                        logger.info(f"Delivery manager status updated after order {order.order_number} was marked as delivered")
+                except Exception as e:
+                    logger.error(f"Failed to reset delivery person status: {str(e)}")
+            elif new_status == 'completed':
+                # Reset delivery manager status to 'online' when order is completed
+                try:
+                    if hasattr(order, 'delivery_assignment') and order.delivery_assignment:
+                        from ..services.delivery_profile_services import DeliveryProfileService
+                        DeliveryProfileService.complete_delivery_task(
+                            order.delivery_assignment.delivery_manager,
+                            completed_order_id=order.id
+                        )
+                        logger.info(f"Delivery manager status updated after order {order.order_number} was marked as completed")
+                except Exception as e:
+                    logger.error(f"Failed to reset delivery person status: {str(e)}")
             elif new_status == 'cancelled':
                 # Restore book quantities when order is cancelled
                 order.restore_book_quantities()
@@ -1121,7 +1459,7 @@ class OrderStatusUpdateView(APIView):
             # Log status change
             logger.info(f"Order #{order.order_number} status changed from {old_status} to {new_status} by {user.email}")
             
-            response_serializer = OrderDetailSerializer(order)
+            response_serializer = OrderDetailSerializer(order, context={'request': request})
             return Response({
                 'message': f'Order status updated from {old_status} to {new_status}' ,
                 'order': response_serializer.data
@@ -1138,50 +1476,121 @@ class NoteActivityView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
-        """Add, edit, or delete delivery notes for an order"""
+        """
+        Add, edit, or delete delivery notes for an order.
+        Supports the new OrderNote model with author tracking.
+        
+        Request body:
+        - order_id (required): ID of the order
+        - notes_content (optional): Content of the note (for add/edit)
+        - note_id (optional): ID of existing note (for edit/delete)
+        - action (optional): 'add', 'edit', or 'delete' (defaults to 'add' if note_id not provided)
+        """
         user = request.user
         order_id = request.data.get('order_id')
         notes_content = (request.data.get('notes_content') or '').strip()
+        note_id = request.data.get('note_id')
+        action = request.data.get('action', 'add').lower()
 
         if not order_id:
             return Response({'error': 'order_id is required'}, status=status.HTTP_400_BAD_REQUEST)
 
         order = get_object_or_404(Order, id=order_id)
 
-        # Ensure user has permission to modify
-        if user.is_customer() and order.customer != user:
-            return Response({'error': 'You are not authorized to modify this order'}, status=status.HTTP_403_FORBIDDEN)
-
-        old_notes = order.delivery_notes or ''
-        activity_type = 'edit_notes'
-        if not old_notes and notes_content:
-            activity_type = 'add_notes'
-        elif old_notes and not notes_content:
-            activity_type = 'delete_notes'
-
-        order.delivery_notes = notes_content
-        order.save()
-
-        # Log activity only if the user is a delivery admin
-        if hasattr(user, 'is_delivery_admin') and user.is_delivery_admin():
-            from ..models.delivery_model import DeliveryActivity
-            DeliveryActivity.objects.create(
-                delivery_manager=user,
+        from ..models.delivery_model import OrderNote
+        
+        # Determine action based on note_id and action parameter
+        note = None
+        activity_type = None
+        message = None
+        
+        if note_id:
+            # Edit or delete existing note - check if user is the author
+            try:
+                note = OrderNote.objects.get(id=note_id, order=order, is_deleted=False)
+                
+                # Only the author can edit or delete their own note
+                if note.author != user:
+                    return Response({
+                        'error': 'You can only edit or delete your own notes'
+                    }, status=status.HTTP_403_FORBIDDEN)
+                
+                if action == 'delete' or (not notes_content and action != 'edit'):
+                    # Delete note (soft delete)
+                    note.is_deleted = True
+                    note.save()
+                    activity_type = 'delete_notes'
+                    message = 'Note deleted successfully'
+                else:
+                    # Edit note
+                    old_content = note.content
+                    note.content = notes_content
+                    note.save()
+                    activity_type = 'edit_notes'
+                    message = 'Note updated successfully'
+                    
+            except OrderNote.DoesNotExist:
+                return Response({
+                    'error': 'Note not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+        else:
+            # Add new note - check if user has permission to add notes to this order
+            has_permission = False
+            
+            # Customers can add notes to their own orders
+            if user.is_customer() and order.customer == user:
+                has_permission = True
+            # Admins (library_admin, delivery_admin) can add notes to any order
+            elif user.user_type in ['library_admin', 'delivery_admin']:
+                has_permission = True
+            
+            if not has_permission:
+                return Response({
+                    'error': 'You are not authorized to add notes to this order'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            if not notes_content:
+                return Response({
+                    'error': 'notes_content is required for adding a new note'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            note = OrderNote.objects.create(
                 order=order,
-                activity_type=activity_type,
-                activity_data={
-                    'old_notes': old_notes,
-                    'new_notes': notes_content,
-                    'order_number': order.order_number,
-                },
-                ip_address=request.META.get('REMOTE_ADDR'),
-                user_agent=request.META.get('HTTP_USER_AGENT', ''),
+                author=user,
+                content=notes_content
             )
+            activity_type = 'add_notes'
+            message = 'Note added successfully'
+
+        # Log activity for admins (delivery admins and library admins)
+        # Note: DeliveryActivity model has limit_choices_to for delivery_admin, but we can still
+        # assign library admins programmatically. If this causes issues, we may need to update the model.
+        if note and (user.is_delivery_admin() or user.is_library_admin()):
+            from ..models.delivery_model import DeliveryActivity
+            try:
+                # For library admins, we still assign them as delivery_manager
+                # The limit_choices_to is only for admin interface, not programmatic assignment
+                DeliveryActivity.objects.create(
+                    delivery_manager=user,
+                    order=order,
+                    activity_type=activity_type,
+                    activity_data={
+                        'note_id': note.id,
+                        'order_number': order.order_number,
+                        'modified_by': user.get_full_name() or user.email,
+                        'user_type': user.user_type,
+                    },
+                    ip_address=request.META.get('REMOTE_ADDR'),
+                    user_agent=request.META.get('HTTP_USER_AGENT', ''),
+                )
+            except Exception as e:
+                # Log error but don't fail the request
+                logger.warning(f"Failed to log delivery activity: {str(e)}")
 
         return Response({
             'success': True,
-            'message': 'Notes updated successfully',
-            'data': OrderDetailSerializer(order).data
+            'message': message,
+            'data': OrderDetailSerializer(order, context={'request': request}).data
         }, status=status.HTTP_200_OK)
 
 # ------------------------------------------------------------
@@ -1356,11 +1765,27 @@ class DeliveryActivityView(APIView):
             delivery_assignment.status = 'in_progress'
             delivery_assignment.started_at = timezone.now()
             message = f"Started delivery for order {order.order_number}"
+            
+            # Ensure delivery person status is 'busy' when starting delivery
+            try:
+                from ..services.delivery_profile_services import DeliveryProfileService
+                DeliveryProfileService.start_delivery_task(user)
+                logger.info(f"Delivery manager {user.email} status updated to busy when starting delivery")
+            except Exception as e:
+                logger.error(f"Failed to update delivery person status: {str(e)}")
         else:
             order.status = 'delivered'
             delivery_assignment.status = 'completed'
             delivery_assignment.completed_at = timezone.now()
             message = f"Completed delivery for order {order.order_number}"
+            
+            # Reset delivery person status to 'online' when delivery is completed
+            try:
+                from ..services.delivery_profile_services import DeliveryProfileService
+                DeliveryProfileService.complete_delivery_task(user, completed_order_id=order.id)
+                logger.info(f"Delivery manager {user.email} status updated after delivery completion")
+            except Exception as e:
+                logger.error(f"Failed to reset delivery person status: {str(e)}")
 
         order.save()
         delivery_assignment.save()
@@ -1374,6 +1799,204 @@ class DeliveryActivityView(APIView):
         )
 
         return Response({'success': True, 'message': message}, status=status.HTTP_201_CREATED)
+
+# ------------------------------------------------------------
+# 🚀 Start Delivery Endpoint (Automatic Status Update)
+# ------------------------------------------------------------
+class StartDeliveryView(APIView):
+    """
+    POST /api/delivery/start_delivery/
+    
+    When the delivery manager starts delivering an order:
+    - Automatically changes delivery manager status to "busy"
+    - Updates order status to "in_delivery"
+    
+    Request body:
+    {
+        "delivery_manager_id": <int>,
+        "order_id": <int>
+    }
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def post(self, request):
+        try:
+            delivery_manager_id = request.data.get('delivery_manager_id')
+            order_id = request.data.get('order_id')
+            
+            # Validate required fields
+            if not delivery_manager_id:
+                return Response({
+                    'error': 'delivery_manager_id is required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            if not order_id:
+                return Response({
+                    'error': 'order_id is required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Fetch the delivery manager
+            try:
+                delivery_manager = User.objects.get(
+                    id=delivery_manager_id,
+                    user_type='delivery_admin'
+                )
+            except User.DoesNotExist:
+                return Response({
+                    'error': 'Delivery manager not found or invalid'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            # Verify user is a delivery admin
+            if not delivery_manager.is_delivery_admin():
+                return Response({
+                    'error': 'User is not a delivery manager'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Security check: Ensure authenticated user matches delivery_manager_id (unless admin)
+            authenticated_user = request.user
+            if (authenticated_user.id != delivery_manager_id and 
+                not authenticated_user.is_library_admin()):
+                return Response({
+                    'error': 'You can only start delivery for your own account'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Fetch the order
+            try:
+                order = Order.objects.get(id=order_id)
+            except Order.DoesNotExist:
+                return Response({
+                    'error': 'Order not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            # Check if order is assigned to this delivery manager
+            delivery_assignment = DeliveryAssignment.objects.filter(
+                order=order,
+                delivery_manager=delivery_manager
+            ).first()
+            
+            if not delivery_assignment:
+                return Response({
+                    'error': 'Order is not assigned to this delivery manager'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Update delivery manager status to "busy" (automatic)
+            try:
+                from ..services.delivery_profile_services import DeliveryProfileService
+                DeliveryProfileService.start_delivery_task(delivery_manager)
+                logger.info(f"Automatically changed delivery manager {delivery_manager.id} status to busy when starting delivery")
+            except Exception as e:
+                logger.error(f"Failed to update delivery manager status to busy: {str(e)}")
+                return Response({
+                    'error': f'Failed to update delivery manager status: {str(e)}'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+            # Update order status to "in_delivery"
+            order.status = 'in_delivery'
+            order.save()
+            
+            # Update delivery assignment status if it exists
+            if delivery_assignment:
+                delivery_assignment.status = 'in_transit'
+                delivery_assignment.started_at = timezone.now()
+                delivery_assignment.save()
+            
+            # If this is a borrowing order, also update the borrow request status
+            if order.order_type == 'borrowing' and order.borrow_request:
+                from ..models.borrowing_model import BorrowRequest, BorrowStatusChoices
+                borrow_request = order.borrow_request
+                borrow_request.status = BorrowStatusChoices.OUT_FOR_DELIVERY
+                borrow_request.delivery_person = delivery_manager
+                if not borrow_request.pickup_date:
+                    borrow_request.pickup_date = timezone.now()
+                borrow_request.save()
+                logger.info(f"Updated borrow request {borrow_request.id} status to OUT_FOR_DELIVERY")
+            
+            # Create delivery activity log
+            try:
+                from ..models.delivery_model import DeliveryActivity
+                DeliveryActivity.objects.create(
+                    delivery_manager=delivery_manager,
+                    order=order,
+                    activity_type='start_delivery',
+                    activity_data={'order_number': order.order_number},
+                )
+            except Exception as e:
+                logger.warning(f"Failed to create delivery activity log: {str(e)}")
+            
+            return Response({
+                'success': True,
+                'message': 'Delivery started successfully. Delivery manager status automatically changed to busy.',
+                'order_id': order.id,
+                'order_status': order.status,
+                'delivery_manager_id': delivery_manager.id,
+                'delivery_manager_status': 'busy'
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error starting delivery: {str(e)}")
+            return Response({
+                'error': f'Failed to start delivery: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+# ------------------------------------------------------------
+# 📋 7. Get Order Activities (for Admin View)
+# ------------------------------------------------------------
+class OrderActivitiesView(APIView):
+    """
+    Retrieve all activities (comments, additions, edits, deletions) for a specific order.
+    Accessible by library admins and delivery admins.
+    """
+    permission_classes = [permissions.IsAuthenticated, IsDeliveryAdminOrLibraryAdmin]
+
+    def get(self, request, order_id):
+        """
+        Get all activities for a specific order.
+        """
+        try:
+            # Get the order
+            order = get_object_or_404(Order, id=order_id)
+            
+            # Check if user has permission to view this order
+            user = request.user
+            if user.is_customer() and order.customer != user:
+                return Response({
+                    'error': 'You do not have permission to view activities for this order'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Get all delivery activities for this order
+            from ..models.delivery_model import DeliveryActivity
+            from ..serializers.delivery_serializers import DeliveryActivitySerializer
+            
+            activities = DeliveryActivity.objects.filter(
+                order=order
+            ).select_related('delivery_manager', 'order').order_by('-timestamp')
+            
+            # Filter by activity type if provided
+            activity_type = request.query_params.get('activity_type')
+            if activity_type:
+                activities = activities.filter(activity_type=activity_type)
+            
+            # Serialize activities
+            serializer = DeliveryActivitySerializer(activities, many=True)
+            
+            return Response({
+                'success': True,
+                'count': activities.count(),
+                'order_id': order.id,
+                'order_number': order.order_number,
+                'activities': serializer.data
+            }, status=status.HTTP_200_OK)
+            
+        except Order.DoesNotExist:
+            return Response({
+                'error': 'Order not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error retrieving order activities: {str(e)}")
+            return Response({
+                'error': 'An error occurred while retrieving activities',
+                'detail': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
 class OrdersReadyForDeliveryView(generics.ListAPIView):
     """
@@ -1386,8 +2009,10 @@ class OrdersReadyForDeliveryView(generics.ListAPIView):
     def get_queryset(self):
         # Get orders in 'ready_for_delivery' or 'pending' status without delivery assignments
         # Including 'pending' for testing purposes
+        # Filter by order_type to separate purchase and borrowing orders
         queryset = Order.objects.filter(
-            status__in=['pending']
+            status__in=['pending'],
+            order_type='purchase'  # Only show purchase orders, borrowing orders have separate endpoint
         ).select_related('customer', 'payment').prefetch_related('items__book')
         
         # Exclude orders that already have delivery assignments
@@ -1531,11 +2156,108 @@ class DeliveryAssignmentStatusUpdateView(APIView):
             # Set timestamps based on status
             if new_status == 'accepted' and not assignment.accepted_at:
                 assignment.accepted_at = timezone.now()
+                # Update order status to 'in_delivery' when delivery manager accepts (as per scenario)
+                order = assignment.order
+                order.status = 'in_delivery'
+                order.save()
+                
+                # Enable GPS tracking for the delivery manager (as per scenario requirement)
+                try:
+                    from ..models.delivery_model import RealTimeTracking
+                    from ..models.delivery_profile_model import DeliveryProfile
+                    
+                    # Get or create real-time tracking
+                    real_time_tracking, created = RealTimeTracking.objects.get_or_create(
+                        delivery_manager=assignment.delivery_manager,
+                        defaults={
+                            'is_tracking_enabled': True,
+                            'is_delivering': True,
+                            'current_delivery_assignment': assignment,
+                        }
+                    )
+                    if not created:
+                        real_time_tracking.is_tracking_enabled = True
+                        real_time_tracking.is_delivering = True
+                        real_time_tracking.current_delivery_assignment = assignment
+                        real_time_tracking.save()
+                    
+                    # Update delivery profile
+                    from ..services.delivery_profile_services import DeliveryProfileService
+                    delivery_profile = DeliveryProfile.objects.get(user=assignment.delivery_manager)
+                    DeliveryProfileService.start_delivery_task(assignment.delivery_manager)
+                    delivery_profile.is_tracking_active = True
+                    delivery_profile.save()
+                    
+                    logger.info(f"GPS tracking enabled for delivery manager {assignment.delivery_manager.email} for order {order.order_number}")
+                except Exception as e:
+                    logger.error(f"Failed to enable GPS tracking: {str(e)}")
+                
+                # Send notification to customer and admin
+                NotificationService.create_notification(
+                    user_id=order.customer.id,
+                    title="Delivery Confirmed",
+                    message=f"Your order #{order.order_number} has been confirmed by delivery manager. Delivery is in progress!",
+                    notification_type="delivery_confirmed",
+                    related_order_id=order.id
+                )
+                
+                # Notify admins
+                admin_users = User.objects.filter(
+                    user_type__in=['library_admin', 'system_admin'],
+                    is_active=True
+                )
+                for admin in admin_users:
+                    NotificationService.create_notification(
+                        user_id=admin.id,
+                        title="Delivery Confirmed",
+                        message=f"Order #{order.order_number} has been confirmed by delivery manager {assignment.delivery_manager.get_full_name()}.",
+                        notification_type="delivery_confirmed_admin",
+                        related_order_id=order.id
+                    )
             elif new_status == 'picked_up' and not assignment.picked_up_at:
                 assignment.picked_up_at = timezone.now()
+            elif new_status == 'in_transit':
+                # Update order status to 'in_progress' when delivery starts
+                order = assignment.order
+                order.status = 'in_progress'
+                order.save()
             elif new_status == 'delivered' and not assignment.delivered_at:
                 assignment.delivered_at = timezone.now()
                 assignment.actual_delivery_time = timezone.now()
+            
+            # Handle rejected status (as per scenario)
+            if new_status == 'rejected' or new_status == 'cancelled':
+                # Update order status to 'rejected_by_delivery_manager' (as per scenario)
+                order = assignment.order
+                order.status = 'rejected_by_delivery_manager'
+                if failure_reason:
+                    order.cancellation_reason = failure_reason
+                # Restore book quantities when order is rejected
+                order.restore_book_quantities()
+                order.save()
+                
+                # Send notifications to customer and admin (as per scenario)
+                NotificationService.create_notification(
+                    user_id=order.customer.id,
+                    title="Delivery Rejected by Delivery Manager",
+                    message=f"Your order #{order.order_number} has been rejected by the delivery manager. Reason: {failure_reason or 'No reason provided'}",
+                    notification_type="delivery_rejected",
+                    related_order_id=order.id
+                )
+                
+                # Notify admins
+                admin_users = User.objects.filter(
+                    user_type__in=['library_admin', 'system_admin'],
+                    is_active=True
+                )
+                for admin in admin_users:
+                    NotificationService.create_notification(
+                        user_id=admin.id,
+                        title="Delivery Rejected",
+                        message=f"Order #{order.order_number} has been rejected by delivery manager {assignment.delivery_manager.get_full_name()}. Reason: {failure_reason or 'No reason provided'}",
+                        notification_type="delivery_rejected_admin",
+                        related_order_id=order.id
+                    )
             
             # Set failure reason if status is failed
             if new_status == 'failed' and failure_reason:
@@ -1563,18 +2285,68 @@ class DeliveryAssignmentStatusUpdateView(APIView):
                 except Exception as e:
                     logger.error(f"Failed to create notification for delivery time update: {str(e)}")
             
-            # Update order status if delivered
+            # Update order status if delivered (as per scenario: status should be "completed")
             if new_status == 'delivered':
                 order = assignment.order
-                order.status = 'delivered'
+                order.status = 'completed'  # As per scenario: status → "Completed"
                 order.delivered_at = timezone.now()
                 order.save()
+                
+                # Stop GPS tracking immediately when delivery ends (as per scenario)
+                try:
+                    if hasattr(assignment.delivery_manager, 'real_time_tracking'):
+                        real_time_tracking = assignment.delivery_manager.real_time_tracking
+                        real_time_tracking.is_tracking_enabled = False
+                        real_time_tracking.is_delivering = False
+                        real_time_tracking.current_delivery_assignment = None
+                        real_time_tracking.save()
+                    
+                    # Update delivery profile
+                    from ..models.delivery_profile_model import DeliveryProfile
+                    delivery_profile = DeliveryProfile.objects.get(user=assignment.delivery_manager)
+                    delivery_profile.is_tracking_active = False
+                    delivery_profile.save()
+                    
+                    logger.info(f"GPS tracking stopped for delivery manager {assignment.delivery_manager.email} after completing order {order.order_number}")
+                except Exception as e:
+                    logger.error(f"Failed to stop GPS tracking: {str(e)}")
+                
+                # Reset delivery person status to 'online' when order is delivered
+                try:
+                    from ..services.delivery_profile_services import DeliveryProfileService
+                    DeliveryProfileService.complete_delivery_task(assignment.delivery_manager, completed_order_id=order.id)
+                    logger.info(f"Delivery manager {assignment.delivery_manager.email} status updated after delivery completion")
+                except Exception as e:
+                    logger.error(f"Failed to reset delivery person status: {str(e)}")
                 
                 # Create notification for order delivered
                 try:
                     NotificationService.notify_order_delivered(order.id)
                 except Exception as e:
                     logger.error(f"Failed to create notification for order delivery: {str(e)}")
+            
+            # Create notification for delivery manager about status change (if updated by admin)
+            if user != assignment.delivery_manager and new_status != old_status:
+                try:
+                    status_messages = {
+                        'accepted': f"Your delivery assignment for order #{assignment.order.order_number} has been accepted.",
+                        'picked_up': f"Order #{assignment.order.order_number} has been marked as picked up.",
+                        'in_transit': f"Delivery for order #{assignment.order.order_number} is now in transit.",
+                        'delivered': f"Order #{assignment.order.order_number} has been delivered successfully.",
+                        'completed': f"Delivery assignment for order #{assignment.order.order_number} has been completed.",
+                        'failed': f"Delivery for order #{assignment.order.order_number} has been marked as failed.",
+                    }
+                    
+                    if new_status in status_messages:
+                        NotificationService.create_notification(
+                            user_id=assignment.delivery_manager.id,
+                            title=f"Delivery Status Update: {new_status.replace('_', ' ').title()}",
+                            message=status_messages[new_status],
+                            notification_type="delivery_status_update",
+                            related_order_id=assignment.order.id
+                        )
+                except Exception as e:
+                    logger.error(f"Failed to create notification for delivery status update: {str(e)}")
             
             # Log status change
             logger.info(f"Delivery assignment #{assignment.id} status changed from {old_status} to {new_status} by {user.email}")
@@ -1619,30 +2391,41 @@ class MyDeliveryAssignmentsView(generics.ListAPIView):
 @permission_classes([permissions.IsAuthenticated, IsDeliveryAdminOrLibraryAdmin])
 def available_delivery_managers_view(request):
     """
-    Get a list of available delivery managers.
+    Get a list of available delivery managers with their status information.
     Accessible by delivery admins, library admins, and system admins.
     """
-    # Stats functionality removed
     try:
-        # Get all active delivery managers (basic info only)
+        # Get all active delivery managers with their delivery profiles
         delivery_managers = User.objects.filter(
             is_active=True,
             user_type='delivery_admin'
-        ).order_by('first_name', 'last_name')
+        ).select_related('delivery_profile').order_by('first_name', 'last_name')
         
-        # Serialize the data with minimal information
-        from ..serializers.user_serializers import UserBasicInfoSerializer
-        serializer = UserBasicInfoSerializer(delivery_managers, many=True)
+        # Serialize the data with delivery status information
+        from ..serializers.borrowing_serializers import DeliveryManagerSerializer
+        serializer = DeliveryManagerSerializer(delivery_managers, many=True)
         
-        # Add placeholder assignment counts
+        # Format response data for frontend compatibility
         response_data = []
         for manager_data in serializer.data:
             manager_data_dict = dict(manager_data)
-            manager_data_dict['active_assignments'] = 0
-            manager_data_dict['message'] = 'Statistics functionality has been removed'
+            # Map status fields for frontend compatibility
+            manager_data_dict['status'] = manager_data_dict.get('status_display', 'Offline')
+            manager_data_dict['delivery_status'] = manager_data_dict.get('delivery_status', 'offline')
+            # Add phone number if available from profile
+            if 'phone' not in manager_data_dict:
+                try:
+                    user = User.objects.get(id=manager_data_dict['id'])
+                    if hasattr(user, 'profile') and user.profile.phone_number:
+                        manager_data_dict['phone'] = user.profile.phone_number
+                    else:
+                        manager_data_dict['phone'] = ''
+                except:
+                    manager_data_dict['phone'] = ''
             response_data.append(manager_data_dict)
         
         return Response({
+            'success': True,
             'delivery_managers': response_data
         }, status=status.HTTP_200_OK)
     
@@ -1964,6 +2747,92 @@ class DeliveryManagerLocationView(APIView):
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
+def get_order_delivery_location_view(request, order_id):
+    """
+    Get real-time delivery location for an order.
+    Accessible by order owner (customer), admin, and assigned delivery manager.
+    Only available when order status is 'in_delivery'.
+    """
+    try:
+        order = Order.objects.select_related('delivery_assignment__delivery_manager').get(id=order_id)
+        user = request.user
+        
+        # Check permissions
+        if not (user.is_delivery_admin() or user.is_library_admin() or order.customer == user):
+            return Response({
+                'error': "You don't have permission to view this order's delivery location"
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        # Check if order is in delivery status (as per scenario requirement)
+        if order.status != 'in_delivery':
+            return Response({
+                'error': f"Delivery location is only available when order status is 'in_delivery'. Current status: {order.status}",
+                'order_status': order.status
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if order has a delivery assignment
+        if not hasattr(order, 'delivery_assignment') or not order.delivery_assignment:
+            return Response({
+                'error': "This order doesn't have a delivery assignment yet"
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        assignment = order.delivery_assignment
+        delivery_manager = assignment.delivery_manager
+        
+        # Get delivery manager location
+        location_data = delivery_manager.get_location_dict()
+        
+        # Check if GPS tracking is active
+        is_tracking_active = False
+        if hasattr(delivery_manager, 'real_time_tracking'):
+            is_tracking_active = delivery_manager.real_time_tracking.is_tracking_enabled
+        
+        # Get latest location from location history if available
+        from ..models.delivery_model import LocationHistory
+        latest_location = LocationHistory.objects.filter(
+            delivery_manager=delivery_manager,
+            delivery_assignment=assignment
+        ).order_by('-recorded_at').first()
+        
+        if latest_location:
+            location_data = {
+                'latitude': float(latest_location.latitude),
+                'longitude': float(latest_location.longitude),
+                'address': latest_location.address,
+                'recorded_at': latest_location.recorded_at.isoformat(),
+                'accuracy': latest_location.accuracy,
+                'speed': latest_location.speed,
+                'heading': latest_location.heading,
+            }
+        
+        return Response({
+            'success': True,
+            'order_id': order.id,
+            'order_number': order.order_number,
+            'order_status': order.status,
+            'is_tracking_active': is_tracking_active,
+            'delivery_manager': {
+                'id': delivery_manager.id,
+                'name': delivery_manager.get_full_name(),
+                'email': delivery_manager.email,
+            },
+            'location': location_data,
+            'last_updated': latest_location.recorded_at.isoformat() if latest_location else None,
+        }, status=status.HTTP_200_OK)
+        
+    except Order.DoesNotExist:
+        return Response({
+            'error': 'Order not found'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        logger.error(f"Error getting order delivery location: {str(e)}")
+        return Response({
+            'error': 'An error occurred while retrieving delivery location'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
 def get_delivery_manager_location_view(request, delivery_manager_id):
     """
     Get a specific delivery manager's location.
@@ -2077,21 +2946,28 @@ class DeliveryManagerStatusUpdateView(APIView):
                 }, status=status.HTTP_400_BAD_REQUEST)
             
             # Check if the delivery manager is currently busy
-            if user.delivery_status == 'busy' and new_status == 'offline':
-                # Check if they have any active deliveries
-                active_requests = DeliveryRequest.objects.filter(
-                    delivery_manager=user, 
-                    status='in_operation'
-                ).exists()
+            from ..models.delivery_profile_model import DeliveryProfile
+            try:
+                delivery_profile = DeliveryProfile.objects.get(user=user)
+                if delivery_profile.delivery_status == 'busy' and new_status == 'offline':
+                    # Check if they have any active deliveries
+                    active_requests = DeliveryRequest.objects.filter(
+                        delivery_manager=user, 
+                        status='in_operation'
+                    ).exists()
+                    
+                    if active_requests:
+                        return Response({
+                            'error': 'Cannot go offline while you have active deliveries'
+                        }, status=status.HTTP_400_BAD_REQUEST)
                 
-                if active_requests:
-                    return Response({
-                        'error': 'Cannot go offline while you have active deliveries'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-            
-            # Update the status
-            user.delivery_status = new_status
-            user.save()
+                # Update the status
+                delivery_profile.delivery_status = new_status
+                delivery_profile.save()
+            except DeliveryProfile.DoesNotExist:
+                return Response({
+                    'error': 'Delivery profile not found'
+                }, status=status.HTTP_404_NOT_FOUND)
             
             return Response({
                 'success': True,
@@ -2239,7 +3115,8 @@ class LocationTrackingUpdateView(APIView):
                 heading=data.get('heading'),
                 battery_level=data.get('battery_level'),
                 network_type=data.get('network_type'),
-                delivery_assignment_id=data.get('delivery_assignment_id')
+                delivery_assignment_id=data.get('delivery_assignment_id'),
+                borrow_request_id=data.get('borrow_request_id')
             )
             
             if result['success']:
@@ -2476,6 +3353,33 @@ class RealTimeTrackingSettingsView(APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+def get_delivery_notification_types():
+    """
+    Get the list of all delivery-related notification types.
+    This ensures consistency across all delivery notification filtering.
+    """
+    return [
+        'order_delivered',
+        'order_accepted', 
+        'delivery_assigned',
+        'delivery_assignment',  # Used in borrowing service
+        'delivery_time_updated',
+        'delivery_request',
+        'delivery_request_assigned',  # When delivery request is assigned
+        'delivery_status_update',
+        'delivery_started',
+        'delivery_started_admin',
+        'delivery_confirmed',
+        'delivery_confirmed_admin',
+        'delivery_rejected',
+        'delivery_rejected_admin',
+        'delivery_completed',
+        'delivery_accepted',
+        'delivery_accepted_admin',
+        'delivery_task_created',  # For other delivery managers
+    ]
+
+
 class DeliveryNotificationsView(APIView):
     """
     View for managing delivery-related notifications
@@ -2507,18 +3411,17 @@ class DeliveryNotificationsView(APIView):
             )
             
             # Filter for delivery-related notifications
-            delivery_types = [
-                'order_delivered',
-                'order_accepted', 
-                'delivery_assigned',
-                'delivery_time_updated',
-                'delivery_request',
-                'delivery_status_update'
-            ]
+            # Include all notification types that are created for delivery managers
+            delivery_types = get_delivery_notification_types()
             
             delivery_notifications = notifications.filter(
                 notification_type__name__in=delivery_types
             ).order_by('-created_at')
+            
+            # Calculate unread count for delivery notifications only
+            # This ensures the count matches what's actually shown in the list
+            unread_delivery_notifications = delivery_notifications.filter(status='unread')
+            unread_count = unread_delivery_notifications.count()
             
             # Serialize the notifications
             from ..serializers.notification_serializers import NotificationSerializer
@@ -2527,7 +3430,8 @@ class DeliveryNotificationsView(APIView):
             return Response({
                 'success': True,
                 'notifications': serializer.data,
-                'count': delivery_notifications.count()
+                'count': delivery_notifications.count(),
+                'unread_count': unread_count
             }, status=status.HTTP_200_OK)
             
         except ValueError as e:
@@ -2551,11 +3455,28 @@ class DeliveryNotificationsView(APIView):
             mark_all = request.data.get('mark_all', False)
             
             if mark_all:
-                # Mark all delivery notifications as read
-                count = NotificationService.mark_all_as_read(request.user.id)
+                # Mark all delivery notifications as read (only delivery-related types)
+                from ..models.notification_model import Notification
+                from django.utils import timezone
+                
+                delivery_types = get_delivery_notification_types()
+                
+                # Get unread delivery notifications and mark them as read
+                unread_delivery_notifications = Notification.objects.filter(
+                    recipient=request.user,
+                    status='unread',
+                    notification_type__name__in=delivery_types
+                )
+                count = unread_delivery_notifications.count()
+                
+                unread_delivery_notifications.update(
+                    status='read',
+                    read_at=timezone.now()
+                )
+                
                 return Response({
                     'success': True,
-                    'message': f'{count} notifications marked as read'
+                    'message': f'{count} delivery notifications marked as read'
                 }, status=status.HTTP_200_OK)
             
             elif notification_id:
@@ -2615,6 +3536,102 @@ class DeliveryNotificationsView(APIView):
             logger.error(f"Error deleting notification: {str(e)}")
             return Response({
                 'error': 'An error occurred while deleting notification'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class DeliveryNotificationMarkReadView(APIView):
+    """
+    View for marking a specific delivery notification as read
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def post(self, request, notification_id):
+        """
+        Mark a specific notification as read
+        """
+        try:
+            from ..services.notification_services import NotificationService
+            from ..models.notification_model import Notification
+            
+            # First, get the notification to check permissions
+            try:
+                notification = Notification.objects.get(id=notification_id)
+            except Notification.DoesNotExist:
+                return Response({
+                    'error': f'Notification with ID {notification_id} does not exist'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            # Verify the notification belongs to the current user
+            if notification.recipient != request.user and not (request.user.is_staff or request.user.is_superuser):
+                return Response({
+                    'error': 'You do not have permission to mark this notification as read'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Mark the notification as read
+            notification = NotificationService.mark_notification_as_read(notification_id)
+            
+            from ..serializers.notification_serializers import NotificationSerializer
+            serializer = NotificationSerializer(notification)
+            
+            return Response({
+                'success': True,
+                'message': 'Notification marked as read',
+                'notification': serializer.data
+            }, status=status.HTTP_200_OK)
+                
+        except ValueError as e:
+            return Response({
+                'error': str(e)
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error marking notification as read: {str(e)}")
+            return Response({
+                'error': 'An error occurred while marking notification as read'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class DeliveryNotificationsUnreadCountView(APIView):
+    """
+    View for getting the unread count of delivery-related notifications
+    This ensures the count matches what's shown in the delivery notifications list
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request):
+        """
+        Get the count of unread delivery-related notifications for the current user
+        """
+        try:
+            from ..services.notification_services import NotificationService
+            from ..models.notification_model import Notification
+            
+            # Get all unread notifications for the user
+            notifications = NotificationService.get_user_notifications(
+                user_id=request.user.id,
+                is_read=False
+            )
+            
+            # Filter for delivery-related notifications only
+            # This matches the same filtering logic used in DeliveryNotificationsView
+            delivery_types = get_delivery_notification_types()
+            
+            unread_delivery_count = notifications.filter(
+                notification_type__name__in=delivery_types
+            ).count()
+            
+            return Response({
+                'success': True,
+                'unread_count': unread_delivery_count
+            }, status=status.HTTP_200_OK)
+            
+        except ValueError as e:
+            return Response({
+                'error': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error(f"Error getting delivery unread count: {str(e)}")
+            return Response({
+                'error': 'An error occurred while fetching unread count'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 

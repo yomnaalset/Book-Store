@@ -4,7 +4,7 @@ from .cart_model import Cart, CartItem
 from .payment_model import Payment, CreditCardPayment, CashOnDeliveryPayment    
 from .delivery_model import (
     Order, OrderItem, DeliveryAssignment, 
-    DeliveryStatusHistory, DeliveryRequest
+    DeliveryStatusHistory, DeliveryRequest, OrderNote
 )
 from .notification_model import Notification, NotificationType
 from .borrowing_model import (
@@ -18,12 +18,13 @@ from .ad_model import Advertisement, AdvertisementStatusChoices
 from .user_preferences_model import UserNotificationPreferences, UserPrivacyPreferences, UserPreference
 from .help_support_model import FAQ, UserGuide, TroubleshootingGuide, SupportContact
 from .delivery_profile_model import DeliveryProfile
+from .return_model import ReturnRequest, ReturnStatus
 __all__ = [
     'User', 'UserProfile',  
     'Library', 'Book','BookImage', 'Category', 'Author',
     'Cart', 'CartItem',
     'Payment', 'CreditCardPayment', 'CashOnDeliveryPayment',
-    'Order', 'OrderItem', 'DeliveryAssignment', 'DeliveryStatusHistory', 'DeliveryRequest',
+    'Order', 'OrderItem', 'DeliveryAssignment', 'DeliveryStatusHistory', 'DeliveryRequest', 'OrderNote',
     'Notification', 'NotificationType', 'BookEvaluation', 'Favorite', 'ReviewLike', 'ReviewReply', 'ReplyLike',
     'BorrowRequest', 'BorrowExtension', 'BorrowFine', 'BorrowStatistics',
     'BorrowStatusChoices', 'ExtensionStatusChoices', 'FineStatusChoices',
@@ -33,5 +34,6 @@ __all__ = [
     'Advertisement', 'AdvertisementStatusChoices',
     'UserNotificationPreferences', 'UserPrivacyPreferences', 'UserPreference',
     'FAQ', 'UserGuide', 'TroubleshootingGuide', 'SupportContact',
-    'DeliveryProfile'
+    'DeliveryProfile',
+    'ReturnRequest', 'ReturnStatus'
 ]

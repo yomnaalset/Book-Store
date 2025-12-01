@@ -2,7 +2,7 @@ from rest_framework import serializers
 from django.utils import timezone
 from django.db import transaction
 from ..models import Order, OrderItem, DeliveryAssignment, DeliveryStatusHistory, User, Payment, Book
-from ..models.delivery_model import DeliveryRequest, LocationHistory, RealTimeTracking, DeliveryActivity
+from ..models.delivery_model import DeliveryRequest, LocationHistory, RealTimeTracking, DeliveryActivity, OrderNote
 from .user_serializers import UserBasicInfoSerializer, UserDetailSerializer 
 from .payment_serializers import PaymentBasicSerializer
 from .library_serializers import BookSerializer
@@ -73,6 +73,8 @@ class DeliveryAssignmentBasicSerializer(serializers.ModelSerializer):
     Basic serializer for delivery assignments with order details for delivery managers.
     """
     delivery_manager_name = serializers.CharField(source='delivery_manager.get_full_name', read_only=True)
+    delivery_manager_email = serializers.EmailField(source='delivery_manager.email', read_only=True, allow_null=True)
+    delivery_manager_phone = serializers.SerializerMethodField()
     order_number = serializers.CharField(source='order.order_number', read_only=True)
     assigned_by_name = serializers.CharField(source='assigned_by.get_full_name', read_only=True)
     order = serializers.SerializerMethodField()
@@ -81,10 +83,36 @@ class DeliveryAssignmentBasicSerializer(serializers.ModelSerializer):
         model = DeliveryAssignment
         fields = [
             'id', 'order', 'order_number', 'delivery_manager', 'delivery_manager_name',
+            'delivery_manager_email', 'delivery_manager_phone',
             'status', 'assigned_at', 'assigned_by', 'assigned_by_name',
             'estimated_delivery_time', 'started_at', 'completed_at'
         ]
         read_only_fields = ['id', 'assigned_at', 'assigned_by']
+    
+    def get_delivery_manager_phone(self, obj):
+        """Get phone number from delivery manager's profile if available"""
+        try:
+            if obj.delivery_manager:
+                delivery_manager = obj.delivery_manager
+                # Try to access profile directly (should be prefetched)
+                try:
+                    if hasattr(delivery_manager, 'profile') and delivery_manager.profile:
+                        phone = delivery_manager.profile.phone_number
+                        if phone and phone.strip():  # Check if not empty
+                            return phone.strip()
+                except AttributeError:
+                    # Profile might not be prefetched, try to access it
+                    try:
+                        profile = delivery_manager.profile
+                        if profile and profile.phone_number and profile.phone_number.strip():
+                            return profile.phone_number.strip()
+                    except Exception:
+                        pass
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.debug(f"Error getting delivery manager phone: {str(e)}")
+        return None
     
     def get_order(self, obj):
         """Return full order details for delivery managers"""
@@ -116,7 +144,7 @@ class OrderListSerializer(serializers.ModelSerializer):
             'id', 'order_number', 'customer_name', 'customer_email',
             'total_amount', 'status', 'order_type', 'payment_method', 'payment_type', 'payment_status',
             'total_items', 'total_quantity', 'has_delivery_assignment',
-            'discount_code', 'discount_amount', 'discount_percentage',
+            'discount_code', 'discount_amount', 'discount_percentage', 'delivery_cost',
             'created_at', 'updated_at', 'delivery_assignment'
         ]
         read_only_fields = ['id', 'order_number', 'created_at', 'updated_at']
@@ -183,6 +211,9 @@ class OrderDetailSerializer(serializers.ModelSerializer):
     total_quantity = serializers.SerializerMethodField()
     can_be_cancelled = serializers.BooleanField(read_only=True)
     can_be_delivered = serializers.BooleanField(read_only=True)
+    can_edit_notes = serializers.SerializerMethodField()
+    can_delete_notes = serializers.SerializerMethodField()
+    notes = serializers.SerializerMethodField()
     class Meta:
         model = Order
         fields = [
@@ -190,7 +221,8 @@ class OrderDetailSerializer(serializers.ModelSerializer):
             'total_amount', 'status', 'status_display', 'order_type', 'payment_method',
             'delivery_address', 'delivery_city', 'delivery_notes', 'cancellation_reason',
             'total_items', 'total_quantity', 'can_be_cancelled', 'can_be_delivered',
-            'discount_code', 'discount_amount', 'discount_percentage',
+            'can_edit_notes', 'can_delete_notes', 'notes',
+            'discount_code', 'discount_amount', 'discount_percentage', 'delivery_cost',
             'created_at', 'updated_at', 'delivery_assignment'
         ]
         read_only_fields = [
@@ -222,6 +254,144 @@ class OrderDetailSerializer(serializers.ModelSerializer):
         except Exception:
             pass
         return None
+    
+    def get_can_edit_notes(self, obj):
+        """Check if current user can edit notes for this order"""
+        request = self.context.get('request')
+        if not request or not request.user:
+            return False
+        
+        user = request.user
+        
+        # Customers can edit notes for their own orders
+        if user.is_customer() and obj.customer == user:
+            return True
+        
+        # Admins (library_admin, delivery_admin) can edit notes for any order
+        if user.user_type in ['library_admin', 'delivery_admin']:
+            return True
+        
+        return False
+    
+    def get_can_delete_notes(self, obj):
+        """Check if current user can delete notes for this order"""
+        # Same permissions as editing
+        return self.get_can_edit_notes(obj)
+    
+    def get_notes(self, obj):
+        """Get all notes for this order with author information"""
+        # Get all non-deleted notes, ordered by most recent first
+        notes = obj.notes.filter(is_deleted=False).order_by('-created_at')
+        return OrderNoteSerializer(notes, many=True, context=self.context).data
+
+
+class OrderNoteSerializer(serializers.ModelSerializer):
+    """
+    Serializer for order notes with author information.
+    """
+    author_name = serializers.SerializerMethodField()
+    author_email = serializers.SerializerMethodField()
+    author_type = serializers.SerializerMethodField()
+    can_edit = serializers.SerializerMethodField()
+    can_delete = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = OrderNote
+        fields = [
+            'id', 'content', 'author', 'author_name', 'author_email', 'author_type',
+            'can_edit', 'can_delete', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'author', 'created_at', 'updated_at']
+    
+    def get_author_name(self, obj):
+        """Get author's full name"""
+        if obj.author:
+            full_name = obj.author.get_full_name()
+            # If full_name is empty or just whitespace, use email
+            if full_name and full_name.strip():
+                return full_name
+            # Fallback to email or username
+            return obj.author.email or getattr(obj.author, 'username', 'Unknown')
+        
+        # If author is None, try to infer from order context
+        # This handles notes created before author tracking was implemented
+        try:
+            order = obj.order
+            # Check if there's a delivery assignment (likely delivery manager wrote it)
+            # DeliveryAssignment has OneToOneField with related_name='delivery_assignment'
+            assignment = getattr(order, 'delivery_assignment', None)
+            if assignment and hasattr(assignment, 'delivery_manager') and assignment.delivery_manager:
+                manager = assignment.delivery_manager
+                full_name = manager.get_full_name()
+                if full_name and full_name.strip():
+                    return full_name
+                return manager.email or getattr(manager, 'username', 'Unknown')
+            
+            # Fallback to customer
+            if order.customer:
+                full_name = order.customer.get_full_name()
+                if full_name and full_name.strip():
+                    return full_name
+                return order.customer.email or getattr(order.customer, 'username', 'Unknown')
+        except Exception:
+            pass
+        
+        return "Unknown"
+    
+    def get_author_email(self, obj):
+        """Get author's email"""
+        if obj.author:
+            return obj.author.email
+        
+        # Try to infer from order context
+        try:
+            order = obj.order
+            assignment = getattr(order, 'delivery_assignment', None)
+            if assignment and hasattr(assignment, 'delivery_manager') and assignment.delivery_manager:
+                return assignment.delivery_manager.email
+            if order.customer:
+                return order.customer.email
+        except Exception:
+            pass
+        
+        return None
+    
+    def get_author_type(self, obj):
+        """Get author's user type"""
+        if obj.author:
+            return obj.author.user_type
+        
+        # Try to infer from order context
+        try:
+            order = obj.order
+            assignment = getattr(order, 'delivery_assignment', None)
+            if assignment and hasattr(assignment, 'delivery_manager') and assignment.delivery_manager:
+                return assignment.delivery_manager.user_type
+            if order.customer:
+                return order.customer.user_type
+        except Exception:
+            pass
+        
+        return None
+    
+    def get_can_edit(self, obj):
+        """Check if current user can edit this specific note"""
+        request = self.context.get('request')
+        if not request or not request.user:
+            return False
+        
+        user = request.user
+        
+        # Only the author can edit their own note
+        if obj.author and obj.author == user:
+            return True
+        
+        return False
+    
+    def get_can_delete(self, obj):
+        """Check if current user can delete this specific note"""
+        # Same permission as editing - only the author can delete
+        return self.get_can_edit(obj)
 
 
 class OrderStatusUpdateSerializer(serializers.Serializer):
@@ -437,8 +607,8 @@ class OrderApprovalSerializer(serializers.Serializer):
             )
             
             # Check if delivery manager is available
-            if hasattr(delivery_manager, 'delivery_profile'):
-                if delivery_manager.delivery_profile.status not in ['online', 'available']:
+            if hasattr(delivery_manager, 'delivery_profile') and delivery_manager.delivery_profile:
+                if delivery_manager.delivery_profile.delivery_status != 'online':
                     raise serializers.ValidationError("Selected delivery manager is not available")
             
             return value
@@ -786,32 +956,107 @@ class DeliveryRequestWithAvailableManagersSerializer(serializers.ModelSerializer
 class BorrowingOrderSerializer(serializers.ModelSerializer):
     """
     Serializer for borrowing orders to be displayed in delivery requests list.
+    Returns the exact status from BorrowRequest model to match database.
     """
     customer_name = serializers.CharField(source='customer.get_full_name', read_only=True)
-    book_title = serializers.CharField(source='borrow_request.book.title', read_only=True)
+    customer_email = serializers.CharField(source='customer.email', read_only=True)
+    book_title = serializers.SerializerMethodField()
+    book_author = serializers.SerializerMethodField()  # Add author name (pseudonym)
+    status = serializers.SerializerMethodField()  # Override to return borrow_request status
     status_display = serializers.SerializerMethodField()
     available_managers = serializers.SerializerMethodField()
     request_type = serializers.SerializerMethodField()
+    payment_method = serializers.SerializerMethodField()
+    borrow_request = serializers.SerializerMethodField()  # Include borrow_request data
     
     class Meta:
         model = Order
         fields = [
-            'id', 'order_number', 'customer_name', 'book_title', 'delivery_address',
+            'id', 'order_number', 'customer_name', 'customer_email', 'book_title', 'book_author', 'delivery_address',
             'status', 'status_display', 'created_at', 'delivery_notes', 
-            'available_managers', 'request_type'
+            'available_managers', 'request_type', 'payment_method', 'borrow_request'
         ]
         read_only_fields = ['id', 'order_number', 'created_at']
     
+    def get_payment_method(self, obj):
+        """Get payment method from borrow request if available."""
+        try:
+            if hasattr(obj, 'borrow_request') and obj.borrow_request:
+                return obj.borrow_request.payment_method
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Error getting payment method for order {obj.id}: {str(e)}")
+        return obj.payment_method if hasattr(obj, 'payment_method') else None
+    
+    def get_book_title(self, obj):
+        """Get book title from borrow request."""
+        try:
+            # Check if borrow_request exists and is loaded
+            if hasattr(obj, 'borrow_request') and obj.borrow_request:
+                # Check if book exists and is loaded
+                if hasattr(obj.borrow_request, 'book') and obj.borrow_request.book:
+                    return obj.borrow_request.book.name
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Error getting book title for order {obj.id}: {str(e)}")
+        return None
+    
+    def get_book_author(self, obj):
+        """Get book author name (pseudonym) from borrow request."""
+        try:
+            # Check if borrow_request exists and is loaded
+            if hasattr(obj, 'borrow_request') and obj.borrow_request:
+                # Check if book exists and is loaded
+                if hasattr(obj.borrow_request, 'book') and obj.borrow_request.book:
+                    # Check if author exists and is loaded
+                    if hasattr(obj.borrow_request.book, 'author') and obj.borrow_request.book.author:
+                        return obj.borrow_request.book.author.name
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Error getting book author for order {obj.id}: {str(e)}")
+        return None
+    
+    def get_status(self, obj):
+        """Return the exact status from BorrowRequest model to match database."""
+        try:
+            if hasattr(obj, 'borrow_request') and obj.borrow_request:
+                return obj.borrow_request.status
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Error getting borrow_request status for order {obj.id}: {str(e)}")
+        # Fallback to order status if borrow_request not available
+        return obj.status
+    
     def get_status_display(self, obj):
-        """Get human-readable status."""
-        status_map = {
-            'pending_assignment': 'Pending',
-            'assigned': 'Assigned', 
-            'in_delivery': 'In Progress',
-            'delivered': 'Completed',
-            'cancelled': 'Cancelled'
-        }
-        return status_map.get(obj.status, obj.status)
+        """Get human-readable status from BorrowRequest."""
+        try:
+            if hasattr(obj, 'borrow_request') and obj.borrow_request:
+                # Use the borrow_request status for display
+                status = obj.borrow_request.status
+            else:
+                status = obj.status
+        except Exception:
+            status = obj.status
+        
+        # Return the status exactly as it appears in database (no transformation)
+        # The frontend will handle display formatting
+        return status
+    
+    def get_borrow_request(self, obj):
+        """Include borrow_request data so frontend can access it."""
+        try:
+            if hasattr(obj, 'borrow_request') and obj.borrow_request:
+                from .borrowing_serializers import BorrowRequestListSerializer
+                return BorrowRequestListSerializer(obj.borrow_request).data
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Error serializing borrow_request for order {obj.id}: {str(e)}")
+        return None
     
     def get_request_type(self, obj):
         """Get request type."""
@@ -819,16 +1064,23 @@ class BorrowingOrderSerializer(serializers.ModelSerializer):
     
     def get_available_managers(self, obj):
         """Get list of available delivery managers for this request."""
-        from ..models import User
-        available_managers = User.objects.filter(
-            user_type='delivery_admin',
-            is_active=True,
-            delivery_profile__delivery_status__in=['online', 'busy'],
-            delivery_profile__is_tracking_active=True
-        ).select_related('delivery_profile')
-        
-        serializer = DeliveryManagerForRequestSerializer(available_managers, many=True)
-        return serializer.data
+        try:
+            from ..models import User
+            available_managers = User.objects.filter(
+                user_type='delivery_admin',
+                is_active=True,
+                delivery_profile__delivery_status__in=['online', 'busy'],
+                delivery_profile__is_tracking_active=True
+            ).select_related('delivery_profile')
+            
+            serializer = DeliveryManagerForRequestSerializer(available_managers, many=True)
+            return serializer.data
+        except Exception as e:
+            # Return empty list if there's an error getting managers
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Error getting available managers for order {obj.id}: {str(e)}")
+            return []
 
 
 class LocationHistorySerializer(serializers.ModelSerializer):
@@ -955,6 +1207,7 @@ class RealTimeTrackingUpdateSerializer(serializers.ModelSerializer):
 class LocationTrackingUpdateSerializer(serializers.Serializer):
     """
     Serializer for real-time location updates.
+    Step 3.3: Location transmission every 5 seconds
     """
     latitude = serializers.DecimalField(max_digits=10, decimal_places=7)
     longitude = serializers.DecimalField(max_digits=10, decimal_places=7)
@@ -969,6 +1222,7 @@ class LocationTrackingUpdateSerializer(serializers.Serializer):
     battery_level = serializers.IntegerField(required=False, min_value=0, max_value=100)
     network_type = serializers.CharField(required=False, max_length=20)
     delivery_assignment_id = serializers.IntegerField(required=False)
+    borrow_request_id = serializers.IntegerField(required=False, help_text="Optional: Link location update to a specific borrow request")
     
     def validate_latitude(self, value):
         """Validate latitude value."""

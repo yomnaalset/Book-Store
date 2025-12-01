@@ -1,11 +1,16 @@
 from django.db import models
 from django.core.exceptions import ValidationError
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 from .user_model import User
 from .payment_model import Payment
 from .cart_model import Cart, CartItem
 from .library_model import Book
 import uuid
 from django.utils import timezone
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Order(models.Model):
@@ -14,12 +19,21 @@ class Order(models.Model):
     Created when a payment is completed successfully.
     """
     ORDER_STATUS_CHOICES = [
-        ('pending', 'Pending'),
-        ('pending_assignment', 'Pending Assignment'),
-        ('confirmed', 'Confirmed'),
+        ('pending', 'Pending Review'),
+        ('rejected_by_admin', 'Rejected by Admin'),
+        ('waiting_for_delivery_manager', 'Waiting for Delivery Manager'),
+        ('rejected_by_delivery_manager', 'Rejected by Delivery Manager'),
         ('in_delivery', 'In Delivery'),
+        ('completed', 'Completed'),
+        ('approved', 'Approved'),
+        ('assigned', 'Assigned'),
+        ('accepted', 'Accepted'),
+        ('in_progress', 'InProgress'),
+        ('confirmed', 'Confirmed'),
+        ('assigned_to_delivery', 'Assigned to Delivery'),
+        ('delivery_in_progress', 'Delivery In Progress'),
+        ('delivery_rejected', 'Delivery Rejected'),
         ('delivered', 'Delivered'),
-        ('cancelled', 'Cancelled'),
         ('returned', 'Returned'),  # For borrowing returns
     ]
     
@@ -93,6 +107,13 @@ class Order(models.Model):
         help_text="Discount percentage applied"
     )
     
+    delivery_cost = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0.00,
+        help_text="Delivery cost (4% of final invoice value)"
+    )
+    
     order_type = models.CharField(
         max_length=20,
         choices=ORDER_TYPE_CHOICES,
@@ -112,7 +133,7 @@ class Order(models.Model):
     )
     
     status = models.CharField(
-        max_length=25,
+        max_length=30,
         choices=ORDER_STATUS_CHOICES,
         default='pending',
         help_text="Current order status"
@@ -253,6 +274,35 @@ class Order(models.Model):
             'confirmed_orders': confirmed_orders,
             'delivered_orders': delivered_orders,
         }
+
+
+@receiver(post_save, sender=Order)
+def reset_delivery_status_on_order_completion(sender, instance, created, **kwargs):
+    """
+    Signal handler to automatically reset delivery manager status when order is completed/delivered.
+    This is a safety mechanism to ensure status is always correct.
+    """
+    # Only process updates (not new orders) and only for completed/delivered status
+    if created:
+        return
+    
+    if instance.status in ['completed', 'delivered']:
+        try:
+            # Check if order has a delivery assignment
+            if hasattr(instance, 'delivery_assignment') and instance.delivery_assignment:
+                delivery_manager = instance.delivery_assignment.delivery_manager
+                if delivery_manager and delivery_manager.is_delivery_admin():
+                    from ..services.delivery_profile_services import DeliveryProfileService
+                    DeliveryProfileService.complete_delivery_task(
+                        delivery_manager,
+                        completed_order_id=instance.id
+                    )
+                    logger.info(
+                        f"Signal: Auto-reset delivery manager {delivery_manager.id} status "
+                        f"after order {instance.order_number} was marked as {instance.status}"
+                    )
+        except Exception as e:
+            logger.error(f"Signal error resetting delivery status for order {instance.id}: {str(e)}")
 
 
 class OrderItem(models.Model):
@@ -492,6 +542,61 @@ class DeliveryStatusHistory(models.Model):
     
     def __str__(self):
         return f"{self.delivery_assignment} - {self.get_status_display()} at {self.timestamp}"
+
+
+class OrderNote(models.Model):
+    """
+    Model to track notes added to orders with author and timestamp information.
+    Each note entry tracks who wrote it and when.
+    """
+    order = models.ForeignKey(
+        Order,
+        on_delete=models.CASCADE,
+        related_name='notes',
+        help_text="Order this note belongs to"
+    )
+    
+    author = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='order_notes',
+        help_text="User who wrote this note"
+    )
+    
+    content = models.TextField(
+        help_text="Note content"
+    )
+    
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When the note was created"
+    )
+    
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        help_text="When the note was last updated"
+    )
+    
+    is_deleted = models.BooleanField(
+        default=False,
+        help_text="Whether this note has been deleted (soft delete)"
+    )
+    
+    class Meta:
+        db_table = 'order_note'
+        verbose_name = 'Order Note'
+        verbose_name_plural = 'Order Notes'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['order', 'is_deleted']),
+            models.Index(fields=['author']),
+            models.Index(fields=['created_at']),
+        ]
+    
+    def __str__(self):
+        author_name = self.author.get_full_name() if self.author else "Unknown"
+        return f"Note by {author_name} on Order {self.order.order_number}"
 
 
 class DeliveryRequest(models.Model):

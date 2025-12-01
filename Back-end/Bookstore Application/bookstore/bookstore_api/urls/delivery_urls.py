@@ -16,6 +16,8 @@ from ..views.delivery_views import (
     RouteActivityView,
     ETAActivityView,
     DeliveryActivityView,
+    OrderActivitiesView,
+    StartDeliveryView,
     
     # Delivery assignment views
     DeliveryAssignmentListView,
@@ -28,6 +30,7 @@ from ..views.delivery_views import (
     available_delivery_managers_view,
     DeliveryManagerStatusUpdateView,
     DeliveryManagerLocationView,
+    get_order_delivery_location_view,
     get_delivery_manager_location_view,
     
     # Bulk operations
@@ -58,6 +61,8 @@ from ..views.delivery_views import (
     
     # Notifications views
     DeliveryNotificationsView,
+    DeliveryNotificationMarkReadView,
+    DeliveryNotificationsUnreadCountView,
     
     # Task management views
     TaskETAUpdateView,
@@ -92,6 +97,7 @@ urlpatterns = [
     path('activities/log/route/', RouteActivityView.as_view(), name='route-activity'),
     path('activities/log/eta/', ETAActivityView.as_view(), name='eta-activity'),
     path('activities/log/delivery/', DeliveryActivityView.as_view(), name='delivery-activity'),
+    path('activities/order/<int:order_id>/', OrderActivitiesView.as_view(), name='order-activities'),
     
     # ---------------------------------------
     # 🚚 Delivery Assignment Endpoints
@@ -115,6 +121,7 @@ urlpatterns = [
     path('customer/orders/', customer_orders_view, name='customer-orders'),
     path('customer/orders/track/<str:order_number>/', order_tracking_view, name='order-tracking'),
     path('customer/orders/<int:order_id>/delivery-contact/', order_delivery_contact_view, name='order-delivery-contact'),
+    path('orders/<int:order_id>/delivery-location/', get_order_delivery_location_view, name='order-delivery-location'),
     
     # ---------------------------------------
     # 📦 Customer Delivery Request Endpoints
@@ -155,9 +162,16 @@ urlpatterns = [
     # 🔔 Notifications Endpoints
     # ---------------------------------------
     path('notifications/', DeliveryNotificationsView.as_view(), name='delivery-notifications'),
+    path('notifications/unread-count/', DeliveryNotificationsUnreadCountView.as_view(), name='delivery-notifications-unread-count'),
+    path('notifications/<int:notification_id>/mark-read/', DeliveryNotificationMarkReadView.as_view(), name='delivery-notification-mark-read'),
     
     # ---------------------------------------
     # ⏱️ Task Management Endpoints
     # ---------------------------------------
     path('tasks/<int:task_id>/eta/', TaskETAUpdateView.as_view(), name='task-update-eta'),
+    
+    # ---------------------------------------
+    # 🚀 Start Delivery Endpoint (Automatic Status Update)
+    # ---------------------------------------
+    path('start_delivery/', StartDeliveryView.as_view(), name='start-delivery'),
 ]

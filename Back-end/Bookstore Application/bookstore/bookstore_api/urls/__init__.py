@@ -1,4 +1,8 @@
 from django.urls import path, include
+from rest_framework_simplejwt.views import (
+    TokenObtainPairView,
+    TokenRefreshView,
+)
 
 from .user_urls import user_urls
 from .library_urls import library_urls
@@ -13,6 +17,8 @@ from .report_urls import report_urls
 from .ad_urls import urlpatterns as ad_urls
 from .user_preferences_urls import user_preferences_urls
 from .delivery_profile_urls import urlpatterns as delivery_profile_urls
+from .return_url import return_urls
+
 urlpatterns = [
     # User management endpoints
     path('users/', include(user_urls)),
@@ -40,5 +46,10 @@ urlpatterns = [
     path('preferences/', include(user_preferences_urls)),
     # Delivery profile endpoints
     path('delivery-profiles/', include(delivery_profile_urls)),
-    ]   
+    # Return request endpoints
+    path('returns/', include(return_urls)),
+    # JWT token endpoints
+    path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+]   
     

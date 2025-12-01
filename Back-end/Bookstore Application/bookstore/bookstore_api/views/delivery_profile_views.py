@@ -146,6 +146,7 @@ class DeliveryProfileViewSet(viewsets.ModelViewSet):
     def my_profile(self, request):
         """
         Get the current user's delivery profile.
+        Automatically resets status to 'online' if user is 'busy' but has no active deliveries.
         """
         if not request.user.is_delivery_admin():
             return Response({
@@ -156,6 +157,28 @@ class DeliveryProfileViewSet(viewsets.ModelViewSet):
         
         try:
             delivery_profile = DeliveryProfileService.get_or_create_delivery_profile(request.user)
+            
+            # Automatically reset status if busy but no active deliveries (safety mechanism)
+            # This ensures status always reflects reality when profile is fetched
+            if delivery_profile.delivery_status == 'busy':
+                try:
+                    logger.info(f"Delivery manager {request.user.id} status is 'busy', checking for active deliveries...")
+                    was_reset = DeliveryProfileService.reset_status_if_no_active_deliveries(request.user)
+                    if was_reset:
+                        # Refresh the profile to get the updated status
+                        delivery_profile.refresh_from_db()
+                        logger.info(
+                            f"Automatically reset delivery status from 'busy' to '{delivery_profile.delivery_status}' "
+                            f"for user {request.user.id} (no active deliveries)"
+                        )
+                    else:
+                        logger.info(
+                            f"Delivery manager {request.user.id} status remains 'busy' - active deliveries found"
+                        )
+                except Exception as reset_error:
+                    logger.error(f"Failed to auto-reset status for user {request.user.id}: {str(reset_error)}")
+                    # Continue with current status even if reset failed
+            
             serializer = DeliveryProfileSerializer(delivery_profile)
             
             return Response({
@@ -230,24 +253,45 @@ class DeliveryProfileViewSet(viewsets.ModelViewSet):
                     'error_code': 'INSUFFICIENT_PERMISSIONS'
                 }, status=403)
             
-            # Reset status if no active deliveries
-            was_reset = DeliveryProfileService.reset_status_if_no_active_deliveries(user)
+            # Get current profile
+            delivery_profile = DeliveryProfileService.get_or_create_delivery_profile(user)
+            old_status = delivery_profile.delivery_status
             
-            if was_reset:
-                return Response({
-                    'success': True,
-                    'message': 'Status reset to online (no active deliveries)',
-                    'data': {
-                        'delivery_status': 'online',
-                        'was_reset': True
-                    }
-                })
+            # If status is busy, force check for active deliveries
+            if delivery_profile.delivery_status == 'busy':
+                logger.info(f"Reset endpoint: User {user.id} has 'busy' status, checking for active deliveries...")
+                was_reset = DeliveryProfileService.reset_status_if_no_active_deliveries(user)
+                
+                # Refresh profile to get updated status
+                delivery_profile.refresh_from_db()
+                
+                if was_reset:
+                    logger.info(f"Reset endpoint: Successfully reset status from '{old_status}' to '{delivery_profile.delivery_status}' for user {user.id}")
+                    return Response({
+                        'success': True,
+                        'message': 'Status reset to online (no active deliveries)',
+                        'data': {
+                            'delivery_status': delivery_profile.delivery_status,
+                            'was_reset': True,
+                            'old_status': old_status
+                        }
+                    })
+                else:
+                    # Status is busy but reset didn't happen
+                    return Response({
+                        'success': True,
+                        'message': 'Status remains busy (active deliveries found)',
+                        'data': {
+                            'delivery_status': delivery_profile.delivery_status,
+                            'was_reset': False,
+                            'old_status': old_status
+                        }
+                    })
             else:
-                # Get current status
-                delivery_profile = DeliveryProfileService.get_or_create_delivery_profile(user)
+                # Status is not busy, no reset needed
                 return Response({
                     'success': True,
-                    'message': 'No reset needed',
+                    'message': 'No reset needed (status is not busy)',
                     'data': {
                         'delivery_status': delivery_profile.delivery_status,
                         'was_reset': False
@@ -255,7 +299,7 @@ class DeliveryProfileViewSet(viewsets.ModelViewSet):
                 })
                 
         except Exception as e:
-            logger.error(f"Error resetting delivery status: {str(e)}")
+            logger.error(f"Error resetting delivery status: {str(e)}", exc_info=True)
             return Response({
                 'success': False,
                 'message': f'Failed to reset status: {str(e)}',
@@ -267,7 +311,7 @@ class DeliveryProfileViewSet(viewsets.ModelViewSet):
         """
         Get the current user's delivery status only.
         This endpoint is specifically designed for frontend to check status after login.
-        IMPORTANT: This endpoint does NOT modify the status - it only returns the current persistent status.
+        Automatically resets status to 'online' if user is 'busy' but has no active deliveries.
         """
         if not request.user.is_delivery_admin():
             return Response({
@@ -278,6 +322,24 @@ class DeliveryProfileViewSet(viewsets.ModelViewSet):
         
         try:
             delivery_profile = DeliveryProfileService.get_or_create_delivery_profile(request.user)
+            
+            # Automatically reset status if busy but no active deliveries (safety mechanism)
+            # This ensures status always reflects reality when dashboard loads
+            if delivery_profile.delivery_status == 'busy':
+                try:
+                    was_reset = DeliveryProfileService.reset_status_if_no_active_deliveries(request.user)
+                    if was_reset:
+                        # Refresh the profile to get the updated status
+                        delivery_profile.refresh_from_db()
+                    else:
+                        # If reset returned False but status is still busy, try force reset as last resort
+                        # Force reset - this will reset if truly no active deliveries exist
+                        was_force_reset = DeliveryProfileService.reset_status_if_no_active_deliveries(request.user, force_reset=True)
+                        if was_force_reset:
+                            delivery_profile.refresh_from_db()
+                except Exception as reset_error:
+                    logger.error(f"Failed to auto-reset status for user {request.user.id}: {str(reset_error)}", exc_info=True)
+                    # Continue with current status even if reset failed
             
             return Response({
                 'success': True,
@@ -385,7 +447,8 @@ class DeliveryProfileViewSet(viewsets.ModelViewSet):
             return Response({
                 'success': True,
                 'message': 'Delivery status updated successfully',
-                'data': response_serializer.data
+                'data': response_serializer.data,
+                'current_status': delivery_profile.delivery_status  # Add for frontend compatibility
             }, status=status.HTTP_200_OK)
             
         except Exception as e:

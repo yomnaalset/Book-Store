@@ -246,6 +246,42 @@ class User(AbstractUser):
         from .delivery_model import LocationHistory
         return LocationHistory.get_movement_summary(self, hours)
     
+    def has_unpaid_fines(self):
+        """Check if user has any unpaid fines."""
+        if not self.is_customer():
+            return False
+        
+        from .borrowing_model import BorrowRequest, FineStatusChoices
+        return BorrowRequest.objects.filter(
+            customer=self,
+            fine_status=FineStatusChoices.UNPAID,
+            fine_amount__gt=0
+        ).exists()
+    
+    def get_total_unpaid_fines(self):
+        """Get total amount of unpaid fines."""
+        if not self.is_customer():
+            return 0
+        
+        from .borrowing_model import BorrowRequest, FineStatusChoices
+        from django.db.models import Sum
+        result = BorrowRequest.objects.filter(
+            customer=self,
+            fine_status=FineStatusChoices.UNPAID,
+            fine_amount__gt=0
+        ).aggregate(total=Sum('fine_amount'))
+        return result['total'] or 0
+    
+    def can_submit_borrow_request(self):
+        """Check if user can submit a new borrow request."""
+        if not self.is_customer():
+            return False, "Only customers can submit borrow requests"
+        
+        if self.has_unpaid_fines():
+            return False, "You cannot submit a new borrowing request until your pending fine is paid."
+        
+        return True, "Can submit borrow request"
+    
     def has_complete_profile(self):
         """Check if user has completed their profile."""
         # Basic required fields

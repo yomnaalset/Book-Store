@@ -31,6 +31,8 @@ class DeliveryProfile(models.Model):
         max_length=20,
         choices=DELIVERY_STATUS_CHOICES,
         default='offline',
+        null=True,  # Allow NULL as fallback for safety
+        blank=True,
         help_text="Current status of delivery manager (online/offline/busy)"
     )
     
@@ -138,7 +140,9 @@ class DeliveryProfile(models.Model):
         """
         Get the human-readable delivery status.
         """
-        return dict(self.DELIVERY_STATUS_CHOICES).get(self.delivery_status, self.delivery_status)
+        if self.delivery_status is None:
+            return 'Offline - Unavailable'
+        return dict(self.DELIVERY_STATUS_CHOICES).get(self.delivery_status, self.delivery_status.capitalize() if self.delivery_status else 'Offline - Unavailable')
     
     @classmethod
     def create_for_user(cls, user):
@@ -189,12 +193,21 @@ class DeliveryProfile(models.Model):
         """
         Automatically set status to busy when starting a delivery.
         This should only be called by the system, not manually.
+        Sets status to busy if currently 'online' or 'offline' (but not if already 'busy').
         """
-        if self.delivery_status == 'online':
+        if self.delivery_status in ['online', 'offline']:
             self.delivery_status = 'busy'
             self.save(update_fields=['delivery_status'])
             return True
-        return False
+        elif self.delivery_status == 'busy':
+            # Already busy, no change needed
+            return False
+        else:
+            # Unknown status, log warning but don't change
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Delivery profile {self.id} has unexpected status '{self.delivery_status}', not setting to busy")
+            return False
     
     def set_online_after_delivery(self):
         """

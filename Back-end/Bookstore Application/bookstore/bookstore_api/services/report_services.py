@@ -765,8 +765,10 @@ class ReportManagementService:
             ).count()
             
             # Get delivery performance by agent (top 10)
-            agent_performance = deliveries.values(
-                'delivery_person__first_name', 'delivery_person__last_name', 'delivery_person__id'
+            agent_performance = deliveries.filter(
+                delivery_manager__isnull=False
+            ).values(
+                'delivery_manager__first_name', 'delivery_manager__last_name', 'delivery_manager__id'
             ).annotate(
                 delivery_count=Count('id'),
                 completed_count=Count('id', filter=Q(actual_delivery_time__isnull=False))
@@ -775,9 +777,12 @@ class ReportManagementService:
             agent_data = []
             for item in agent_performance:
                 completion_rate = (item['completed_count'] / item['delivery_count'] * 100) if item['delivery_count'] > 0 else 0
+                first_name = item.get('delivery_manager__first_name') or ''
+                last_name = item.get('delivery_manager__last_name') or ''
+                agent_name = f"{first_name} {last_name}".strip() or 'Unknown Agent'
                 agent_data.append({
-                    'agent_id': item['delivery_person__id'],
-                    'agent_name': f"{item['delivery_person__first_name']} {item['delivery_person__last_name']}",
+                    'agent_id': item['delivery_manager__id'],
+                    'agent_name': agent_name,
                     'delivery_count': item['delivery_count'],
                     'completed_count': item['completed_count'],
                     'completion_rate': round(completion_rate, 2)

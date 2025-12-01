@@ -100,8 +100,6 @@ from .borrowing_views import (
     BorrowExtensionsListView,
     BorrowFinesListView,
     LateReturnProcessView,
-    BookReturnWithFineView,
-    FinePaymentView,
     LateReturnSummaryView,
     ProcessOverdueBorrowingsView,
     DepositManagementView,

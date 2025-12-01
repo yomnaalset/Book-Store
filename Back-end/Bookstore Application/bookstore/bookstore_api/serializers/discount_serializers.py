@@ -31,7 +31,7 @@ class DiscountCodeSerializer(serializers.ModelSerializer):
             'usage_limit_per_customer': {
                 'required': True,
                 'help_text': 'Maximum number of times each customer can use this code',
-                'min_value': Decimal('1')
+                'min_value': 1
             },
             'expiration_date': {
                 'required': True,
@@ -114,7 +114,7 @@ class DiscountCodeUpdateSerializer(serializers.ModelSerializer):
             },
             'usage_limit_per_customer': {
                 'help_text': 'Maximum number of times each customer can use this code',
-                'min_value': Decimal('1')
+                'min_value': 1
             },
             'expiration_date': {
                 'help_text': 'When this discount code expires'
@@ -367,7 +367,7 @@ class BookDiscountSerializer(serializers.ModelSerializer):
             'usage_limit_per_customer': {
                 'required': True,
                 'help_text': 'Maximum number of times each customer can use this discount',
-                'min_value': Decimal('1')
+                'min_value': 1
             },
             'start_date': {
                 'required': True,
@@ -494,7 +494,7 @@ class BookDiscountUpdateSerializer(serializers.ModelSerializer):
             },
             'usage_limit_per_customer': {
                 'help_text': 'Maximum number of times each customer can use this discount',
-                'min_value': Decimal('1')
+                'min_value': 1
             },
             'start_date': {
                 'help_text': 'When this discount becomes active'

@@ -1,21 +1,29 @@
 from django.db import models
 from django.utils import timezone
 from datetime import timedelta
+from decimal import Decimal
 from django.core.validators import MinValueValidator, MaxValueValidator
 from .user_model import User
 from .library_model import Book
 
 
 class BorrowStatusChoices(models.TextChoices):
+    PAYMENT_PENDING = 'payment_pending', 'Payment Pending'
     PENDING = 'pending', 'Under Review'
     APPROVED = 'approved', 'Approved' 
     REJECTED = 'rejected', 'Rejected'
     AWAITING_PICKUP = 'awaiting_pickup', 'Awaiting Pickup'
     PENDING_DELIVERY = 'pending_delivery', 'Pending Delivery'
+    ASSIGNED_TO_DELIVERY = 'assigned_to_delivery', 'Assigned to Delivery'
+    PREPARING = 'preparing', 'Preparing'
+    OUT_FOR_DELIVERY = 'out_for_delivery', 'Out for Delivery'
     DELIVERED = 'delivered', 'Delivered'
     ACTIVE = 'active', 'Active'
     EXTENDED = 'extended', 'Extended'
     RETURN_REQUESTED = 'return_requested', 'Return Requested'
+    RETURN_APPROVED = 'return_approved', 'Return Approved'
+    RETURN_ASSIGNED = 'return_assigned', 'Return Assigned'
+    OUT_FOR_RETURN_PICKUP = 'out_for_return_pickup', 'Out for Return Pickup'
     RETURNED = 'returned', 'Returned'
     LATE = 'late', 'Late'
     RETURNED_AFTER_DELAY = 'returned_after_delay', 'Returned After Delay'
@@ -51,9 +59,19 @@ class BorrowRequest(models.Model):
     
     # Request details
     status = models.CharField(
-        max_length=20,
+        max_length=25,
         choices=BorrowStatusChoices.choices,
-        default=BorrowStatusChoices.PENDING
+        default=BorrowStatusChoices.PAYMENT_PENDING
+    )
+    payment_method = models.CharField(
+        max_length=20,
+        choices=[
+            ('cash', 'Cash on Delivery'),
+            ('mastercard', 'Mastercard'),
+        ],
+        null=True,
+        blank=True,
+        help_text="Payment method selected by customer"
     )
     borrow_period_days = models.PositiveIntegerField(
         validators=[MinValueValidator(1), MaxValueValidator(30)],
@@ -439,8 +457,6 @@ class BorrowFine(models.Model):
             'unpaid_fines': unpaid_fines,
             'paid_fines': paid_fines,
         }
-
-
 class BorrowStatistics(models.Model):
     """
     Model for storing borrowing statistics

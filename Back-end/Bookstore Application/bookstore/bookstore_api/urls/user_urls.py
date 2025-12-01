@@ -6,7 +6,7 @@ from bookstore_api.views.user_views import (
     ApplicationLanguageView, ChangeEmailView, LibraryManagerProfileView
 )
 from bookstore_api.views.user_preferences_views import (
-    NotificationPreferencesView, PrivacyPreferencesView
+    NotificationPreferencesView
 )
 from bookstore_api.views.help_support_views import (
     HelpSupportDataView, FAQListView, UserGuideListView, 
@@ -31,7 +31,6 @@ user_urls = [
     path('application-language/', ApplicationLanguageView.as_view(), name='application_language'),
     # User preferences endpoints
     path('notification-preferences/', NotificationPreferencesView.as_view(), name='notification_preferences'),
-    path('privacy-preferences/', PrivacyPreferencesView.as_view(), name='privacy_preferences'),
     # Help and support endpoints
     path('help-support/', HelpSupportDataView.as_view(), name='help_support_data'),
     path('help-support/faqs/', FAQListView.as_view(), name='faq_list'),

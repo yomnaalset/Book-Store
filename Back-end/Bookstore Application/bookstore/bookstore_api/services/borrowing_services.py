@@ -1,14 +1,22 @@
 from django.db.models import Q, Count, Avg, Sum
+from django.db import transaction
 from django.utils import timezone
 from datetime import timedelta
 from decimal import Decimal
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, TYPE_CHECKING
+import logging
+
+if TYPE_CHECKING:
+    pass
 
 from ..models import (
     BorrowRequest, BorrowExtension, BorrowFine, BorrowStatistics,
-    Book, User, Payment, BorrowStatusChoices, ExtensionStatusChoices, FineStatusChoices
+    Book, User, Payment, BorrowStatusChoices, ExtensionStatusChoices, FineStatusChoices,
+    Notification
 )
 from ..services.notification_services import NotificationService
+
+logger = logging.getLogger(__name__)
 
 
 class BorrowingService:
@@ -20,19 +28,31 @@ class BorrowingService:
     def create_borrow_request(customer: User, book: Book, borrow_period_days: int, delivery_address: str, additional_notes: str = "") -> BorrowRequest:
         """
         Create a new borrow request
+        Stage 1: Customer initiates borrow request
+        Step 1.1: Check if Available_Count > 0
         """
+        # Check if customer has unpaid fines (Stage 1 validation)
+        can_submit, message = customer.can_submit_borrow_request()
+        if not can_submit:
+            raise ValueError(message)
+        
+        # Step 1.1: Check if Available_Count > 0
+        if book.available_copies <= 0:
+            raise ValueError("Book is not available for borrowing. No copies available.")
+        
         borrow_request = BorrowRequest.objects.create(
             customer=customer,
             book=book,
             borrow_period_days=borrow_period_days,
             delivery_address=delivery_address,
             additional_notes=additional_notes,
-            expected_return_date=timezone.now() + timedelta(days=borrow_period_days)
+            expected_return_date=timezone.now() + timedelta(days=borrow_period_days),
+            status=BorrowStatusChoices.PAYMENT_PENDING
         )
         
-        # Send notification to library manager
-        library_manager = User.objects.filter(user_type='library_admin', is_active=True).first()
-        if library_manager:
+        # Step 1.2: Send notification to admin
+        library_managers = User.objects.filter(user_type='library_admin', is_active=True)
+        for library_manager in library_managers:
             NotificationService.create_notification(
                 user_id=library_manager.id,
                 title="New Borrowing Request",
@@ -43,34 +63,198 @@ class BorrowingService:
         return borrow_request
     
     @staticmethod
+    @transaction.atomic
+    def confirm_payment(borrow_request: BorrowRequest, payment_method: str, card_data: Dict[str, Any] = None) -> Dict[str, Any]:
+        """
+        Confirm payment for a borrowing request
+        Step 3.1 & 3.2: Process payment and update request status
+        """
+        # Validate that request is in payment pending status
+        if borrow_request.status != BorrowStatusChoices.PAYMENT_PENDING:
+            raise ValueError(f"Borrow request must be in Payment Pending status. Current status: {borrow_request.get_status_display()}")
+        
+        try:
+            if payment_method == 'cash':
+                # Step 3.2a: Cash on Delivery
+                borrow_request.payment_method = 'cash'
+                borrow_request.status = BorrowStatusChoices.PENDING
+                borrow_request.save()
+                
+                # Send notification to Admin
+                library_admins = User.objects.filter(user_type='library_admin', is_active=True)
+                for admin in library_admins:
+                    NotificationService.create_notification(
+                        user_id=admin.id,
+                        title="New Borrowing Request - Payment Confirmed",
+                        message=f"Customer {borrow_request.customer.get_full_name()} has confirmed payment (Cash on Delivery) for borrowing request of '{borrow_request.book.name}'.",
+                        notification_type="borrow_payment_confirmed"
+                    )
+                
+                return {
+                    'success': True,
+                    'message': 'Payment confirmed successfully. Request submitted.',
+                    'payment_method': 'cash',
+                    'status': borrow_request.get_status_display()
+                }
+            
+            elif payment_method == 'mastercard':
+                # Step 3.2b: Mastercard payment
+                if not card_data:
+                    raise ValueError("Card data is required for Mastercard payment")
+                
+                # Process payment through payment gateway
+                # In a real implementation, this would call an external payment gateway API
+                # For now, we'll simulate the payment processing
+                payment_result = BorrowingService._process_mastercard_payment(
+                    borrow_request=borrow_request,
+                    card_data=card_data
+                )
+                
+                if payment_result['success']:
+                    # Update borrow request
+                    borrow_request.payment_method = 'mastercard'
+                    borrow_request.status = BorrowStatusChoices.PENDING
+                    borrow_request.save()
+                    
+                    # Send notification to Admin
+                    library_admins = User.objects.filter(user_type='library_admin', is_active=True)
+                    for admin in library_admins:
+                        NotificationService.create_notification(
+                            user_id=admin.id,
+                            title="New Borrowing Request - Payment Confirmed",
+                            message=f"Customer {borrow_request.customer.get_full_name()} has confirmed payment (Mastercard) for borrowing request of '{borrow_request.book.name}'. Transaction ID: {payment_result.get('transaction_id', 'N/A')}",
+                            notification_type="borrow_payment_confirmed"
+                        )
+                    
+                    return {
+                        'success': True,
+                        'message': 'Payment confirmed successfully. Request submitted.',
+                        'payment_method': 'mastercard',
+                        'status': borrow_request.get_status_display(),
+                        'transaction_id': payment_result.get('transaction_id')
+                    }
+                else:
+                    return {
+                        'success': False,
+                        'message': payment_result.get('message', 'Payment processing failed'),
+                        'error_code': payment_result.get('error_code')
+                    }
+            else:
+                raise ValueError(f"Invalid payment method: {payment_method}")
+                
+        except Exception as e:
+            logger.error(f"Error confirming payment for borrow request {borrow_request.id}: {str(e)}", exc_info=True)
+            raise
+    
+    @staticmethod
+    def _process_mastercard_payment(borrow_request: BorrowRequest, card_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Process Mastercard payment through payment gateway
+        This is a placeholder for actual payment gateway integration
+        """
+        try:
+            # In a real implementation, you would:
+            # 1. Call the payment gateway API (e.g., Stripe, PayPal, etc.)
+            # 2. Handle the response
+            # 3. Store transaction details
+            
+            # For demo purposes, we'll simulate a successful payment
+            # In production, replace this with actual payment gateway call
+            
+            import uuid
+            transaction_id = f"TXN-{uuid.uuid4().hex[:12].upper()}"
+            
+            # Simulate payment gateway validation
+            card_number = card_data.get('card_number', '').replace(' ', '').replace('-', '')
+            
+            # Basic validation (in production, this would be done by the payment gateway)
+            if not card_number.isdigit() or len(card_number) < 13:
+                return {
+                    'success': False,
+                    'message': 'Invalid card number',
+                    'error_code': 'INVALID_CARD'
+                }
+            
+            # Check if card is expired
+            expiry_month = card_data.get('expiry_month')
+            expiry_year = card_data.get('expiry_year')
+            if expiry_year and expiry_month:
+                from datetime import datetime
+                current_date = timezone.now().date()
+                if expiry_year < current_date.year or (expiry_year == current_date.year and expiry_month < current_date.month):
+                    return {
+                        'success': False,
+                        'message': 'Card has expired',
+                        'error_code': 'EXPIRED_CARD'
+                    }
+            
+            # Simulate successful payment
+            # TODO: Replace with actual payment gateway API call
+            # Example:
+            # payment_gateway_response = payment_gateway.charge(
+            #     amount=borrow_request.book.borrow_price,
+            #     card_number=card_number,
+            #     expiry_month=expiry_month,
+            #     expiry_year=expiry_year,
+            #     cvv=card_data.get('cvv'),
+            #     cardholder_name=card_data.get('cardholder_name')
+            # )
+            
+            logger.info(f"Simulated successful payment for borrow request {borrow_request.id}, transaction ID: {transaction_id}")
+            
+            return {
+                'success': True,
+                'transaction_id': transaction_id,
+                'message': 'Payment processed successfully'
+            }
+            
+        except Exception as e:
+            logger.error(f"Error processing Mastercard payment: {str(e)}", exc_info=True)
+            return {
+                'success': False,
+                'message': f'Payment processing error: {str(e)}',
+                'error_code': 'PAYMENT_PROCESSING_ERROR'
+            }
+    
+    @staticmethod
+    @transaction.atomic
     def approve_borrow_request(borrow_request: BorrowRequest, approved_by: User, delivery_manager: User = None) -> BorrowRequest:
         """
         Approve a borrow request and assign to delivery manager
         """
-        # Reserve a copy of the book
-        if not borrow_request.book.borrow_copy():
-            raise ValueError("No copies available for borrowing")
-        
-        borrow_request.status = BorrowStatusChoices.APPROVED
-        borrow_request.approved_by = approved_by
-        borrow_request.approved_date = timezone.now()
-        
-        # Assign delivery manager if provided
-        if delivery_manager:
-            borrow_request.delivery_person = delivery_manager
+        try:
+            # Reserve a copy of the book
+            if not borrow_request.book.borrow_copy():
+                raise ValueError("No copies available for borrowing")
             
-            # Update delivery manager status to busy
-            if hasattr(delivery_manager, 'delivery_profile'):
-                delivery_manager.delivery_profile.delivery_status = 'busy'
-                delivery_manager.delivery_profile.save()
+            # Set status based on whether delivery manager is assigned
+            if delivery_manager:
+                borrow_request.status = BorrowStatusChoices.ASSIGNED_TO_DELIVERY
+                borrow_request.delivery_person = delivery_manager
+                logger.info(f"Assigning delivery manager {delivery_manager.id} to borrow request {borrow_request.id}, status set to ASSIGNED_TO_DELIVERY")
+                
+                # Do not change delivery_manager.delivery_status here
+                # Keep the manager "Online" until they accept the task
+            else:
+                borrow_request.status = BorrowStatusChoices.APPROVED
+                logger.info(f"Borrow request {borrow_request.id} approved without delivery manager assignment, status set to APPROVED")
+            
+            borrow_request.approved_by = approved_by
+            borrow_request.approved_date = timezone.now()
+            
+            borrow_request.save()
+            logger.info(f"Saved borrow request {borrow_request.id} with status {borrow_request.status}")
+            
+            # Create delivery order as specified in requirements
+            from ..services.delivery_services import BorrowingDeliveryService
+            delivery_order = BorrowingDeliveryService.create_delivery_for_borrow(borrow_request)
+            logger.info(f"Created delivery order {delivery_order.id} for borrow request {borrow_request.id}")
+            
+        except Exception as e:
+            logger.error(f"Error approving borrow request {borrow_request.id}: {str(e)}", exc_info=True)
+            raise  # Re-raise to ensure transaction rollback
         
-        borrow_request.save()
-        
-        # Create delivery order as specified in requirements
-        from ..services.delivery_services import BorrowingDeliveryService
-        delivery_order = BorrowingDeliveryService.create_delivery_for_borrow(borrow_request)
-        
-        # Send notification to customer
+        # Send notification to customer (outside transaction - notifications can fail without breaking the flow)
         NotificationService.create_notification(
             user_id=borrow_request.customer.id,
             title="Borrowing Request Approved",
@@ -123,9 +307,172 @@ class BorrowingService:
         return borrow_request
     
     @staticmethod
+    def reject_delivery_request(borrow_request: BorrowRequest, delivery_person: User, rejection_reason: str) -> BorrowRequest:
+        """
+        Delivery Manager Rejects Delivery Assignment
+        Unassigns the delivery manager and notifies admin
+        """
+        if borrow_request.status != BorrowStatusChoices.ASSIGNED_TO_DELIVERY:
+            raise ValueError("Request must be assigned to delivery before rejection")
+        
+        if borrow_request.delivery_person != delivery_person:
+            raise ValueError("Only the assigned delivery manager can reject this request")
+        
+        # Unassign the delivery manager
+        borrow_request.delivery_person = None
+        # Note: We don't change the status here - it remains ASSIGNED_TO_DELIVERY
+        # so the admin can reassign it to another delivery manager
+        borrow_request.save()
+        
+        # Send notification to library admin
+        library_admins = User.objects.filter(user_type='library_admin', is_active=True)
+        for admin in library_admins:
+            NotificationService.create_notification(
+                user_id=admin.id,
+                title="Delivery Request Rejected",
+                message=f"Delivery manager {delivery_person.get_full_name()} has rejected the delivery request for '{borrow_request.book.name}'. Reason: {rejection_reason}. Please reassign to another delivery manager.",
+                notification_type="delivery_rejected"
+            )
+        
+        return borrow_request
+    
+    @staticmethod
+    def accept_delivery_request(borrow_request: BorrowRequest, delivery_person: User) -> BorrowRequest:
+        """
+        Step 3.1: Delivery Manager Accepts Request
+        Update status to "Preparing"
+        """
+        if borrow_request.status != BorrowStatusChoices.ASSIGNED_TO_DELIVERY:
+            raise ValueError("Request must be assigned to delivery before acceptance")
+        
+        if borrow_request.delivery_person != delivery_person:
+            raise ValueError("Only the assigned delivery manager can accept this request")
+        
+        borrow_request.status = BorrowStatusChoices.PREPARING
+        borrow_request.pickup_date = timezone.now()
+        borrow_request.save()
+        
+        # Update associated Order status if it exists
+        # This ensures the order remains visible in the Borrowing Requests list
+        try:
+            from ..models.delivery_model import Order
+            order = Order.objects.filter(borrow_request=borrow_request, order_type='borrowing').first()
+            if order:
+                # Keep order status as 'assigned' - the BorrowRequest status 'preparing' 
+                # is what makes it appear in the Borrowing Requests list
+                # The order status doesn't need to change here, as we filter by BorrowRequest status
+                logger.info(f"Order {order.id} associated with borrow request {borrow_request.id} - BorrowRequest status updated to 'preparing'")
+        except Exception as e:
+            logger.warning(f"Failed to update order status for borrow request {borrow_request.id}: {str(e)}")
+        
+        # Update delivery manager status to busy
+        try:
+            from ..services.delivery_profile_services import DeliveryProfileService
+            DeliveryProfileService.start_delivery_task(delivery_person)
+        except Exception as e:
+            logger.warning(f"Failed to update delivery manager status to busy: {str(e)}")
+        
+        # Send notification to customer and admin
+        NotificationService.create_notification(
+            user_id=borrow_request.customer.id,
+            title="Delivery Accepted",
+            message=f"Delivery manager {delivery_person.get_full_name()} has accepted your request for '{borrow_request.book.name}'. Preparing for delivery.",
+            notification_type="delivery_accepted"
+        )
+        
+        library_admins = User.objects.filter(user_type='library_admin', is_active=True)
+        for admin in library_admins:
+            NotificationService.create_notification(
+                user_id=admin.id,
+                title="Delivery Accepted",
+                message=f"Delivery manager {delivery_person.get_full_name()} has accepted the delivery request for '{borrow_request.book.name}'.",
+                notification_type="delivery_accepted_admin"
+        )
+        
+        return borrow_request
+    
+    @staticmethod
     def start_delivery(borrow_request: BorrowRequest, delivery_person: User) -> BorrowRequest:
         """
-        Mark book as picked up from library (Step 5: Pick up the book from the library)
+        Step 3.2: Delivery Manager Starts Delivery
+        Update status to "Out for Delivery"
+        Step 3.3: Location transmission begins (every 5 seconds)
+        Step 3.4: Real-time tracking enabled
+        """
+        if borrow_request.status != BorrowStatusChoices.PREPARING:
+            raise ValueError("Request must be in Preparing status before starting delivery")
+        
+        if borrow_request.delivery_person != delivery_person:
+            raise ValueError("Only the assigned delivery manager can start delivery")
+        
+        borrow_request.status = BorrowStatusChoices.OUT_FOR_DELIVERY
+        borrow_request.save()
+        
+        # Step 3.3 & 3.4: Enable real-time location tracking
+        try:
+            from ..services.delivery_services import LocationTrackingService
+            from ..models.delivery_model import RealTimeTracking
+            
+            # Get or create RealTimeTracking for this delivery manager
+            tracking, created = RealTimeTracking.objects.get_or_create(
+                delivery_manager=delivery_person,
+                defaults={
+                    'is_tracking_enabled': True,
+                    'is_delivering': True,
+                    'tracking_interval': 5,  # 5 seconds as per Step 3.3
+                }
+            )
+            
+            if not created:
+                # Update existing tracking
+                tracking.is_tracking_enabled = True
+                tracking.is_delivering = True
+                tracking.tracking_interval = 5  # 5 seconds
+                tracking.save()
+            
+            # Get delivery assignment if exists
+            from ..models.delivery_model import DeliveryAssignment, Order
+            try:
+                order = Order.objects.filter(
+                    borrow_request=borrow_request,
+                    order_type='borrowing'
+                ).first()
+                if order:
+                    assignment = DeliveryAssignment.objects.filter(order=order).first()
+                    if assignment:
+                        tracking.current_delivery_assignment = assignment
+                        tracking.save()
+            except Exception as e:
+                logger.warning(f"Could not link delivery assignment to tracking: {str(e)}")
+            
+            logger.info(f"Enabled real-time tracking for delivery manager {delivery_person.id} with 5-second interval")
+            
+        except Exception as e:
+            logger.warning(f"Failed to enable location tracking: {str(e)}")
+        
+        # Send notification to customer and admin
+        NotificationService.create_notification(
+            user_id=borrow_request.customer.id,
+            title="Delivery Started",
+            message=f"Your book '{borrow_request.book.name}' is now out for delivery. You can track the delivery in real-time.",
+            notification_type="delivery_started"
+        )
+        
+        library_admins = User.objects.filter(user_type='library_admin', is_active=True)
+        for admin in library_admins:
+            NotificationService.create_notification(
+                user_id=admin.id,
+                title="Delivery Started",
+                message=f"Delivery of '{borrow_request.book.name}' to {borrow_request.customer.get_full_name()} has started. Real-time tracking is active.",
+                notification_type="delivery_started_admin"
+            )
+        
+        return borrow_request
+    
+    @staticmethod
+    def start_delivery_legacy(borrow_request: BorrowRequest, delivery_person: User) -> BorrowRequest:
+        """
+        Legacy method: Mark book as picked up from library (Step 5: Pick up the book from the library)
         """
         borrow_request.status = BorrowStatusChoices.PENDING_DELIVERY
         borrow_request.pickup_date = timezone.now()
@@ -152,13 +499,18 @@ class BorrowingService:
     @staticmethod
     def mark_delivered(borrow_request: BorrowRequest, delivery_notes: str = "") -> BorrowRequest:
         """
-        Mark book as delivered to customer (Step 5: When the book is delivered to the customer)
+        Step 3.5: Delivery Completion
+        Mark book as delivered to customer and log expected return date
+        Stop location tracking
         """
+        if borrow_request.status != BorrowStatusChoices.OUT_FOR_DELIVERY:
+            raise ValueError("Delivery must be started before completion")
+        
         borrow_request.status = BorrowStatusChoices.ACTIVE
         borrow_request.delivery_date = timezone.now()
         borrow_request.delivery_notes = delivery_notes
         
-        # Set final return date
+        # Step 3.5: Log the expected return date
         borrow_request.final_return_date = borrow_request.expected_return_date
         borrow_request.save()
         
@@ -169,6 +521,18 @@ class BorrowingService:
                 DeliveryProfileService.complete_delivery_task(borrow_request.delivery_person)
             except Exception as e:
                 logger.warning(f"Failed to update delivery manager status to online: {str(e)}")
+        
+        # Stop location tracking when delivery is completed
+        try:
+            from ..models.delivery_model import RealTimeTracking
+            tracking = RealTimeTracking.objects.filter(delivery_manager=borrow_request.delivery_person).first()
+            if tracking:
+                tracking.is_delivering = False
+                tracking.current_delivery_assignment = None
+                tracking.save()
+                logger.info(f"Stopped location tracking for delivery manager {borrow_request.delivery_person.id}")
+        except Exception as e:
+            logger.warning(f"Failed to stop location tracking: {str(e)}")
         
         # Increment borrow count when book is successfully delivered
         borrow_request.book.borrow_count += 1
@@ -181,7 +545,7 @@ class BorrowingService:
         NotificationService.create_notification(
             user_id=borrow_request.customer.id,
             title="Book Delivered Successfully",
-            message=f"Your book '{borrow_request.book.name}' has been delivered. Return date: {borrow_request.final_return_date.strftime('%Y-%m-%d')}",
+            message=f"Your book '{borrow_request.book.name}' has been delivered. Loan period starts today. Return date: {borrow_request.final_return_date.strftime('%Y-%m-%d')}",
             notification_type="delivery_completed"
         )
         
@@ -237,33 +601,43 @@ class BorrowingService:
     @staticmethod
     def request_early_return(borrow_request: BorrowRequest, return_reason: str = "") -> BorrowRequest:
         """
-        Request early return of a book (Step 7: Return Process)
+        Step 4.3: Customer Clicks "Early Return"
+        Notification sent to Admin and Delivery Manager
         """
+        if borrow_request.status not in [BorrowStatusChoices.ACTIVE, BorrowStatusChoices.EXTENDED]:
+            raise ValueError("Can only request early return for active borrowings")
+        
         borrow_request.status = BorrowStatusChoices.RETURN_REQUESTED
         borrow_request.save()
         
-        # Create return delivery task for delivery manager
-        from ..models.delivery_model import DeliveryRequest
-        delivery_request = DeliveryRequest.objects.create(
-            customer=borrow_request.customer,
-            request_type='return',
-            delivery_address="Main Library",
-            delivery_city="Library City",
-            preferred_pickup_time=timezone.now() + timedelta(hours=1),
-            preferred_delivery_time=timezone.now() + timedelta(hours=4),
-            notes=f"Collect book '{borrow_request.book.name}' from {borrow_request.customer.get_full_name()} for return",
-            status='pending'
-        )
-        
-        # Send notification to delivery managers
-        delivery_managers = User.objects.filter(user_type='delivery_admin', is_active=True)
-        for manager in delivery_managers:
+        # Step 4.3: Send notification to Admin
+        library_admins = User.objects.filter(user_type='library_admin', is_active=True)
+        for admin in library_admins:
             NotificationService.create_notification(
-                user_id=manager.id,
-                title="Book Return Request",
-                message=f"New Request: Collect the book '{borrow_request.book.name}' from {borrow_request.customer.get_full_name()} and return it to the library.",
-                notification_type="return_task_created"
+                user_id=admin.id,
+                title="Early Return Requested",
+                message=f"Customer {borrow_request.customer.get_full_name()} has requested early return of '{borrow_request.book.name}'.",
+                notification_type="early_return_requested"
             )
+        
+        # Step 4.3: Send notification to Delivery Manager (if assigned)
+        if borrow_request.delivery_person:
+            NotificationService.create_notification(
+                user_id=borrow_request.delivery_person.id,
+                title="Early Return Requested",
+                message=f"Customer {borrow_request.customer.get_full_name()} has requested early return of '{borrow_request.book.name}'. Please collect the book.",
+                notification_type="early_return_requested_dm"
+            )
+        else:
+            # Notify all delivery managers if no specific DM assigned
+            delivery_managers = User.objects.filter(user_type='delivery_admin', is_active=True)
+            for manager in delivery_managers:
+                NotificationService.create_notification(
+                    user_id=manager.id,
+                    title="Early Return Requested",
+                    message=f"Customer {borrow_request.customer.get_full_name()} has requested early return of '{borrow_request.book.name}'. Please collect the book.",
+                    notification_type="early_return_requested_dm"
+                )
         
         return borrow_request
     
@@ -432,8 +806,13 @@ class BorrowingService:
     def get_customer_borrowings(customer: User, status: str = None) -> List[BorrowRequest]:
         """
         Get customer's borrow requests
+        Excludes borrow requests with RETURN_REQUESTED status (these are handled by ReturnRequest model)
         """
-        queryset = BorrowRequest.objects.filter(customer=customer).select_related('book', 'book__author')
+        queryset = BorrowRequest.objects.filter(
+            customer=customer
+        ).exclude(
+            status=BorrowStatusChoices.RETURN_REQUESTED
+        ).select_related('book', 'book__author')
         
         if status:
             queryset = queryset.filter(status=status)
@@ -444,6 +823,7 @@ class BorrowingService:
     def get_all_borrowing_requests(status: Optional[str] = None, search: Optional[str] = None) -> List[BorrowRequest]:
         """
         Get all borrowing requests with optional status filter and search
+        Excludes borrow requests with RETURN_REQUESTED status (these are handled by ReturnRequest model)
         
         Args:
             status: Optional status filter (e.g., 'pending', 'approved', 'active', etc.)
@@ -452,7 +832,10 @@ class BorrowingService:
         Returns:
             List of borrowing requests
         """
-        queryset = BorrowRequest.objects.select_related('customer', 'book').order_by('-request_date')
+        # Exclude RETURN_REQUESTED status - these should only appear in ReturnRequest views
+        queryset = BorrowRequest.objects.exclude(
+            status=BorrowStatusChoices.RETURN_REQUESTED
+        ).select_related('customer', 'book').order_by('-request_date')
         
         # Add status filter if provided
         if status and status.lower() != 'all':
@@ -574,16 +957,98 @@ class BorrowingService:
     @staticmethod
     def get_available_delivery_managers() -> List[User]:
         """
-        Get all delivery managers with their status for admin selection
+        Get ALL delivery managers (online, busy, offline) with their status for admin selection.
+        This method returns all delivery managers regardless of their status.
+        Only online managers are selectable in the UI, but all managers are displayed.
+        Ensures all delivery managers have delivery profiles.
         """
         from ..models import DeliveryProfile
+        from ..services.delivery_profile_services import DeliveryProfileService
         
+        # Get all active delivery managers - use prefetch_related to ensure we get all managers
+        # even if they don't have profiles yet (though we create them below)
         delivery_managers = User.objects.filter(
             user_type='delivery_admin',
             is_active=True
         ).select_related('delivery_profile').order_by('first_name', 'last_name')
         
-        return delivery_managers
+        # Ensure all delivery managers have profiles with valid status
+        managers_list = list(delivery_managers)  # Convert to list to allow modification
+        for manager in managers_list:
+            try:
+                # Get or create delivery profile
+                delivery_profile = DeliveryProfileService.get_or_create_delivery_profile(manager)
+                
+                # Ensure status is not None
+                if delivery_profile.delivery_status is None:
+                    delivery_profile.delivery_status = 'offline'
+                    delivery_profile.save(update_fields=['delivery_status'])
+                    logger.info(f"Set delivery_status to 'offline' for manager {manager.id}")
+                
+                # Reload the manager to get the updated profile relationship
+                manager = User.objects.select_related('delivery_profile').get(pk=manager.pk)
+                
+            except Exception as e:
+                logger.warning(f"Failed to create/update delivery profile for manager {manager.id}: {str(e)}")
+        
+        # Re-query to ensure all relationships are properly loaded
+        # Use select_related for OneToOne to ensure it's loaded
+        queryset = User.objects.filter(
+            user_type='delivery_admin',
+            is_active=True
+        ).select_related('delivery_profile').order_by('first_name', 'last_name')
+        
+        # Force evaluation and verify profiles exist
+        managers_list = list(queryset)
+        for manager in managers_list:
+            # Ensure profile exists and has status
+            try:
+                if not hasattr(manager, 'delivery_profile') or manager.delivery_profile is None:
+                    logger.warning(f"Manager {manager.id} has no delivery_profile, creating one...")
+                    delivery_profile = DeliveryProfileService.get_or_create_delivery_profile(manager)
+                    if delivery_profile.delivery_status is None:
+                        delivery_profile.delivery_status = 'offline'
+                        delivery_profile.save(update_fields=['delivery_status'])
+                elif manager.delivery_profile.delivery_status is None:
+                    logger.warning(f"Manager {manager.id} has null delivery_status, setting to offline...")
+                    manager.delivery_profile.delivery_status = 'offline'
+                    manager.delivery_profile.save(update_fields=['delivery_status'])
+            except Exception as e:
+                logger.error(f"Error ensuring profile for manager {manager.id}: {str(e)}")
+        
+        # After ensuring all profiles exist, re-query to get fresh data with all profiles loaded
+        # This ensures we get all managers with their updated profiles
+        # IMPORTANT: Return ALL managers regardless of status (online, busy, offline)
+        # Use select_related to efficiently load profiles
+        # Note: select_related with OneToOneField uses LEFT OUTER JOIN, so it includes
+        # all managers even if they don't have profiles (though we create them above)
+        final_queryset = User.objects.filter(
+            user_type='delivery_admin',
+            is_active=True
+        ).select_related('delivery_profile').order_by('first_name', 'last_name')
+        
+        # Log the count for debugging
+        manager_count = final_queryset.count()
+        logger.info(f"BorrowingService.get_available_delivery_managers: Returning {manager_count} delivery managers (ALL statuses: online, busy, offline)")
+        
+        # Log each manager's status for debugging
+        status_counts = {'online': 0, 'busy': 0, 'offline': 0, 'unknown': 0}
+        for manager in final_queryset:
+            try:
+                status = 'unknown'
+                if hasattr(manager, 'delivery_profile') and manager.delivery_profile:
+                    status = manager.delivery_profile.delivery_status or 'offline'
+                status_counts[status] = status_counts.get(status, 0) + 1
+                logger.info(f"BorrowingService: Manager {manager.id} ({manager.get_full_name()}) - Status: {status}")
+            except Exception as e:
+                status_counts['unknown'] += 1
+                logger.warning(f"BorrowingService: Error logging manager {manager.id}: {str(e)}")
+        
+        logger.info(f"BorrowingService: Status breakdown - Online: {status_counts['online']}, Busy: {status_counts['busy']}, Offline: {status_counts['offline']}, Unknown: {status_counts['unknown']}")
+        
+        # Return ALL delivery managers (online, busy, offline) - NO FILTERING BY STATUS
+        # The frontend will display all managers but only allow selection of online ones
+        return final_queryset
 
 
 class BorrowingNotificationService:

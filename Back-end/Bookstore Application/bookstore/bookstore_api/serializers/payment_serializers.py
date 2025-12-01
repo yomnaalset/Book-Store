@@ -21,7 +21,8 @@ class PaymentSerializer(serializers.ModelSerializer):
         model = Payment
         fields = [
             'id', 'user', 'amount', 'payment_type', 'payment_type_display',
-            'status', 'status_display', 'transaction_id', 'created_at', 'updated_at'
+            'status', 'status_display', 'transaction_id', 'delivery_cost',
+            'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'user', 'transaction_id', 'created_at', 'updated_at', 'status']
 
@@ -118,6 +119,6 @@ class PaymentBasicSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Payment
-        fields = ['id', 'amount', 'payment_type', 'payment_type_display', 'status', 'status_display', 'created_at']
+        fields = ['id', 'amount', 'payment_type', 'payment_type_display', 'status', 'status_display', 'delivery_cost', 'created_at']
         read_only_fields = ['id', 'amount', 'payment_type', 'payment_type_display', 'status', 'status_display', 'created_at']
 
