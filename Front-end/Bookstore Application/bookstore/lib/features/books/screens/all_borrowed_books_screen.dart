@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
+import '../../../core/localization/app_localizations.dart';
 import '../../../core/widgets/common/error_message.dart';
 import '../../../core/widgets/common/loading_indicator.dart';
 import '../models/book.dart';
@@ -21,7 +22,7 @@ class _AllBorrowedBooksScreenState extends State<AllBorrowedBooksScreen> {
   String? _error;
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
-  String _selectedFilter = 'All'; // New filter state
+  String _selectedFilter = 'all'; // New filter state - using keys
 
   @override
   void initState() {
@@ -131,7 +132,7 @@ class _AllBorrowedBooksScreenState extends State<AllBorrowedBooksScreen> {
           _applyFilters();
         },
         decoration: InputDecoration(
-          hintText: 'Search books...',
+          hintText: AppLocalizations.of(context).searchBooksPlaceholder,
           prefixIcon: const Icon(Icons.search),
           suffixIcon: _searchQuery.isNotEmpty
               ? IconButton(
@@ -151,30 +152,40 @@ class _AllBorrowedBooksScreenState extends State<AllBorrowedBooksScreen> {
   }
 
   Widget _buildFilterBar() {
-    return Container(
-      height: 50,
-      padding: const EdgeInsets.symmetric(horizontal: AppDimensions.paddingM),
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        children: [
-          _buildFilterChip('All'),
-          const SizedBox(width: 8),
-          _buildFilterChip('New Books'),
-          const SizedBox(width: 8),
-          _buildFilterChip('Highest Rated'),
-        ],
-      ),
+    return Builder(
+      builder: (context) {
+        final localizations = AppLocalizations.of(context);
+        return Container(
+          height: 50,
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppDimensions.paddingM,
+          ),
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              _buildFilterChip('all', localizations.filterAll),
+              const SizedBox(width: 8),
+              _buildFilterChip('new_books', localizations.filterNewBooks),
+              const SizedBox(width: 8),
+              _buildFilterChip(
+                'highest_rated',
+                localizations.filterHighestRated,
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildFilterChip(String label) {
-    final isSelected = _selectedFilter == label;
+  Widget _buildFilterChip(String filterKey, String label) {
+    final isSelected = _selectedFilter == filterKey;
     return FilterChip(
       label: Text(label),
       selected: isSelected,
       onSelected: (selected) {
         setState(() {
-          _selectedFilter = label;
+          _selectedFilter = filterKey;
         });
         _applyFilters();
       },
@@ -196,9 +207,9 @@ class _AllBorrowedBooksScreenState extends State<AllBorrowedBooksScreen> {
 
       // Determine sortBy parameter based on selected filter
       String? sortBy;
-      if (_selectedFilter == 'New Books') {
+      if (_selectedFilter == 'new_books') {
         sortBy = 'created_at';
-      } else if (_selectedFilter == 'Highest Rated') {
+      } else if (_selectedFilter == 'highest_rated') {
         sortBy = 'average_rating';
       }
 
@@ -341,13 +352,18 @@ class _AllBorrowedBooksScreenState extends State<AllBorrowedBooksScreen> {
                             6,
                           ), // Reduced radius
                         ),
-                        child: Text(
-                          'Borrow: \$${book.borrowPrice}',
-                          style: const TextStyle(
-                            fontSize: 10, // Reduced font size
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.success,
-                          ),
+                        child: Builder(
+                          builder: (context) {
+                            final localizations = AppLocalizations.of(context);
+                            return Text(
+                              '${localizations.borrowPrefix} \$${book.borrowPrice}',
+                              style: const TextStyle(
+                                fontSize: 10, // Reduced font size
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.success,
+                              ),
+                            );
+                          },
                         ),
                       ),
                     const SizedBox(height: 4), // Reduced spacing
@@ -365,24 +381,29 @@ class _AllBorrowedBooksScreenState extends State<AllBorrowedBooksScreen> {
                             6,
                           ), // Reduced radius
                         ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.library_add,
-                              size: 14, // Reduced icon size
-                              color: Colors.white,
-                            ),
-                            SizedBox(width: 2), // Reduced spacing
-                            Text(
-                              'Borrow',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 10, // Reduced font size
-                              ),
-                            ),
-                          ],
+                        child: Builder(
+                          builder: (context) {
+                            final localizations = AppLocalizations.of(context);
+                            return Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(
+                                  Icons.library_add,
+                                  size: 14, // Reduced icon size
+                                  color: Colors.white,
+                                ),
+                                const SizedBox(width: 2), // Reduced spacing
+                                Text(
+                                  localizations.borrowButton,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 10, // Reduced font size
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
                         ),
                       ),
                     ),

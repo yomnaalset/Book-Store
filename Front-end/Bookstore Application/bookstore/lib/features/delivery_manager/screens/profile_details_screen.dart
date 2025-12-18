@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
-import '../../../core/translations.dart';
+import '../../../core/localization/app_localizations.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/widgets/common/custom_button.dart';
 import '../../../core/widgets/common/custom_text_field.dart';
@@ -108,12 +108,11 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
 
     // Get the current token from AuthProvider
     final token = authProvider.token;
+    final localizations = AppLocalizations.of(context);
     if (token == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Authentication token not available. Please log in again.',
-          ),
+        SnackBar(
+          content: Text(localizations.authenticationTokenNotAvailable),
           backgroundColor: AppColors.error,
         ),
       );
@@ -127,8 +126,8 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
     final currentUser = authProvider.user;
     if (currentUser == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('User data not available. Please log in again.'),
+        SnackBar(
+          content: Text(localizations.userDataNotAvailable),
           backgroundColor: AppColors.error,
         ),
       );
@@ -174,8 +173,8 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
     // Check if there are any changes
     if (changedFields.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No changes detected.'),
+        SnackBar(
+          content: Text(localizations.noChangesDetected),
           backgroundColor: AppColors.warning,
         ),
       );
@@ -205,7 +204,9 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                'Profile updated successfully! Updated ${changedFields.length} field(s).',
+                localizations.profileUpdatedSuccessfullyFields(
+                  changedFields.length,
+                ),
               ),
               backgroundColor: AppColors.success,
             ),
@@ -217,7 +218,8 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                profileProvider.errorMessage ?? 'Failed to update profile',
+                profileProvider.errorMessage ??
+                    localizations.failedToUpdateProfile,
               ),
               backgroundColor: AppColors.error,
             ),
@@ -228,7 +230,7 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to update profile: $e'),
+            content: Text('${localizations.failedToUpdateProfile}: $e'),
             backgroundColor: AppColors.error,
           ),
         );
@@ -248,7 +250,7 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
-        title: Text(AppTranslations.t(context, 'profile')),
+        title: Text(AppLocalizations.of(context).personalProfile),
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.white,
         elevation: 0,
@@ -268,7 +270,7 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
                       ),
                     )
                   : Text(
-                      AppTranslations.t(context, 'save'),
+                      AppLocalizations.of(context).save,
                       style: const TextStyle(color: AppColors.white),
                     ),
             )
@@ -286,6 +288,7 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
       body: Consumer<AuthProvider>(
         builder: (context, authProvider, child) {
           return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(16),
             child: Form(
               key: _formKey,
@@ -379,12 +382,18 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    authProvider.user?.fullName ?? 'Delivery Manager',
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Text(
+                        authProvider.user?.fullName ??
+                            localizations.deliveryManager,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      );
+                    },
                   ),
                   const SizedBox(height: 8),
                   Container(
@@ -396,13 +405,17 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
                       color: AppColors.success.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(16),
                     ),
-                    child: const Text(
-                      'Delivery Manager',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: AppColors.success,
-                        fontWeight: FontWeight.w500,
-                      ),
+                    child: Builder(
+                      builder: (context) {
+                        return Text(
+                          AppLocalizations.of(context).deliveryManager,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: AppColors.success,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ],
@@ -421,37 +434,47 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Personal Information',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: theme.colorScheme.onSurface,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: CustomTextField(
-                    label: 'First Name',
-                    controller: _firstNameController,
-                    enabled: _isEditing,
-                    validator: Validators.name,
-                    prefixIcon: const Icon(Icons.person_outlined),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: CustomTextField(
-                    label: 'Last Name',
-                    controller: _lastNameController,
-                    enabled: _isEditing,
-                    validator: Validators.name,
-                    prefixIcon: const Icon(Icons.person_outlined),
-                  ),
-                ),
-              ],
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      localizations.personalInformation,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: CustomTextField(
+                            label: localizations.firstNameLabel,
+                            controller: _firstNameController,
+                            enabled: _isEditing,
+                            validator: Validators.name,
+                            prefixIcon: const Icon(Icons.person_outlined),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: CustomTextField(
+                            label: localizations.lastNameLabel,
+                            controller: _lastNameController,
+                            enabled: _isEditing,
+                            validator: Validators.name,
+                            prefixIcon: const Icon(Icons.person_outlined),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+              },
             ),
           ],
         ),
@@ -466,44 +489,53 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Text(
-                  'Contact Information',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: theme.colorScheme.onSurface,
-                  ),
-                ),
-                const Spacer(),
-                if (_isEditing && !_isChangingEmail)
-                  TextButton.icon(
-                    onPressed: _handleStartEmailChange,
-                    icon: const Icon(Icons.edit, size: 16),
-                    label: const Text('Change Email'),
-                  ),
-              ],
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Row(
+                  children: [
+                    Text(
+                      localizations.contactInformation,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                    ),
+                    const Spacer(),
+                    if (_isEditing && !_isChangingEmail)
+                      TextButton.icon(
+                        onPressed: _handleStartEmailChange,
+                        icon: const Icon(Icons.edit, size: 16),
+                        label: Text(localizations.changeEmail),
+                      ),
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 16),
 
             // Current email display
             if (!_isChangingEmail)
-              CustomTextField(
-                label: 'Email',
-                controller: _emailController,
-                enabled: false,
-                keyboardType: TextInputType.emailAddress,
-                prefixIcon: const Icon(Icons.email_outlined),
-                suffixIcon: _isEditing
-                    ? IconButton(
-                        icon: const Icon(Icons.edit),
-                        onPressed: () {
-                          debugPrint('Email edit button pressed');
-                          _handleStartEmailChange();
-                        },
-                      )
-                    : null,
+              Builder(
+                builder: (context) {
+                  return CustomTextField(
+                    label: AppLocalizations.of(context).email,
+                    controller: _emailController,
+                    enabled: false,
+                    keyboardType: TextInputType.emailAddress,
+                    prefixIcon: const Icon(Icons.email_outlined),
+                    suffixIcon: _isEditing
+                        ? IconButton(
+                            icon: const Icon(Icons.edit),
+                            onPressed: () {
+                              debugPrint('Email edit button pressed');
+                              _handleStartEmailChange();
+                            },
+                          )
+                        : null,
+                  );
+                },
               ),
 
             // Email change form
@@ -525,14 +557,15 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
                           }
                         });
 
+                        final localizations = AppLocalizations.of(context);
                         return CustomTextField(
-                          label: 'New Email',
+                          label: localizations.newEmailLabel,
                           controller: _newEmailController,
                           enabled: true,
                           keyboardType: TextInputType.emailAddress,
                           validator: Validators.email,
                           prefixIcon: const Icon(Icons.email_outlined),
-                          hint: 'Enter your new email address',
+                          hint: localizations.enterYourNewEmailAddress,
                           onChanged: (value) {
                             debugPrint('New email field changed to: $value');
                           },
@@ -553,22 +586,23 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
                           }
                         });
 
+                        final localizations = AppLocalizations.of(context);
                         return CustomTextField(
-                          label: 'Confirm New Email',
+                          label: localizations.confirmNewEmailLabel,
                           controller: _confirmEmailController,
                           enabled: true,
                           keyboardType: TextInputType.emailAddress,
                           validator: (value) {
                             if (value == null || value.isEmpty) {
-                              return 'Please confirm your new email';
+                              return localizations.pleaseConfirmYourNewEmail;
                             }
                             if (value != _newEmailController.text) {
-                              return 'Email addresses do not match';
+                              return localizations.emailAddressesDoNotMatch;
                             }
                             return null;
                           },
                           prefixIcon: const Icon(Icons.email_outlined),
-                          hint: 'Confirm your new email address',
+                          hint: localizations.confirmYourNewEmailAddress,
                           onChanged: (value) {
                             debugPrint(
                               'Confirm email field changed to: $value',
@@ -578,82 +612,102 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
                       },
                     ),
                     const SizedBox(height: 16),
-                    CustomTextField(
-                      label: 'Current Password',
-                      controller: _currentPasswordController,
-                      enabled: true,
-                      obscureText: _obscureCurrentPassword,
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Current password is required';
-                        }
-                        return null;
+                    Builder(
+                      builder: (context) {
+                        final localizations = AppLocalizations.of(context);
+                        return CustomTextField(
+                          label: localizations.currentPasswordLabel,
+                          controller: _currentPasswordController,
+                          enabled: true,
+                          obscureText: _obscureCurrentPassword,
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return localizations.currentPasswordRequired;
+                            }
+                            return null;
+                          },
+                          prefixIcon: const Icon(Icons.lock_outline),
+                          hint: localizations.enterYourCurrentPassword,
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscureCurrentPassword
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _obscureCurrentPassword =
+                                    !_obscureCurrentPassword;
+                              });
+                            },
+                          ),
+                        );
                       },
-                      prefixIcon: const Icon(Icons.lock_outline),
-                      hint: 'Enter your current password',
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscureCurrentPassword
-                              ? Icons.visibility_outlined
-                              : Icons.visibility_off_outlined,
-                        ),
-                        onPressed: () {
-                          setState(() {
-                            _obscureCurrentPassword = !_obscureCurrentPassword;
-                          });
-                        },
-                      ),
                     ),
                     const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: CustomButton(
-                            text: 'Cancel',
-                            onPressed: _handleCancelEmailChange,
-                            type: ButtonType.secondary,
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: CustomButton(
-                            text: 'Change Email',
-                            onPressed: _handleChangeEmail,
-                            type: ButtonType.primary,
-                          ),
-                        ),
-                      ],
+                    Builder(
+                      builder: (context) {
+                        final localizations = AppLocalizations.of(context);
+                        return Row(
+                          children: [
+                            Expanded(
+                              child: CustomButton(
+                                text: localizations.cancel,
+                                onPressed: _handleCancelEmailChange,
+                                type: ButtonType.secondary,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: CustomButton(
+                                text: localizations.changeEmail,
+                                onPressed: _handleChangeEmail,
+                                type: ButtonType.primary,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   ],
                 ),
               ),
 
             const SizedBox(height: 16),
-            CustomTextField(
-              label: 'Phone Number',
-              controller: _phoneController,
-              enabled: _isEditing,
-              keyboardType: TextInputType.phone,
-              validator: (value) {
-                // Phone is optional but if provided, should be valid format
-                if (value != null && value.trim().isNotEmpty) {
-                  // ignore: deprecated_member_use
-                  final phoneRegex = RegExp(r'^\+?[\d\s\-\(\)]{7,20}$');
-                  if (!phoneRegex.hasMatch(value.trim())) {
-                    return 'Please enter a valid phone number (e.g., +1234567890)';
-                  }
-                }
-                return null;
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return CustomTextField(
+                  label: localizations.phoneNumber,
+                  controller: _phoneController,
+                  enabled: _isEditing,
+                  keyboardType: TextInputType.phone,
+                  validator: (value) {
+                    // Phone is optional but if provided, should be valid format
+                    if (value != null && value.trim().isNotEmpty) {
+                      // ignore: deprecated_member_use
+                      final phoneRegex = RegExp(r'^\+?[\d\s\-\(\)]{7,20}$');
+                      if (!phoneRegex.hasMatch(value.trim())) {
+                        return localizations.pleaseEnterAValidPhoneNumber;
+                      }
+                    }
+                    return null;
+                  },
+                  prefixIcon: const Icon(Icons.phone_outlined),
+                );
               },
-              prefixIcon: const Icon(Icons.phone_outlined),
             ),
             const SizedBox(height: 16),
-            CustomTextField(
-              label: 'Address',
-              controller: _addressController,
-              enabled: _isEditing,
-              maxLines: 2,
-              prefixIcon: const Icon(Icons.location_on_outlined),
+            Builder(
+              builder: (context) {
+                return CustomTextField(
+                  label: AppLocalizations.of(context).addressLabel,
+                  controller: _addressController,
+                  enabled: _isEditing,
+                  maxLines: 2,
+                  prefixIcon: const Icon(Icons.location_on_outlined),
+                );
+              },
             ),
           ],
         ),
@@ -668,28 +722,37 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Address Information',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: theme.colorScheme.onSurface,
-              ),
-            ),
-            const SizedBox(height: 16),
-            CustomTextField(
-              label: 'City',
-              controller: _cityController,
-              enabled: _isEditing,
-              prefixIcon: const Icon(Icons.location_city_outlined),
-            ),
-            const SizedBox(height: 16),
-
-            CustomTextField(
-              label: 'Country',
-              controller: _countryController,
-              enabled: _isEditing,
-              prefixIcon: const Icon(Icons.public_outlined),
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      localizations.addressInformation,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    CustomTextField(
+                      label: localizations.cityLabel,
+                      controller: _cityController,
+                      enabled: _isEditing,
+                      prefixIcon: const Icon(Icons.location_city_outlined),
+                    ),
+                    const SizedBox(height: 16),
+                    CustomTextField(
+                      label: localizations.countryLabel,
+                      controller: _countryController,
+                      enabled: _isEditing,
+                      prefixIcon: const Icon(Icons.public_outlined),
+                    ),
+                  ],
+                );
+              },
             ),
           ],
         ),
@@ -706,20 +769,31 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
           return SafeArea(
             child: Wrap(
               children: [
-                ListTile(
-                  leading: const Icon(Icons.camera_alt),
-                  title: const Text('Camera'),
-                  onTap: () => Navigator.of(context).pop(ImageSource.camera),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.photo_library),
-                  title: const Text('Gallery'),
-                  onTap: () => Navigator.of(context).pop(ImageSource.gallery),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.cancel),
-                  title: const Text('Cancel'),
-                  onTap: () => Navigator.of(context).pop(),
+                Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return Column(
+                      children: [
+                        ListTile(
+                          leading: const Icon(Icons.camera_alt),
+                          title: Text(localizations.camera),
+                          onTap: () =>
+                              Navigator.of(context).pop(ImageSource.camera),
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.photo_library),
+                          title: Text(localizations.gallery),
+                          onTap: () =>
+                              Navigator.of(context).pop(ImageSource.gallery),
+                        ),
+                        ListTile(
+                          leading: const Icon(Icons.cancel),
+                          title: Text(localizations.cancel),
+                          onTap: () => Navigator.of(context).pop(),
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ],
             ),
@@ -747,9 +821,10 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
     } catch (e) {
       debugPrint('Error picking image: $e');
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error picking image: ${e.toString()}'),
+            content: Text(localizations.errorPickingImage(e.toString())),
             backgroundColor: AppColors.error,
           ),
         );
@@ -772,12 +847,11 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
       final token = authProvider.token;
+      final localizations = AppLocalizations.of(context);
       if (token == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Authentication token not available. Please log in again.',
-            ),
+          SnackBar(
+            content: Text(localizations.authenticationTokenNotAvailable),
             backgroundColor: AppColors.error,
           ),
         );
@@ -794,8 +868,8 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
       if (mounted) {
         if (success) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Profile picture updated successfully!'),
+            SnackBar(
+              content: Text(localizations.profilePictureUpdatedSuccessfully),
               backgroundColor: AppColors.success,
             ),
           );
@@ -812,7 +886,7 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
             SnackBar(
               content: Text(
                 profileProvider.errorMessage ??
-                    'Failed to upload profile picture',
+                    localizations.failedToUploadProfilePicture,
               ),
               backgroundColor: AppColors.error,
             ),
@@ -822,9 +896,12 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
     } catch (e) {
       debugPrint('Error uploading profile picture: $e');
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error uploading profile picture: ${e.toString()}'),
+            content: Text(
+              localizations.errorUploadingProfilePicture(e.toString()),
+            ),
             backgroundColor: AppColors.error,
           ),
         );
@@ -885,11 +962,12 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
       'Current password length: ${_currentPasswordController.text.length}',
     );
 
+    final localizations = AppLocalizations.of(context);
     // Only validate the email change form fields, not the entire form
     if (_newEmailController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a new email address'),
+        SnackBar(
+          content: Text(localizations.pleaseEnterNewEmail),
           backgroundColor: AppColors.error,
         ),
       );
@@ -898,8 +976,8 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
 
     if (_confirmEmailController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please confirm your new email address'),
+        SnackBar(
+          content: Text(localizations.pleaseConfirmNewEmailAddress),
           backgroundColor: AppColors.error,
         ),
       );
@@ -909,8 +987,8 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
     if (_newEmailController.text.trim() !=
         _confirmEmailController.text.trim()) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Email addresses do not match'),
+        SnackBar(
+          content: Text(localizations.emailAddressesDoNotMatch),
           backgroundColor: AppColors.error,
         ),
       );
@@ -919,8 +997,8 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
 
     if (_currentPasswordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter your current password'),
+        SnackBar(
+          content: Text(localizations.pleaseEnterCurrentPassword),
           backgroundColor: AppColors.error,
         ),
       );
@@ -937,10 +1015,8 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
     final token = authProvider.token;
     if (token == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Authentication token not available. Please log in again.',
-          ),
+        SnackBar(
+          content: Text(localizations.authenticationTokenNotAvailable),
           backgroundColor: AppColors.error,
         ),
       );
@@ -967,10 +1043,8 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
     if (mounted) {
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Email changed successfully! Please log in again with your new email.',
-            ),
+          SnackBar(
+            content: Text(localizations.emailChangedSuccessfully),
             backgroundColor: AppColors.success,
           ),
         );
@@ -989,7 +1063,7 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              profileProvider.errorMessage ?? 'Failed to change email',
+              profileProvider.errorMessage ?? localizations.failedToChangeEmail,
             ),
             backgroundColor: AppColors.error,
           ),

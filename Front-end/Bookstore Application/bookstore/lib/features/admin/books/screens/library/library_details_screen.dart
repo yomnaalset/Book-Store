@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../providers/library_manager/library_provider.dart';
 import '../../../widgets/library_manager/empty_state.dart';
+import '../../../../../core/localization/app_localizations.dart';
 
 class LibraryDetailsScreen extends StatefulWidget {
   const LibraryDetailsScreen({super.key});
@@ -16,10 +17,13 @@ class _LibraryDetailsScreenState extends State<LibraryDetailsScreen> {
   @override
   void initState() {
     super.initState();
-    _loadLibraryData();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadLibraryData();
+    });
   }
 
   Future<void> _loadLibraryData() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
     });
@@ -29,9 +33,10 @@ class _LibraryDetailsScreenState extends State<LibraryDetailsScreen> {
       await provider.getLibrary();
     } catch (e) {
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error loading library data: ${e.toString()}'),
+            content: Text(localizations.errorLoadingLibraryData(e.toString())),
           ),
         );
       }
@@ -46,13 +51,15 @@ class _LibraryDetailsScreenState extends State<LibraryDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Library Details'),
+        title: Text(localizations.libraryDetails),
         actions: [
           IconButton(
             onPressed: () => _loadLibraryData(),
             icon: const Icon(Icons.refresh),
+            tooltip: localizations.refresh,
           ),
         ],
       ),
@@ -61,31 +68,41 @@ class _LibraryDetailsScreenState extends State<LibraryDetailsScreen> {
           : Consumer<LibraryProvider>(
               builder: (context, provider, child) {
                 if (provider.error != null) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          'Error: ${provider.error}',
-                          style: const TextStyle(color: Colors.red),
+                  return Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              '${localizations.error}: ${provider.error}',
+                              style: const TextStyle(color: Colors.red),
+                            ),
+                            const SizedBox(height: 16),
+                            ElevatedButton(
+                              onPressed: _loadLibraryData,
+                              child: Text(localizations.retry),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: _loadLibraryData,
-                          child: const Text('Retry'),
-                        ),
-                      ],
-                    ),
+                      );
+                    },
                   );
                 }
 
                 if (provider.library == null) {
-                  return EmptyState(
-                    title: 'No Library Data',
-                    message: 'No library data available',
-                    icon: Icons.library_books,
-                    actionText: 'Refresh',
-                    onAction: _loadLibraryData,
+                  return Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return EmptyState(
+                        title: localizations.noLibraryData,
+                        message: localizations.noLibraryDataAvailable,
+                        icon: Icons.library_books,
+                        actionText: localizations.refresh,
+                        onAction: _loadLibraryData,
+                      );
+                    },
                   );
                 }
 
@@ -153,18 +170,25 @@ class _LibraryDetailsScreenState extends State<LibraryDetailsScreen> {
 
                       // Basic Information
                       _buildSectionCard(
-                        title: 'Basic Information',
+                        title: localizations.basicInformation,
                         icon: Icons.info,
                         children: [
-                          _buildInfoRow('Name', library.name),
-                          _buildInfoRow('Details', library.details),
+                          _buildInfoRow(localizations.nameLabel, library.name),
                           _buildInfoRow(
-                            'Logo',
-                            library.hasLogo ? 'Available' : 'Not set',
+                            localizations.description,
+                            library.details,
                           ),
                           _buildInfoRow(
-                            'Status',
-                            library.isActive ? 'Active' : 'Inactive',
+                            localizations.logo,
+                            library.hasLogo
+                                ? localizations.available
+                                : localizations.notSet,
+                          ),
+                          _buildInfoRow(
+                            localizations.status,
+                            library.isActive
+                                ? localizations.active
+                                : localizations.inactive,
                           ),
                         ],
                       ),
@@ -172,36 +196,39 @@ class _LibraryDetailsScreenState extends State<LibraryDetailsScreen> {
 
                       // Statistics
                       _buildSectionCard(
-                        title: 'Library Statistics',
+                        title: localizations.libraryStatistics,
                         icon: Icons.analytics,
                         children: [
-                          _buildInfoRow('Total Books', '0'),
-                          _buildInfoRow('Available Books', '0'),
-                          _buildInfoRow('Borrowed Books', '0'),
-                          _buildInfoRow('Total Members', '0'),
-                          _buildInfoRow('Active Members', '0'),
+                          _buildInfoRow(localizations.totalBooks, '0'),
+                          _buildInfoRow(localizations.availableBooks, '0'),
+                          _buildInfoRow(localizations.borrowedBooks, '0'),
+                          _buildInfoRow(localizations.totalMembers, '0'),
+                          _buildInfoRow(localizations.activeMembers, '0'),
                         ],
                       ),
                       const SizedBox(height: 16),
 
                       // Library Information
                       _buildSectionCard(
-                        title: 'Library Information',
+                        title: localizations.libraryInformation,
                         icon: Icons.info_outline,
                         children: [
                           _buildInfoRow(
-                            'Created At',
+                            localizations.createdAt,
                             library.createdAt.toString(),
                           ),
                           _buildInfoRow(
-                            'Updated At',
+                            localizations.updatedAt,
                             library.updatedAt.toString(),
                           ),
                           if (library.createdByName.isNotEmpty)
-                            _buildInfoRow('Created By', library.createdByName),
+                            _buildInfoRow(
+                              localizations.createdBy,
+                              library.createdByName,
+                            ),
                           if (library.lastUpdatedByName.isNotEmpty)
                             _buildInfoRow(
-                              'Last Updated By',
+                              localizations.lastUpdatedBy,
                               library.lastUpdatedByName,
                             ),
                         ],
@@ -215,7 +242,7 @@ class _LibraryDetailsScreenState extends State<LibraryDetailsScreen> {
                             child: ElevatedButton.icon(
                               onPressed: () => _showDeleteConfirmation(context),
                               icon: const Icon(Icons.delete),
-                              label: const Text('Delete Library'),
+                              label: Text(localizations.deleteLibrary),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.red,
                                 foregroundColor: Colors.white,
@@ -234,7 +261,7 @@ class _LibraryDetailsScreenState extends State<LibraryDetailsScreen> {
                                 );
                               },
                               icon: const Icon(Icons.edit),
-                              label: const Text('Edit Library Information'),
+                              label: Text(localizations.editLibraryInformation),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: Colors.blue,
                                 side: const BorderSide(color: Colors.blue),
@@ -309,18 +336,17 @@ class _LibraryDetailsScreenState extends State<LibraryDetailsScreen> {
   }
 
   void _showDeleteConfirmation(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('Delete Library'),
-          content: const Text(
-            'Are you sure you want to delete this library? This action cannot be undone.',
-          ),
+          title: Text(localizations.deleteLibrary),
+          content: Text(localizations.areYouSureDeleteLibrary),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
+              child: Text(localizations.cancel),
             ),
             TextButton(
               onPressed: () async {
@@ -328,7 +354,7 @@ class _LibraryDetailsScreenState extends State<LibraryDetailsScreen> {
                 await _deleteLibrary(context);
               },
               style: TextButton.styleFrom(foregroundColor: Colors.red),
-              child: const Text('Delete'),
+              child: Text(localizations.delete),
             ),
           ],
         );
@@ -340,6 +366,7 @@ class _LibraryDetailsScreenState extends State<LibraryDetailsScreen> {
     final provider = context.read<LibraryProvider>();
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
+    final localizations = AppLocalizations.of(context);
 
     try {
       final success = await provider.deleteLibrary();
@@ -347,8 +374,8 @@ class _LibraryDetailsScreenState extends State<LibraryDetailsScreen> {
       if (mounted) {
         if (success) {
           scaffoldMessenger.showSnackBar(
-            const SnackBar(
-              content: Text('Library deleted successfully'),
+            SnackBar(
+              content: Text(localizations.libraryDeletedSuccessfully),
               backgroundColor: Colors.green,
             ),
           );
@@ -357,7 +384,11 @@ class _LibraryDetailsScreenState extends State<LibraryDetailsScreen> {
         } else {
           scaffoldMessenger.showSnackBar(
             SnackBar(
-              content: Text('Failed to delete library: ${provider.error}'),
+              content: Text(
+                localizations.failedToDeleteLibrary(
+                  provider.error ?? localizations.unknownError,
+                ),
+              ),
               backgroundColor: Colors.red,
             ),
           );
@@ -367,7 +398,7 @@ class _LibraryDetailsScreenState extends State<LibraryDetailsScreen> {
       if (mounted) {
         scaffoldMessenger.showSnackBar(
           SnackBar(
-            content: Text('Error deleting library: $e'),
+            content: Text(localizations.errorDeletingLibrary(e.toString())),
             backgroundColor: Colors.red,
           ),
         );

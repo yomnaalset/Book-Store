@@ -22,8 +22,8 @@ class ReviewsProvider extends ChangeNotifier {
   // Add a review
   Future<void> addReview(
     int bookId,
-    int rating,
-    String comment,
+    int? rating,
+    String? comment,
     String? token,
   ) async {
     _setLoading(true);
@@ -35,10 +35,18 @@ class ReviewsProvider extends ChangeNotifier {
         return;
       }
 
+      final body = <String, dynamic>{'book_id': bookId};
+      if (rating != null) {
+        body['rating'] = rating;
+      }
+      if (comment != null && comment.isNotEmpty) {
+        body['comment'] = comment;
+      }
+
       final response = await ApiClient.post(
         '/library/book-reviews/create/',
         token: token,
-        body: {'book_id': bookId, 'rating': rating, 'comment': comment},
+        body: body,
       );
 
       if (response.statusCode == 201) {
@@ -64,8 +72,8 @@ class ReviewsProvider extends ChangeNotifier {
   // Update a review
   Future<void> updateReview(
     int reviewId,
-    int rating,
-    String comment,
+    int? rating,
+    String? comment,
     String? token,
   ) async {
     _setLoading(true);
@@ -77,10 +85,18 @@ class ReviewsProvider extends ChangeNotifier {
         return;
       }
 
+      final body = <String, dynamic>{};
+      if (rating != null) {
+        body['rating'] = rating;
+      }
+      if (comment != null && comment.isNotEmpty) {
+        body['comment'] = comment;
+      }
+
       final response = await ApiClient.put(
         '/library/book-reviews/$reviewId/update/',
         token: token,
-        body: {'rating': rating, 'comment': comment},
+        body: body,
       );
 
       if (response.statusCode == 200) {

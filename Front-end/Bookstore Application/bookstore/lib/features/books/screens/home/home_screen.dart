@@ -13,6 +13,7 @@ import 'components/writers_section.dart';
 import 'components/offers_section.dart';
 import 'components/advertisements_section.dart';
 import 'components/discounted_books_section.dart';
+import '../../../../core/localization/app_localizations.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -131,29 +132,33 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       bottomNavigationBar: Consumer<AuthProvider>(
         builder: (context, authProvider, child) {
+          final localizations = AppLocalizations.of(context);
           return BottomNavigationBar(
             type: BottomNavigationBarType.fixed,
             backgroundColor: Theme.of(context).colorScheme.surface,
             selectedItemColor: Theme.of(context).colorScheme.primary,
             unselectedItemColor: Theme.of(context).colorScheme.onSurfaceVariant,
             currentIndex: 0, // Home is selected
-            items: const [
-              BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+            items: [
               BottomNavigationBarItem(
-                icon: Icon(Icons.receipt_long),
-                label: 'My Orders',
+                icon: const Icon(Icons.home),
+                label: localizations.home,
               ),
               BottomNavigationBarItem(
-                icon: Icon(Icons.library_books),
-                label: 'Borrowings',
+                icon: const Icon(Icons.receipt_long),
+                label: localizations.myOrders,
               ),
               BottomNavigationBarItem(
-                icon: Icon(Icons.favorite),
-                label: 'Favorites',
+                icon: const Icon(Icons.library_books),
+                label: localizations.borrowings,
               ),
               BottomNavigationBarItem(
-                icon: Icon(Icons.person),
-                label: 'Profile',
+                icon: const Icon(Icons.favorite),
+                label: localizations.favorites,
+              ),
+              BottomNavigationBarItem(
+                icon: const Icon(Icons.person),
+                label: localizations.profile,
               ),
             ],
             onTap: (index) {
@@ -182,17 +187,34 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildAppBar(AuthProvider authProvider) {
+    // Check if user is a customer (not admin)
+    final isCustomer =
+        authProvider.user?.userType == 'customer' ||
+        (authProvider.user?.userType != 'library_admin' &&
+            authProvider.user?.userType != 'delivery_admin' &&
+            authProvider.user?.userType != 'system_admin');
+
     return SliverAppBar(
       expandedHeight: 140.0,
       floating: true,
       pinned: true,
       backgroundColor: Theme.of(context).colorScheme.primary,
+      leading: isCustomer
+          ? IconButton(
+              icon: const Icon(Icons.add_circle_outline),
+              color: Theme.of(context).colorScheme.onPrimary,
+              iconSize: 28,
+              onPressed: () {
+                Navigator.pushNamed(context, '/customer-complaints');
+              },
+            )
+          : null,
       flexibleSpace: FlexibleSpaceBar(
         background: Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+              begin: AlignmentDirectional.topStart,
+              end: AlignmentDirectional.bottomEnd,
               colors: [
                 Theme.of(context).colorScheme.primary,
                 Theme.of(context).colorScheme.primary,
@@ -206,61 +228,77 @@ class _HomeScreenState extends State<HomeScreen> {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   // App Title
-                  Text(
-                    'E-Library',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onPrimary,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 24,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  // Search Bar
-                  Container(
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surface,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.1),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: TextField(
-                      decoration: InputDecoration(
-                        hintText: 'Search books, authors...',
-                        hintStyle: TextStyle(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                        prefixIcon: Icon(
-                          Icons.search,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                      ),
-                      onChanged: (value) {
-                        // Handle search
-                      },
-                      onTap: () {
-                        Navigator.pushNamed(context, '/advanced-search');
-                      },
-                      onSubmitted: (value) {
-                        if (value.trim().isNotEmpty) {
-                          Navigator.pushNamed(
-                            context,
-                            '/advanced-search',
-                            arguments: {'searchQuery': value.trim()},
-                          );
-                        }
-                      },
-                    ),
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Column(
+                        children: [
+                          Text(
+                            localizations.appName,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onPrimary,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 24,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          // Search Bar
+                          Container(
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.surface,
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.1),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: TextField(
+                              decoration: InputDecoration(
+                                hintText: localizations.searchBooksHint,
+                                hintStyle: TextStyle(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                ),
+                                prefixIcon: Icon(
+                                  Icons.search,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                ),
+                                border: InputBorder.none,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 8,
+                                ),
+                              ),
+                              onChanged: (value) {
+                                // Handle search
+                              },
+                              onTap: () {
+                                Navigator.pushNamed(
+                                  context,
+                                  '/advanced-search',
+                                );
+                              },
+                              onSubmitted: (value) {
+                                if (value.trim().isNotEmpty) {
+                                  Navigator.pushNamed(
+                                    context,
+                                    '/advanced-search',
+                                    arguments: {'searchQuery': value.trim()},
+                                  );
+                                }
+                              },
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ],
               ),

@@ -93,6 +93,54 @@ class ComplaintsProvider with ChangeNotifier {
     }
   }
 
+  // Update complaint status via POST (for status menu)
+  Future<bool> updateComplaintStatusViaPost(int id, String status) async {
+    _clearError();
+
+    try {
+      await _apiService.updateComplaintStatusViaPost(id, status);
+
+      // Update local data
+      final index = _complaints.indexWhere((c) => c.id == id);
+      if (index != -1) {
+        _complaints[index] = _complaints[index].copyWith(
+          status: status,
+          updatedAt: DateTime.now(),
+        );
+        notifyListeners();
+      }
+
+      return true;
+    } catch (e) {
+      _setError('Failed to update complaint status: $e');
+      return false;
+    }
+  }
+
+  // Send complaint reply
+  Future<bool> sendComplaintReply(int id, String response) async {
+    _clearError();
+
+    try {
+      await _apiService.sendComplaintReply(id, response);
+
+      // Refresh the complaint in the list to get updated status
+      final updatedComplaint = await _apiService.getComplaint(id);
+      if (updatedComplaint != null) {
+        final index = _complaints.indexWhere((c) => c.id == id);
+        if (index != -1) {
+          _complaints[index] = updatedComplaint;
+          notifyListeners();
+        }
+      }
+
+      return true;
+    } catch (e) {
+      _setError('Failed to send complaint reply: $e');
+      return false;
+    }
+  }
+
   // Assign complaint
   Future<bool> assignComplaint(int id, int assignedToId) async {
     _clearError();
@@ -104,8 +152,7 @@ class ComplaintsProvider with ChangeNotifier {
       final index = _complaints.indexWhere((c) => c.id == id);
       if (index != -1) {
         _complaints[index] = _complaints[index].copyWith(
-          assignedToId: assignedToId,
-          status: 'assigned',
+          status: 'in_progress',
           updatedAt: DateTime.now(),
         );
         notifyListeners();
@@ -119,19 +166,17 @@ class ComplaintsProvider with ChangeNotifier {
   }
 
   // Resolve complaint
-  Future<bool> resolveComplaint(int id, String resolution) async {
+  Future<bool> resolveComplaint(int id) async {
     _clearError();
 
     try {
-      await _apiService.resolveComplaint(id, resolution);
+      await _apiService.resolveComplaint(id);
 
       // Update local data
       final index = _complaints.indexWhere((c) => c.id == id);
       if (index != -1) {
         _complaints[index] = _complaints[index].copyWith(
           status: 'resolved',
-          resolution: resolution,
-          resolvedAt: DateTime.now(),
           updatedAt: DateTime.now(),
         );
         notifyListeners();
@@ -150,6 +195,17 @@ class ComplaintsProvider with ChangeNotifier {
 
     try {
       await _apiService.addComplaintResponse(id, response);
+
+      // Refresh the complaint in the list to get updated status
+      final updatedComplaint = await _apiService.getComplaint(id);
+      if (updatedComplaint != null) {
+        final index = _complaints.indexWhere((c) => c.id == id);
+        if (index != -1) {
+          _complaints[index] = updatedComplaint;
+          notifyListeners();
+        }
+      }
+
       return true;
     } catch (e) {
       _setError('Failed to add complaint response: $e');
@@ -182,6 +238,12 @@ class ComplaintsProvider with ChangeNotifier {
 
   void _clearError() {
     _error = null;
+  }
+
+  // Public method to clear error
+  void clearError() {
+    _error = null;
+    notifyListeners();
   }
 
   // Update the API service with a new token

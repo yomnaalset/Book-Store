@@ -1651,10 +1651,11 @@ class EvaluationAccessService:
             }
             
         except Exception as e:
-            logger.error(f"Error retrieving book evaluations: {str(e)}")
+            error_message = str(e) if e else 'Unknown error'
+            logger.error(f"Error retrieving book evaluations: {error_message}", exc_info=True)
             return {
                 'success': False,
-                'message': 'Failed to retrieve book evaluations',
+                'message': f'Failed to retrieve book evaluations: {error_message}',
                 'error_code': 'RETRIEVAL_ERROR'
             }
     
@@ -1671,7 +1672,9 @@ class EvaluationAccessService:
         """
         distribution = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
         for evaluation in evaluations:
-            distribution[evaluation.rating] += 1
+            # Only count evaluations with ratings (rating can be None now)
+            if evaluation.rating is not None:
+                distribution[evaluation.rating] += 1        # Count the number of evaluations for each rating
         return distribution
     
     @staticmethod

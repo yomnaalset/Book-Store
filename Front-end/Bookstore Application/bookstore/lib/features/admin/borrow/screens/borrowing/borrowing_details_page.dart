@@ -8,6 +8,7 @@ import '../../../../borrow/models/borrow_request.dart';
 import '../../../../borrow/services/borrow_service.dart';
 import '../../../../auth/providers/auth_provider.dart';
 import '../../../../../core/services/api_service.dart';
+import '../../../../../core/localization/app_localizations.dart';
 
 class BorrowingDetailsPage extends StatefulWidget {
   final BorrowRequest request;
@@ -119,114 +120,157 @@ class _BorrowingDetailsPageState extends State<BorrowingDetailsPage> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _currentRequest == null
-          ? const Center(child: Text('Request not found'))
+          ? Builder(
+              builder: (context) {
+                return Center(
+                  child: Text(AppLocalizations.of(context).requestNotFound),
+                );
+              },
+            )
           : SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Section 1 - Request Details
-                  _buildSectionCard(
-                    title: 'Request Details',
-                    icon: Icons.book_outlined,
-                    children: [
-                      _buildInfoRow(
-                        'Request Number',
-                        '#${_currentRequest!.id}',
-                      ),
-                      _buildInfoRow(
-                        'Sending Date',
-                        _formatDate(_currentRequest!.requestDate),
-                      ),
-                      _buildInfoRow(
-                        'Expected Return Date',
-                        _currentRequest!.dueDate != null
-                            ? _formatDate(_currentRequest!.dueDate!)
-                            : 'Not set',
-                      ),
-                      _buildInfoRow(
-                        'Request Status',
-                        _getStatusDisplay(_currentRequest!.status),
-                      ),
-                    ],
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return _buildSectionCard(
+                        title: localizations.requestDetails,
+                        icon: Icons.book_outlined,
+                        children: [
+                          _buildInfoRow(
+                            localizations.requestNumberLabel,
+                            '#${_currentRequest!.id}',
+                          ),
+                          _buildInfoRow(
+                            localizations.sendingDate,
+                            _formatDate(_currentRequest!.requestDate),
+                          ),
+                          _buildInfoRow(
+                            localizations.expectedReturnDate,
+                            _currentRequest!.dueDate != null
+                                ? _formatDate(_currentRequest!.dueDate!)
+                                : localizations.notSet,
+                          ),
+                          _buildInfoRow(
+                            localizations.requestStatus,
+                            _getStatusDisplay(_currentRequest!.status),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                   const SizedBox(height: 16),
 
                   // Section 2 - Customer Information
-                  _buildSectionCard(
-                    title: 'Customer Information',
-                    icon: Icons.person,
-                    children: [
-                      _buildInfoRow(
-                        'Full Name',
-                        _currentRequest!.customerName ?? 'Not provided',
-                      ),
-                      _buildInfoRow('Phone Number', _getCustomerPhone()),
-                      _buildInfoRow('Email', _getCustomerEmail()),
-                    ],
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return _buildSectionCard(
+                        title: localizations.customerInformation,
+                        icon: Icons.person,
+                        children: [
+                          _buildInfoRow(
+                            localizations.fullName,
+                            _currentRequest!.customerName ??
+                                localizations.notProvided,
+                          ),
+                          _buildInfoRow(
+                            localizations.phoneNumber,
+                            _getCustomerPhone(),
+                          ),
+                          _buildInfoRow(
+                            localizations.email,
+                            _getCustomerEmail(),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                   const SizedBox(height: 16),
 
                   // Section 3 - Borrowed Books
-                  _buildSectionCard(
-                    title: 'Borrowed Books',
-                    icon: Icons.library_books,
-                    children: [_buildBookCard(_currentRequest!)],
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return _buildSectionCard(
+                        title: localizations.borrowedBooks,
+                        icon: Icons.library_books,
+                        children: [_buildBookCard(_currentRequest!)],
+                      );
+                    },
                   ),
                   const SizedBox(height: 16),
 
                   // Section 4 - Delivery Manager Information (if assigned)
                   if (_currentRequest?.deliveryPerson != null) ...[
-                    _buildSectionCard(
-                      title: 'Delivery Manager',
-                      icon: Icons.local_shipping,
-                      children: [
-                        _buildInfoRow('Full Name', _getDeliveryManagerName()),
-                        _buildInfoRow(
-                          'Email',
-                          _currentRequest!.deliveryPerson!.email.isNotEmpty
-                              ? _currentRequest!.deliveryPerson!.email
-                              : 'Not provided',
-                        ),
-                        _buildInfoRow(
-                          'Phone Number',
-                          _currentRequest!.deliveryPerson!.phone != null &&
-                                  _currentRequest!
-                                      .deliveryPerson!
-                                      .phone!
-                                      .isNotEmpty
-                              ? _currentRequest!.deliveryPerson!.phone!
-                              : 'Not provided',
-                        ),
-                        // View Delivery Manager Location Button
-                        // Only show when status is "out_for_delivery"
-                        if (_isDeliveryActive()) ...[
-                          const SizedBox(height: 16),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              onPressed: _openDeliveryManagerLocation,
-                              icon: const Icon(Icons.location_on, size: 20),
-                              label: const Text(
-                                'View Delivery Manager Current Location',
-                                style: TextStyle(fontSize: 16),
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF4285F4),
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 14,
-                                  horizontal: 16,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                elevation: 2,
-                              ),
+                    Builder(
+                      builder: (context) {
+                        final localizations = AppLocalizations.of(context);
+                        return _buildSectionCard(
+                          title: localizations.deliveryManager,
+                          icon: Icons.local_shipping,
+                          children: [
+                            _buildInfoRow(
+                              localizations.fullName,
+                              _getDeliveryManagerName(),
                             ),
-                          ),
-                        ],
-                      ],
+                            _buildInfoRow(
+                              localizations.email,
+                              _currentRequest!.deliveryPerson!.email.isNotEmpty
+                                  ? _currentRequest!.deliveryPerson!.email
+                                  : localizations.notProvided,
+                            ),
+                            _buildInfoRow(
+                              localizations.phoneNumber,
+                              _currentRequest!.deliveryPerson!.phone != null &&
+                                      _currentRequest!
+                                          .deliveryPerson!
+                                          .phone!
+                                          .isNotEmpty
+                                  ? _currentRequest!.deliveryPerson!.phone!
+                                  : localizations.notProvided,
+                            ),
+                            // View Delivery Manager Location Button
+                            // Only show when status is "out_for_delivery"
+                            if (_isDeliveryActive()) ...[
+                              const SizedBox(height: 16),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  onPressed: _openDeliveryManagerLocation,
+                                  icon: const Icon(Icons.location_on, size: 20),
+                                  label: Builder(
+                                    builder: (context) {
+                                      return Text(
+                                        AppLocalizations.of(
+                                          context,
+                                        ).viewDeliveryManagerLocation,
+                                        style: const TextStyle(fontSize: 16),
+                                      );
+                                    },
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF4285F4),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 14,
+                                      horizontal: 16,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    elevation: 2,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        );
+                      },
                     ),
                     const SizedBox(height: 16),
                   ],
@@ -305,6 +349,7 @@ class _BorrowingDetailsPageState extends State<BorrowingDetailsPage> {
   }
 
   Widget _buildBookCard(BorrowRequest request) {
+    final localizations = AppLocalizations.of(context);
     return Card(
       margin: const EdgeInsets.only(bottom: 12.0),
       elevation: 1,
@@ -329,7 +374,9 @@ class _BorrowingDetailsPageState extends State<BorrowingDetailsPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    request.bookTitle ?? request.book?.title ?? 'Unknown Book',
+                    request.bookTitle ??
+                        request.book?.title ??
+                        localizations.unknownBook,
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -340,7 +387,7 @@ class _BorrowingDetailsPageState extends State<BorrowingDetailsPage> {
                   const SizedBox(height: 4),
                   if (request.book?.author != null) ...[
                     Text(
-                      'by ${request.book!.author}',
+                      localizations.byAuthor(request.book!.author!),
                       style: const TextStyle(fontSize: 14, color: Colors.grey),
                     ),
                   ],
@@ -350,7 +397,7 @@ class _BorrowingDetailsPageState extends State<BorrowingDetailsPage> {
                       const Icon(Icons.schedule, size: 16, color: Colors.grey),
                       const SizedBox(width: 4),
                       Text(
-                        'Duration: ${request.durationDays} days',
+                        '${localizations.duration}: ${request.durationDays} ${localizations.days}',
                         style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
@@ -483,7 +530,7 @@ class _BorrowingDetailsPageState extends State<BorrowingDetailsPage> {
         _currentRequest!.customer!.phone!.isNotEmpty) {
       return _currentRequest!.customer!.phone!;
     }
-    return 'Not provided';
+    return AppLocalizations.of(context).notProvided;
   }
 
   String _getCustomerEmail() {
@@ -491,12 +538,12 @@ class _BorrowingDetailsPageState extends State<BorrowingDetailsPage> {
         _currentRequest!.customer!.email.isNotEmpty) {
       return _currentRequest!.customer!.email;
     }
-    return 'Not provided';
+    return AppLocalizations.of(context).notProvided;
   }
 
   String _getDeliveryManagerName() {
     if (_currentRequest?.deliveryPerson == null) {
-      return 'Not provided';
+      return AppLocalizations.of(context).notProvided;
     }
 
     final deliveryPerson = _currentRequest!.deliveryPerson!;
@@ -526,26 +573,12 @@ class _BorrowingDetailsPageState extends State<BorrowingDetailsPage> {
     }
 
     // If all name fields are empty or only contain email, return "Not provided"
-    return 'Not provided';
+    return AppLocalizations.of(context).notProvided;
   }
 
   String _getStatusDisplay(String status) {
-    switch (status.toLowerCase()) {
-      case 'pending':
-        return 'Pending';
-      case 'approved':
-        return 'Approved';
-      case 'active':
-        return 'Borrowed';
-      case 'returned':
-        return 'Returned';
-      case 'rejected':
-        return 'Rejected';
-      case 'overdue':
-        return 'Overdue';
-      default:
-        return status;
-    }
+    final localizations = AppLocalizations.of(context);
+    return localizations.getBorrowStatusLabel(status);
   }
 
   Color _getStatusColor(String status) {
@@ -568,20 +601,25 @@ class _BorrowingDetailsPageState extends State<BorrowingDetailsPage> {
   }
 
   String _getStatusMessage(BorrowRequest request) {
+    final localizations = AppLocalizations.of(context);
     final status = request.status.toLowerCase();
+    final statusLabel = localizations.getBorrowStatusLabel(request.status);
+
     switch (status) {
       case 'approved':
-        return '✓ Request has been approved';
+        return '✓ ${localizations.requestHasBeenApproved}';
       case 'rejected':
-        return '✗ Request has been rejected';
+        return '✗ ${localizations.requestHasBeenRejected}';
       case 'active':
-        return '📖 Book is currently borrowed';
+        return '📖 ${localizations.bookIsCurrentlyBorrowed}';
       case 'returned':
-        return '↩️ Book has been returned';
+        return '↩️ ${localizations.bookHasBeenReturned}';
       case 'overdue':
-        return '⚠️ Book is overdue';
+        return '⚠️ ${localizations.bookIsOverdue}';
+      case 'delivered':
+        return '${localizations.status}: $statusLabel';
       default:
-        return 'Status: ${request.status}';
+        return '${localizations.status}: $statusLabel';
     }
   }
 
@@ -593,67 +631,76 @@ class _BorrowingDetailsPageState extends State<BorrowingDetailsPage> {
   void _showActionDialog() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Request Action'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('What action would you like to take for this request?'),
-            const SizedBox(height: 20),
-            if (_canApproveOrReject(_currentRequest!)) ...[
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _approveRequest();
-                      },
-                      icon: const Icon(Icons.check_circle, color: Colors.white),
-                      label: const Text('Approve'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
+      builder: (context) {
+        final localizations = AppLocalizations.of(context);
+        return AlertDialog(
+          title: Text(localizations.requestAction),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(localizations.whatActionForRequest),
+              const SizedBox(height: 20),
+              if (_canApproveOrReject(_currentRequest!)) ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _approveRequest();
+                        },
+                        icon: const Icon(
+                          Icons.check_circle,
+                          color: Colors.white,
+                        ),
+                        label: Text(localizations.approve),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _rejectRequest();
-                      },
-                      icon: const Icon(Icons.cancel, color: Colors.white),
-                      label: const Text('Reject'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
-                        foregroundColor: Colors.white,
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _rejectRequest();
+                        },
+                        icon: const Icon(Icons.cancel, color: Colors.white),
+                        label: Text(localizations.reject),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          foregroundColor: Colors.white,
+                        ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ] else ...[
-              Text(
-                _getStatusMessage(_currentRequest!),
-                style: const TextStyle(fontSize: 16),
-                textAlign: TextAlign.center,
-              ),
+                  ],
+                ),
+              ] else ...[
+                Text(
+                  _getStatusMessage(_currentRequest!),
+                  style: const TextStyle(fontSize: 16),
+                  textAlign: TextAlign.center,
+                ),
+              ],
             ],
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
           ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(localizations.cancel),
+            ),
+          ],
+        );
+      },
     );
   }
 
   Future<void> _approveRequest() async {
+    // Get ScaffoldMessenger before async operations to avoid context issues
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
     try {
       final provider = context.read<AdminBorrowingProvider>();
 
@@ -663,14 +710,18 @@ class _BorrowingDetailsPageState extends State<BorrowingDetailsPage> {
       if (!mounted) return;
 
       if (provider.deliveryManagers.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'No delivery managers available. Cannot approve request.',
+        try {
+          scaffoldMessenger.showSnackBar(
+            const SnackBar(
+              content: Text(
+                'No delivery managers available. Cannot approve request.',
+              ),
+              backgroundColor: Colors.red,
             ),
-            backgroundColor: Colors.red,
-          ),
-        );
+          );
+        } catch (_) {
+          // Widget disposed, ignore
+        }
         return;
       }
 
@@ -692,24 +743,32 @@ class _BorrowingDetailsPageState extends State<BorrowingDetailsPage> {
           );
 
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                  'Borrowing request approved and assigned to delivery manager',
+            try {
+              scaffoldMessenger.showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'Borrowing request approved and assigned to delivery manager',
+                  ),
+                  backgroundColor: Colors.green,
                 ),
-                backgroundColor: Colors.green,
-              ),
-            );
+              );
+            } catch (_) {
+              // Widget disposed, ignore
+            }
             await _fetchRequestDetails();
           }
         } catch (e) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Failed to approve request: $e'),
-                backgroundColor: Colors.red,
-              ),
-            );
+            try {
+              scaffoldMessenger.showSnackBar(
+                SnackBar(
+                  content: Text('Failed to approve request: $e'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            } catch (_) {
+              // Widget disposed, ignore
+            }
           }
         } finally {
           if (mounted) {
@@ -721,12 +780,16 @@ class _BorrowingDetailsPageState extends State<BorrowingDetailsPage> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to load delivery managers: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        try {
+          scaffoldMessenger.showSnackBar(
+            SnackBar(
+              content: Text('Failed to load delivery managers: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        } catch (_) {
+          // Widget disposed, ignore
+        }
       }
     }
   }
@@ -1106,7 +1169,7 @@ class _BorrowingDetailsPageState extends State<BorrowingDetailsPage> {
   /// Open delivery manager location in Google Maps
   Future<void> _openDeliveryManagerLocation() async {
     if (!mounted) return;
-    
+
     if (_currentRequest == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1227,10 +1290,7 @@ class _BorrowingDetailsPageState extends State<BorrowingDetailsPage> {
             'Failed to get location';
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(errorMessage),
-              backgroundColor: Colors.red,
-            ),
+            SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
           );
         }
       }

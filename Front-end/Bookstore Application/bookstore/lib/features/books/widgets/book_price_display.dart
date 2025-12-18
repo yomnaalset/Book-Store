@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/localization/app_localizations.dart';
 import '../models/book.dart';
 
 class BookPriceDisplay extends StatelessWidget {
@@ -69,13 +70,18 @@ class BookPriceDisplay extends StatelessWidget {
         // Borrow price
         if (showBorrowPrice && book.borrowPrice != null) ...[
           const SizedBox(height: 1),
-          Text(
-            'Borrow: \$${book.borrowPrice}',
-            style: TextStyle(
-              color: AppColors.warning,
-              fontWeight: FontWeight.w600,
-              fontSize: smallFontSize ?? 8,
-            ),
+          Builder(
+            builder: (context) {
+              final localizations = AppLocalizations.of(context);
+              return Text(
+                '${localizations.borrowPrefix} \$${book.borrowPrice}',
+                style: TextStyle(
+                  color: AppColors.warning,
+                  fontWeight: FontWeight.w600,
+                  fontSize: smallFontSize ?? 8,
+                ),
+              );
+            },
           ),
         ],
       ],
@@ -113,13 +119,20 @@ class BookPriceDisplay extends StatelessWidget {
           // Savings amount
           if (book.savingsAmount > 0) ...[
             const SizedBox(height: 2),
-            Text(
-              'Save \$${book.savingsAmount.toStringAsFixed(2)}',
-              style: TextStyle(
-                color: AppColors.success,
-                fontSize: smallFontSize ?? 9,
-                fontWeight: FontWeight.w500,
-              ),
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Text(
+                  localizations.saveAmount(
+                    '\$${book.savingsAmount.toStringAsFixed(2)}',
+                  ),
+                  style: TextStyle(
+                    color: AppColors.success,
+                    fontSize: smallFontSize ?? 9,
+                    fontWeight: FontWeight.w500,
+                  ),
+                );
+              },
             ),
           ],
         ] else if (book.price != null) ...[
@@ -136,13 +149,18 @@ class BookPriceDisplay extends StatelessWidget {
         // Borrow price
         if (showBorrowPrice && book.borrowPrice != null) ...[
           const SizedBox(height: 4),
-          Text(
-            'Borrow: \$${book.borrowPrice}',
-            style: TextStyle(
-              color: AppColors.warning,
-              fontWeight: FontWeight.w600,
-              fontSize: smallFontSize ?? 10,
-            ),
+          Builder(
+            builder: (context) {
+              final localizations = AppLocalizations.of(context);
+              return Text(
+                '${localizations.borrowPrefix} \$${book.borrowPrice}',
+                style: TextStyle(
+                  color: AppColors.warning,
+                  fontWeight: FontWeight.w600,
+                  fontSize: smallFontSize ?? 10,
+                ),
+              );
+            },
           ),
         ],
       ],

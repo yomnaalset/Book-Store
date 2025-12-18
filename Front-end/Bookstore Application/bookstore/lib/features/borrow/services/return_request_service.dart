@@ -45,7 +45,6 @@ class ReturnRequestService {
   }
 
   /// Approve return request - Admin
-  /// POST /api/returns/requests/<pk>/approve/
   Future<ReturnRequest> approveReturnRequestById(int returnId) async {
     try {
       final response = await ApiClient.post(
@@ -75,7 +74,6 @@ class ReturnRequestService {
   }
 
   /// Assign delivery manager to return request - Admin
-  /// POST /api/returns/requests/<pk>/assign/
   Future<ReturnRequest> assignDeliveryManagerToReturnRequest(
     int returnId,
     int deliveryManagerId,
@@ -142,7 +140,6 @@ class ReturnRequestService {
   }
 
   /// Accept a return request (Delivery Manager)
-  /// POST /api/returns/requests/<pk>/accept/
   Future<ReturnRequest> acceptReturnRequest(
     int returnId, {
     String? notes,
@@ -180,19 +177,38 @@ class ReturnRequestService {
   }
 
   /// Start return process (Delivery Manager)
-  /// POST /api/returns/requests/<pk>/start/
+  /// Uses unified /start-delivery endpoint (backend-driven)
+  /// IMPORTANT: This method should only be called by delivery managers.
+  /// Role validation should be done in the calling UI component before calling this method.
   Future<ReturnRequest> startReturnProcess(int returnId) async {
     try {
+      // Use unified start-delivery endpoint
+      // Backend will use request.user if delivery_manager_id is not provided
       final response = await ApiClient.post(
-        '/returns/requests/$returnId/start/',
-        body: {},
+        '/delivery/start-delivery/',
+        body: {'delivery_type': 'return', 'delivery_id': returnId},
         token: _token,
       );
+
+      // Handle 403 Forbidden - User doesn't have permission
+      if (response.statusCode == 403) {
+        final errorData = ApiClient.handleResponse(response);
+        debugPrint(
+          'ReturnRequestService: 403 Forbidden - User does not have permission to start return process',
+        );
+        throw Exception(
+          errorData['error'] ??
+              errorData['message'] ??
+              'You do not have permission to perform this action. Only delivery managers can start return processes.',
+        );
+      }
 
       if (ApiClient.isSuccess(response)) {
         final responseData = ApiClient.handleResponse(response);
         if (responseData['success'] == true) {
-          return ReturnRequest.fromJson(responseData['data']);
+          // Unified endpoint returns: { 'delivery_type': 'return', 'delivery_id': ..., 'return_status': ... }
+          // We need to fetch the updated return request
+          return await getReturnRequestById(returnId);
         }
         throw Exception(
           responseData['message'] ?? 'Failed to start return process',
@@ -200,7 +216,9 @@ class ReturnRequestService {
       } else {
         final errorData = ApiClient.handleResponse(response);
         throw Exception(
-          errorData['message'] ?? 'Failed to start return process',
+          errorData['error'] ??
+              errorData['message'] ??
+              'Failed to start return process',
         );
       }
     } catch (e) {
@@ -210,24 +228,46 @@ class ReturnRequestService {
   }
 
   /// Complete return (Delivery Manager)
-  /// POST /api/returns/requests/<pk>/complete/
+  /// Uses unified /complete-delivery endpoint (backend-driven)
+  /// IMPORTANT: This method should only be called by delivery managers.
+  /// Role validation should be done in the calling UI component before calling this method.
   Future<ReturnRequest> completeReturn(int returnId) async {
     try {
+      // Use unified complete-delivery endpoint
       final response = await ApiClient.post(
-        '/returns/requests/$returnId/complete/',
-        body: {},
+        '/delivery/complete-delivery/',
+        body: {'delivery_type': 'return', 'delivery_id': returnId},
         token: _token,
       );
+
+      // Handle 403 Forbidden - User doesn't have permission
+      if (response.statusCode == 403) {
+        final errorData = ApiClient.handleResponse(response);
+        debugPrint(
+          'ReturnRequestService: 403 Forbidden - User does not have permission to complete return',
+        );
+        throw Exception(
+          errorData['error'] ??
+              errorData['message'] ??
+              'You do not have permission to perform this action. Only delivery managers can complete returns.',
+        );
+      }
 
       if (ApiClient.isSuccess(response)) {
         final responseData = ApiClient.handleResponse(response);
         if (responseData['success'] == true) {
-          return ReturnRequest.fromJson(responseData['data']);
+          // Unified endpoint returns: { 'delivery_type': 'return', 'delivery_id': ..., 'return_status': ... }
+          // We need to fetch the updated return request
+          return await getReturnRequestById(returnId);
         }
         throw Exception(responseData['message'] ?? 'Failed to complete return');
       } else {
         final errorData = ApiClient.handleResponse(response);
-        throw Exception(errorData['message'] ?? 'Failed to complete return');
+        throw Exception(
+          errorData['error'] ??
+              errorData['message'] ??
+              'Failed to complete return',
+        );
       }
     } catch (e) {
       debugPrint('ReturnRequestService: Error completing return: $e');
@@ -287,8 +327,60 @@ class ReturnRequestService {
     }
   }
 
+  /// Confirm/finalize return fine - Admin
+  Future<ReturnRequest> confirmReturnFine(int returnId) async {
+    try {
+      final response = await ApiClient.post(
+        '/returns/requests/$returnId/confirm-fine/',
+        body: {},
+        token: _token,
+      );
+
+      if (ApiClient.isSuccess(response)) {
+        final responseData = ApiClient.handleResponse(response);
+        if (responseData['success'] == true) {
+          return ReturnRequest.fromJson(responseData['data']['return_request']);
+        }
+        throw Exception(responseData['message'] ?? 'Failed to confirm fine');
+      } else {
+        final errorData = ApiClient.handleResponse(response);
+        throw Exception(errorData['message'] ?? 'Failed to confirm fine');
+      }
+    } catch (e) {
+      debugPrint('ReturnRequestService: Error confirming fine: $e');
+      rethrow;
+    }
+  }
+
+  /// Increase return fine - Admin
+  Future<ReturnRequest> increaseReturnFine(
+    int returnId,
+    double additionalAmount,
+  ) async {
+    try {
+      final response = await ApiClient.post(
+        '/returns/requests/$returnId/increase-fine/',
+        body: {'additional_amount': additionalAmount},
+        token: _token,
+      );
+
+      if (ApiClient.isSuccess(response)) {
+        final responseData = ApiClient.handleResponse(response);
+        if (responseData['success'] == true) {
+          return ReturnRequest.fromJson(responseData['data']['return_request']);
+        }
+        throw Exception(responseData['message'] ?? 'Failed to increase fine');
+      } else {
+        final errorData = ApiClient.handleResponse(response);
+        throw Exception(errorData['message'] ?? 'Failed to increase fine');
+      }
+    } catch (e) {
+      debugPrint('ReturnRequestService: Error increasing fine: $e');
+      rethrow;
+    }
+  }
+
   /// Get return request by ID
-  /// GET /api/returns/requests/<pk>/
   Future<ReturnRequest> getReturnRequestById(int returnId) async {
     try {
       final response = await ApiClient.get(
@@ -316,7 +408,6 @@ class ReturnRequestService {
   }
 
   /// Pay fine for a return request
-  /// POST /api/returns/requests/<pk>/pay-fine/
   Future<ReturnRequest> payFine(
     int returnRequestId,
     String paymentMethod,

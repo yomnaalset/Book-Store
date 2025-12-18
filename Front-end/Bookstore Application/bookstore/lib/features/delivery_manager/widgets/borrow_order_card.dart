@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/localization/app_localizations.dart';
 import '../../orders/models/order.dart';
 import '../../orders/screens/order_detail_screen.dart';
 import '../screens/borrow_requests_screen.dart';
@@ -69,7 +70,7 @@ class BorrowOrderCard extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          'Borrowing Request',
+                          AppLocalizations.of(context).borrowingRequest,
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: _getCardColor(),
                             fontWeight: FontWeight.w500,
@@ -87,13 +88,20 @@ class BorrowOrderCard extends StatelessWidget {
                       color: _getStatusColor(order.status),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Text(
-                      _getStatusText(order.status),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    child: Builder(
+                      builder: (context) {
+                        final localizations = AppLocalizations.of(context);
+                        return Text(
+                          localizations
+                              .getBorrowStatusLabel(order.status)
+                              .toUpperCase(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ],
@@ -112,43 +120,59 @@ class BorrowOrderCard extends StatelessWidget {
                 ),
                 child: Column(
                   children: [
-                    _buildDetailRow(
-                      icon: Icons.person,
-                      label: 'Customer',
-                      value: order.customerName,
-                    ),
-                    const Divider(height: 16),
-                    _buildDetailRow(
-                      icon: Icons.location_on,
-                      label: 'Address',
-                      value: order.shippingAddress?.fullAddress ?? 'No address',
-                    ),
-                    const Divider(height: 16),
-                    _buildDetailRow(
-                      icon: Icons.library_books,
-                      label: 'Book Title',
-                      value: order.bookTitle ?? 
-                             (order.items.isNotEmpty 
-                                ? order.items.first.book.title 
-                                : 'No book title available'),
-                    ),
-                    if (order.bookAuthor != null || 
-                        (order.items.isNotEmpty && order.items.first.book.author?.name != null)) ...[
-                      const Divider(height: 16),
-                      _buildDetailRow(
-                        icon: Icons.person_outline,
-                        label: 'Author',
-                        value: order.bookAuthor ?? 
-                               (order.items.isNotEmpty 
-                                  ? order.items.first.book.author?.name ?? 'Unknown author'
-                                  : 'Unknown author'),
-                      ),
-                    ],
-                    const Divider(height: 16),
-                    _buildDetailRow(
-                      icon: Icons.schedule,
-                      label: 'Created',
-                      value: _formatDate(order.createdAt),
+                    Builder(
+                      builder: (context) {
+                        final localizations = AppLocalizations.of(context);
+                        return Column(
+                          children: [
+                            _buildDetailRow(
+                              icon: Icons.person,
+                              label: localizations.customer,
+                              value: order.customerName,
+                            ),
+                            const Divider(height: 16),
+                            _buildDetailRow(
+                              icon: Icons.location_on,
+                              label: localizations.addressLabel,
+                              value:
+                                  order.shippingAddress?.fullAddress ??
+                                  localizations.noAddress,
+                            ),
+                            const Divider(height: 16),
+                            _buildDetailRow(
+                              icon: Icons.library_books,
+                              label: localizations.bookTitle,
+                              value:
+                                  order.bookTitle ??
+                                  (order.items.isNotEmpty
+                                      ? order.items.first.book.title
+                                      : localizations.noBookTitleAvailable),
+                            ),
+                            if (order.bookAuthor != null ||
+                                (order.items.isNotEmpty &&
+                                    order.items.first.book.author?.name !=
+                                        null)) ...[
+                              const Divider(height: 16),
+                              _buildDetailRow(
+                                icon: Icons.person_outline,
+                                label: localizations.author,
+                                value:
+                                    order.bookAuthor ??
+                                    (order.items.isNotEmpty
+                                        ? order.items.first.book.author?.name ??
+                                              localizations.unknownAuthor
+                                        : localizations.unknownAuthor),
+                              ),
+                            ],
+                            const Divider(height: 16),
+                            _buildDetailRow(
+                              icon: Icons.schedule,
+                              label: localizations.created,
+                              value: _formatDate(order.createdAt),
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -158,7 +182,7 @@ class BorrowOrderCard extends StatelessWidget {
               if (order.items.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 Text(
-                  'Books to Deliver:',
+                  AppLocalizations.of(context).booksToDeliver,
                   style: theme.textTheme.bodySmall?.copyWith(
                     fontWeight: FontWeight.w600,
                     color: theme.colorScheme.onSurfaceVariant,
@@ -265,12 +289,6 @@ class BorrowOrderCard extends StatelessWidget {
       default:
         return Colors.grey;
     }
-  }
-
-  String _getStatusText(String status) {
-    // Return the status exactly as it appears in the database
-    // Replace underscores with spaces and convert to uppercase for display
-    return status.replaceAll('_', ' ').toUpperCase();
   }
 
   String _formatDate(DateTime date) {

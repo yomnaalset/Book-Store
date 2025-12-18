@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:badges/badges.dart' as badges;
+import 'package:flutter_svg/flutter_svg.dart';
 import '../../../../../core/constants/app_colors.dart';
+import '../../../../../core/localization/app_localizations.dart';
 import '../../../../../features/auth/providers/auth_provider.dart';
 import '../../../../../features/cart/providers/cart_provider.dart';
 import '../../../../../features/favorites/providers/favorites_provider.dart';
@@ -15,6 +17,7 @@ class HomeAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return AppBar(
       backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
       elevation: 0,
@@ -22,8 +25,8 @@ class HomeAppBar extends StatelessWidget implements PreferredSizeWidget {
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             colors: AppColors.primaryGradient,
-            begin: Alignment.centerLeft,
-            end: Alignment.centerRight,
+            begin: AlignmentDirectional.centerStart,
+            end: AlignmentDirectional.centerEnd,
           ),
         ),
       ),
@@ -62,7 +65,7 @@ class HomeAppBar extends StatelessWidget implements PreferredSizeWidget {
           const Icon(Icons.library_books, color: AppColors.white, size: 28),
           const SizedBox(width: 8),
           Text(
-            'Bookstore',
+            localizations.bookstore,
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
               color: AppColors.white,
               fontWeight: FontWeight.bold,
@@ -186,6 +189,7 @@ class HomeAppBar extends StatelessWidget implements PreferredSizeWidget {
         ),
         child: Consumer<AuthProvider>(
           builder: (context, authProvider, child) {
+            final localizations = AppLocalizations.of(context);
             return Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -226,7 +230,8 @@ class HomeAppBar extends StatelessWidget implements PreferredSizeWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              authProvider.user?.firstName ?? 'Guest User',
+                              authProvider.user?.firstName ??
+                                  localizations.guestUser,
                               style: Theme.of(context).textTheme.titleMedium
                                   ?.copyWith(fontWeight: FontWeight.bold),
                             ),
@@ -246,7 +251,7 @@ class HomeAppBar extends StatelessWidget implements PreferredSizeWidget {
                               ),
                               child: Text(
                                 authProvider.user?.userType.toUpperCase() ??
-                                    'USER',
+                                    localizations.userLabel,
                                 style: const TextStyle(
                                   color: AppColors.white,
                                   fontSize: 10,
@@ -262,68 +267,100 @@ class HomeAppBar extends StatelessWidget implements PreferredSizeWidget {
                 ),
 
                 // Menu Items
-                _buildMenuItem(context, Icons.person_outline, 'My Profile', () {
-                  Navigator.pop(context);
-                  _showSnackBar(context, 'Profile feature coming soon!');
-                }),
-                _buildMenuItem(
-                  context,
-                  Icons.receipt_long_outlined,
-                  'My Orders',
-                  () {
-                    Navigator.pop(context);
-                    _showSnackBar(context, 'Orders feature coming soon!');
+                Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return Column(
+                      children: [
+                        _buildMenuItem(
+                          context,
+                          Icons.person_outline,
+                          localizations.myProfile,
+                          () {
+                            Navigator.pop(context);
+                            _showSnackBar(
+                              context,
+                              localizations.profileFeatureComingSoon,
+                            );
+                          },
+                        ),
+                        _buildMenuItem(
+                          context,
+                          Icons.receipt_long_outlined,
+                          localizations.myOrdersMenu,
+                          () {
+                            Navigator.pop(context);
+                            _showSnackBar(
+                              context,
+                              localizations.ordersFeatureComingSoon,
+                            );
+                          },
+                        ),
+
+                        // Admin/Manager specific items
+                        if (authProvider.user?.userType == 'library_admin')
+                          _buildMenuItem(
+                            context,
+                            Icons.admin_panel_settings_outlined,
+                            localizations.libraryManagement,
+                            () {
+                              Navigator.pop(context);
+                              _showSnackBar(
+                                context,
+                                localizations.libraryManagementComingSoon,
+                              );
+                            },
+                          ),
+
+                        if (authProvider.user?.userType == 'delivery_admin')
+                          _buildMenuItem(
+                            context,
+                            Icons.local_shipping_outlined,
+                            localizations.deliveryManagement,
+                            () {
+                              Navigator.pop(context);
+                              _showSnackBar(
+                                context,
+                                localizations.deliveryManagementComingSoon,
+                              );
+                            },
+                          ),
+
+                        _buildMenuItem(
+                          context,
+                          Icons.language_outlined,
+                          localizations.languageMenu,
+                          () {
+                            Navigator.pop(context);
+                            _showLanguageDialog(context);
+                          },
+                        ),
+                        _buildMenuItem(
+                          context,
+                          Icons.settings_outlined,
+                          localizations.settings,
+                          () {
+                            Navigator.pop(context);
+                            _showSnackBar(
+                              context,
+                              localizations.settingsFeatureComingSoon,
+                            );
+                          },
+                        ),
+                        _buildMenuItem(
+                          context,
+                          Icons.logout_outlined,
+                          localizations.logout,
+                          () {
+                            Navigator.pop(context);
+                            _showLogoutDialog(context);
+                          },
+                          isDestructive: true,
+                        ),
+                      ],
+                    );
                   },
                 ),
-
-                // Admin/Manager specific items
-                if (authProvider.user?.userType == 'library_admin')
-                  _buildMenuItem(
-                    context,
-                    Icons.admin_panel_settings_outlined,
-                    'Library Management',
-                    () {
-                      Navigator.pop(context);
-                      _showSnackBar(context, 'Library management coming soon!');
-                    },
-                  ),
-
-                if (authProvider.user?.userType == 'delivery_admin')
-                  _buildMenuItem(
-                    context,
-                    Icons.local_shipping_outlined,
-                    'Delivery Management',
-                    () {
-                      Navigator.pop(context);
-                      _showSnackBar(
-                        context,
-                        'Delivery management coming soon!',
-                      );
-                    },
-                  ),
-
-                _buildMenuItem(
-                  context,
-                  Icons.language_outlined,
-                  'Language',
-                  () {
-                    Navigator.pop(context);
-                    _showLanguageDialog(context);
-                  },
-                ),
-                _buildMenuItem(
-                  context,
-                  Icons.settings_outlined,
-                  'Settings',
-                  () {
-                    Navigator.pop(context);
-                    _showSnackBar(context, 'Settings feature coming soon!');
-                  },
-                ),
-                _buildMenuItem(context, Icons.logout_outlined, 'Logout', () {
-                  Navigator.pop(context);
-                  _showLogoutDialog(context);
-                }, isDestructive: true),
 
                 const SizedBox(height: 20),
               ],
@@ -359,27 +396,33 @@ class HomeAppBar extends StatelessWidget implements PreferredSizeWidget {
   }
 
   void _showLanguageDialog(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Select Language'),
+        title: Text(localizations.selectLanguage),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
               leading: const Text('🇺🇸'),
-              title: const Text('English'),
+              title: Text(localizations.englishLanguage),
               onTap: () {
                 Navigator.pop(context);
-                _showSnackBar(context, 'Language changed to English');
+                _showSnackBar(context, localizations.languageChangedToEnglish);
               },
             ),
             ListTile(
-              leading: const Text('🇸🇦'),
-              title: const Text('العربية'),
+              leading: SvgPicture.asset(
+                'assets/images/Flag_of_Syria.svg',
+                width: 24,
+                height: 18,
+                fit: BoxFit.contain,
+              ),
+              title: Text(localizations.arabicLanguage),
               onTap: () {
                 Navigator.pop(context);
-                _showSnackBar(context, 'تم تغيير اللغة إلى العربية');
+                _showSnackBar(context, localizations.languageChangedToArabic);
               },
             ),
           ],
@@ -389,23 +432,27 @@ class HomeAppBar extends StatelessWidget implements PreferredSizeWidget {
   }
 
   void _showLogoutDialog(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Logout'),
-        content: const Text('Are you sure you want to logout?'),
+        title: Text(localizations.logout),
+        content: Text(localizations.logoutConfirmation),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(localizations.cancel),
           ),
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
-              _showSnackBar(context, 'Logout functionality coming soon!');
+              _showSnackBar(
+                context,
+                localizations.logoutFunctionalityComingSoon,
+              );
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
-            child: const Text('Logout'),
+            child: Text(localizations.logout),
           ),
         ],
       ),

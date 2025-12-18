@@ -6,6 +6,7 @@ import '../../../models/category.dart';
 import '../../../widgets/library_manager/admin_search_bar.dart';
 import '../../../widgets/library_manager/empty_state.dart';
 import '../../../../auth/providers/auth_provider.dart';
+import '../../../../../core/localization/app_localizations.dart';
 import 'category_form_screen.dart';
 
 class CategoriesListScreen extends StatefulWidget {
@@ -79,9 +80,10 @@ class _CategoriesListScreenState extends State<CategoriesListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Categories'),
+        title: Text(localizations.categories),
         actions: [
           IconButton(
             onPressed: () => _loadCategories(),
@@ -95,7 +97,7 @@ class _CategoriesListScreenState extends State<CategoriesListScreen> {
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: AdminSearchBar(
-              hintText: 'Search categories...',
+              hintText: localizations.searchCategories,
               onSubmitted: _onSearchImmediate,
               onChanged: _onSearch,
             ),
@@ -121,7 +123,7 @@ class _CategoriesListScreenState extends State<CategoriesListScreen> {
                         const SizedBox(height: 16),
                         ElevatedButton(
                           onPressed: _loadCategories,
-                          child: const Text('Retry'),
+                          child: Text(localizations.retry),
                         ),
                       ],
                     ),
@@ -130,10 +132,10 @@ class _CategoriesListScreenState extends State<CategoriesListScreen> {
 
                 if (provider.categories.isEmpty) {
                   return EmptyState(
-                    title: 'No Categories',
-                    message: 'No categories found',
+                    title: localizations.noCategories,
+                    message: localizations.noCategoriesFound,
                     icon: Icons.category,
-                    actionText: 'Add Category',
+                    actionText: localizations.addCategory,
                     onAction: () => _navigateToCategoryForm(),
                   );
                 }
@@ -153,13 +155,14 @@ class _CategoriesListScreenState extends State<CategoriesListScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _navigateToCategoryForm(),
-        tooltip: 'Add Category',
+        tooltip: localizations.addCategory,
         child: const Icon(Icons.add),
       ),
     );
   }
 
   Widget _buildCategoryCard(Category category) {
+    final localizations = AppLocalizations.of(context);
     return Card(
       margin: const EdgeInsets.only(bottom: 12.0),
       child: ListTile(
@@ -196,7 +199,7 @@ class _CategoriesListScreenState extends State<CategoriesListScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
-                      'Created: ${_formatDate(category.createdAt)}',
+                      '${localizations.createdLabel} ${_formatDate(category.createdAt)}',
                       style: const TextStyle(
                         fontSize: 12,
                         color: Colors.grey,
@@ -220,10 +223,13 @@ class _CategoriesListScreenState extends State<CategoriesListScreen> {
                 break;
             }
           },
-          itemBuilder: (context) => [
-            const PopupMenuItem(value: 'edit', child: Text('Edit')),
-            const PopupMenuItem(value: 'delete', child: Text('Delete')),
-          ],
+          itemBuilder: (context) {
+            final localizations = AppLocalizations.of(context);
+            return [
+              PopupMenuItem(value: 'edit', child: Text(localizations.edit)),
+              PopupMenuItem(value: 'delete', child: Text(localizations.delete)),
+            ];
+          },
         ),
         onTap: () => _navigateToCategoryForm(category),
       ),
@@ -231,22 +237,21 @@ class _CategoriesListScreenState extends State<CategoriesListScreen> {
   }
 
   Future<void> _deleteCategory(Category category) async {
+    final localizations = AppLocalizations.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Category'),
-        content: Text(
-          'Are you sure you want to delete "${category.name}"? This action cannot be undone.',
-        ),
+        title: Text(localizations.deleteCategory),
+        content: Text(localizations.deleteCategoryConfirmation(category.name)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text(localizations.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
+            child: Text(localizations.delete),
           ),
         ],
       ),
@@ -266,14 +271,19 @@ class _CategoriesListScreenState extends State<CategoriesListScreen> {
         final success = await provider.deleteCategory(int.parse(category.id));
 
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           if (success) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Category deleted successfully')),
+              SnackBar(
+                content: Text(localizations.categoryDeletedSuccessfully),
+              ),
             );
           } else {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(provider.error ?? 'Failed to delete category'),
+                content: Text(
+                  provider.error ?? localizations.failedToDeleteCategory,
+                ),
                 backgroundColor: Colors.red,
               ),
             );
@@ -281,16 +291,18 @@ class _CategoriesListScreenState extends State<CategoriesListScreen> {
         }
       } catch (e) {
         if (mounted) {
-          String errorMessage = 'Failed to delete category';
+          final localizations = AppLocalizations.of(context);
+          String errorMessage = localizations.failedToDeleteCategory;
 
           // Check if it's a business logic error (category has books)
           if (e.toString().contains('book(s) assigned to it')) {
-            errorMessage =
-                'Cannot delete category "${category.name}" because it has books assigned to it. Please reassign or remove these books first.';
+            errorMessage = localizations.cannotDeleteCategoryWithBooks(
+              category.name,
+            );
           } else if (e.toString().contains('401')) {
-            errorMessage = 'Authentication failed. Please log in again.';
+            errorMessage = localizations.authenticationFailedPleaseLogInAgain;
           } else {
-            errorMessage = 'Error: ${e.toString()}';
+            errorMessage = '${localizations.error}: ${e.toString()}';
           }
 
           ScaffoldMessenger.of(context).showSnackBar(

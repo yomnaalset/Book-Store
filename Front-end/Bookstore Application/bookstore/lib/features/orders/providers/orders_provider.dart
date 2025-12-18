@@ -108,8 +108,8 @@ class OrdersProvider extends ChangeNotifier {
   ];
 
   // Get available filter options for statuses
+  // Note: 'all' is not included as the dropdown already has a separate "All" option
   List<String> get statusFilterOptions => [
-    'all',
     'pending',
     'waiting_for_delivery_manager',
     'rejected_by_admin',
@@ -446,6 +446,7 @@ class OrdersProvider extends ChangeNotifier {
   }
 
   // Accept delivery assignment (for delivery managers)
+  // Uses the new dedicated acceptance endpoint: POST /api/delivery/assignments/{id}/accept
   Future<bool> acceptAssignment(int assignmentId) async {
     _clearError();
     debugPrint(
@@ -453,16 +454,22 @@ class OrdersProvider extends ChangeNotifier {
     );
 
     try {
-      await _ordersService.updateDeliveryAssignmentStatus(
-        assignmentId,
-        'accepted',
-      );
-      debugPrint('DEBUG: Assignment accepted successfully');
-
-      // Refresh order data
-      await loadOrders();
-
-      return true;
+      // Use the new dedicated acceptance endpoint
+      // This only accepts the assignment - does NOT start delivery or change manager status to BUSY
+      final result = await _ordersService.acceptDeliveryAssignment(assignmentId);
+      
+      if (result['success'] == true) {
+        debugPrint('DEBUG: Assignment accepted successfully');
+        
+        // Refresh order data to get updated assignment status
+        await loadOrders();
+        
+        return true;
+      } else {
+        debugPrint('DEBUG: Failed to accept assignment: ${result['message']}');
+        _setError(result['message'] ?? 'Failed to accept assignment');
+        return false;
+      }
     } catch (e) {
       debugPrint('DEBUG: Error accepting assignment: $e');
       _setError('Failed to accept assignment: $e');

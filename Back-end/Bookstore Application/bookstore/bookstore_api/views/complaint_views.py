@@ -5,16 +5,18 @@ from django.shortcuts import get_object_or_404
 from django.db.models import Q
 from django.core.paginator import Paginator
 from django.utils import timezone
-from ..models import Complaint, ComplaintResponse
+from ..models import Complaint, ComplaintResponse, User
 from ..serializers import (
     ComplaintListSerializer,
     ComplaintDetailSerializer,
     ComplaintCreateSerializer,
     ComplaintUpdateSerializer,
+    ComplaintCustomerUpdateSerializer,
     ComplaintResponseSerializer,
     ComplaintResponseCreateSerializer,
 )
 from ..permissions import IsLibraryAdmin, IsSystemAdmin, IsDeliveryAdmin
+from ..services.notification_services import NotificationService
 
 
 class ComplaintListView(generics.ListCreateAPIView):
@@ -30,7 +32,7 @@ class ComplaintListView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         queryset = Complaint.objects.select_related(
-            'customer', 'assigned_to', 'related_order', 'related_borrow_request'
+            'customer'
         ).prefetch_related('responses')
         
         # Filter by user type
@@ -58,14 +60,6 @@ class ComplaintListView(generics.ListCreateAPIView):
         if status_filter:
             queryset = queryset.filter(status=status_filter)
         
-        type_filter = self.request.query_params.get('type')
-        if type_filter:
-            queryset = queryset.filter(complaint_type=type_filter)
-        
-        priority_filter = self.request.query_params.get('priority')
-        if priority_filter:
-            queryset = queryset.filter(priority=priority_filter)
-        
         return queryset.order_by('-created_at')
     
     def list(self, request, *args, **kwargs):
@@ -88,6 +82,46 @@ class ComplaintListView(generics.ListCreateAPIView):
             'has_next': page_obj.has_next(),
             'has_previous': page_obj.has_previous(),
         })
+    
+    def create(self, request, *args, **kwargs):
+        """
+        Create a new complaint and send notification to admins.
+        """
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        complaint = serializer.save()
+        
+        # Send notification to all admins
+        try:
+            admin_users = User.objects.filter(
+                user_type__in=['library_admin', 'system_admin', 'delivery_admin'],
+                is_active=True
+            )
+            
+            for admin in admin_users:
+                NotificationService.create_notification(
+                    user_id=admin.id,
+                    title="New Complaint Received",
+                    message=f"A customer has submitted a new complaint. Please review it.",
+                    notification_type="new_complaint",
+                    prevent_duplicates=False  # Allow multiple notifications for different admins
+                )
+        except Exception as e:
+            # Log error but don't fail the complaint creation
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to send notification for complaint {complaint.id}: {str(e)}")
+        
+        headers = self.get_success_headers(serializer.data)
+        return Response(
+            {
+                'success': True,
+                'message': 'Complaint created successfully',
+                'data': ComplaintDetailSerializer(complaint, context={'request': request}).data
+            },
+            status=status.HTTP_201_CREATED,
+            headers=headers
+        )
 
 
 class ComplaintDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -98,7 +132,12 @@ class ComplaintDetailView(generics.RetrieveUpdateDestroyAPIView):
     
     def get_serializer_class(self):
         if self.request.method in ['PUT', 'PATCH']:
-            return ComplaintUpdateSerializer
+            # Use different serializers based on user type
+            user = self.request.user
+            if user.user_type == 'customer':
+                return ComplaintCustomerUpdateSerializer
+            else:
+                return ComplaintUpdateSerializer
         return ComplaintDetailSerializer
     
     def get_queryset(self):
@@ -113,6 +152,36 @@ class ComplaintDetailView(generics.RetrieveUpdateDestroyAPIView):
     def get_object(self):
         obj = get_object_or_404(self.get_queryset(), pk=self.kwargs['pk'])
         return obj
+    
+    def retrieve(self, request, *args, **kwargs):
+        """
+        Override retrieve to ensure serializer has request context for filtering responses.
+        """
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, context={'request': request})
+        return Response(serializer.data)
+    
+    def update(self, request, *args, **kwargs):
+        """
+        Override update to return full complaint object.
+        """
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        
+        # Refresh instance from database to get updated data
+        instance.refresh_from_db()
+        
+        # Return full complaint object using ComplaintDetailSerializer
+        detail_serializer = ComplaintDetailSerializer(instance, context={'request': request})
+        
+        return Response({
+            'success': True,
+            'message': 'Complaint updated successfully',
+            'data': detail_serializer.data
+        })
 
 
 class ComplaintStatusUpdateView(generics.UpdateAPIView):
@@ -134,7 +203,7 @@ class ComplaintStatusUpdateView(generics.UpdateAPIView):
             return Response({
                 'success': True,
                 'message': 'Complaint status updated successfully',
-                'data': ComplaintDetailSerializer(complaint).data
+                'data': ComplaintDetailSerializer(complaint, context={'request': request}).data
             })
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -143,6 +212,8 @@ class ComplaintStatusUpdateView(generics.UpdateAPIView):
 class ComplaintAssignView(generics.UpdateAPIView):
     """
     Assign complaint to a staff member.
+    Note: Assignment functionality has been removed. This endpoint is kept for backward compatibility
+    but no longer performs assignment operations.
     """
     permission_classes = [permissions.IsAuthenticated, IsLibraryAdmin | IsSystemAdmin | IsDeliveryAdmin]
     serializer_class = ComplaintUpdateSerializer
@@ -152,34 +223,11 @@ class ComplaintAssignView(generics.UpdateAPIView):
     
     def patch(self, request, *args, **kwargs):
         complaint = self.get_object()
-        staff_id = request.data.get('assigned_to')
-        
-        if not staff_id:
-            return Response({
-                'success': False,
-                'message': 'assigned_to field is required'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Validate that the assigned user is a staff member
-        from ..models import User
-        try:
-            staff_member = User.objects.get(
-                id=staff_id,
-                user_type__in=['library_admin', 'delivery_admin', 'system_admin']
-            )
-        except User.DoesNotExist:
-            return Response({
-                'success': False,
-                'message': 'Invalid staff member ID'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        complaint.assigned_to = staff_member
-        complaint.save()
         
         return Response({
             'success': True,
-            'message': 'Complaint assigned successfully',
-            'data': ComplaintDetailSerializer(complaint).data
+            'message': 'Assignment functionality has been removed',
+            'data': ComplaintDetailSerializer(complaint, context={'request': request}).data
         })
 
 
@@ -199,7 +247,30 @@ class ComplaintResponseCreateView(generics.CreateAPIView):
         if user.user_type == 'customer' and complaint.customer != user:
             raise permissions.PermissionDenied("You can only respond to your own complaints")
         
-        serializer.save(complaint=complaint, responder=user)
+        response = serializer.save(complaint=complaint, responder=user)
+        
+        # If admin is responding, update status to "in_progress" (Replied) and notify customer
+        if user.user_type in ['library_admin', 'system_admin', 'delivery_admin']:
+            # Update complaint status to "in_progress" (which represents "Replied")
+            if complaint.status == 'open':
+                complaint.status = 'in_progress'
+                complaint.save()
+            
+            # Send notification to customer
+            try:
+                NotificationService.create_notification(
+                    user_id=complaint.customer.id,
+                    title="Your complaint has been answered",
+                    message="Your complaint has been answered. Please check the details.",
+                    notification_type="complaint_replied",
+                    prevent_duplicates=False
+                )
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Failed to send notification for complaint {complaint.id}: {str(e)}")
+        
+        return response
 
 
 class ComplaintResponseListView(generics.ListAPIView):
@@ -229,7 +300,7 @@ class ComplaintResponseListView(generics.ListAPIView):
 
 class ComplaintResolveView(generics.UpdateAPIView):
     """
-    Resolve a complaint with resolution details.
+    Resolve a complaint by updating its status to resolved.
     """
     permission_classes = [permissions.IsAuthenticated, IsLibraryAdmin | IsSystemAdmin | IsDeliveryAdmin]
     serializer_class = ComplaintUpdateSerializer
@@ -239,23 +310,134 @@ class ComplaintResolveView(generics.UpdateAPIView):
     
     def patch(self, request, *args, **kwargs):
         complaint = self.get_object()
-        resolution = request.data.get('resolution')
-        
-        if not resolution:
-            return Response({
-                'success': False,
-                'message': 'resolution field is required'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
         complaint.status = 'resolved'
-        complaint.resolution = resolution
-        complaint.resolved_at = timezone.now()
         complaint.save()
+        
+        # Send notification to customer
+        try:
+            NotificationService.create_notification(
+                user_id=complaint.customer.id,
+                title="Your complaint has been resolved",
+                message="Your complaint has been marked as resolved. Thank you for your patience.",
+                notification_type="complaint_resolved",
+                prevent_duplicates=False
+            )
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to send notification for complaint {complaint.id}: {str(e)}")
         
         return Response({
             'success': True,
             'message': 'Complaint resolved successfully',
-            'data': ComplaintDetailSerializer(complaint).data
+            'data': ComplaintDetailSerializer(complaint, context={'request': request}).data
+        })
+
+
+class ComplaintUpdateStatusView(generics.GenericAPIView):
+    """
+    Update complaint status via POST request.
+    Used by the status menu actions.
+    """
+    permission_classes = [permissions.IsAuthenticated, IsLibraryAdmin | IsSystemAdmin | IsDeliveryAdmin]
+    
+    def get_queryset(self):
+        return Complaint.objects.all()
+    
+    def post(self, request, *args, **kwargs):
+        complaint = get_object_or_404(self.get_queryset(), pk=self.kwargs['pk'])
+        status = request.data.get('status')
+        
+        if not status:
+            return Response({
+                'success': False,
+                'message': 'status field is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Validate status
+        valid_statuses = [choice[0] for choice in Complaint.STATUS_CHOICES]
+        if status not in valid_statuses:
+            return Response({
+                'success': False,
+                'message': f'Invalid status. Must be one of: {", ".join(valid_statuses)}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        complaint.status = status
+        complaint.save()
+        
+        # Send notification to customer if status changed to resolved or closed
+        if status in ['resolved', 'closed']:
+            try:
+                NotificationService.create_notification(
+                    user_id=complaint.customer.id,
+                    title=f"Your complaint has been {status}",
+                    message=f"Your complaint status has been updated to {status}.",
+                    notification_type=f"complaint_{status}",
+                    prevent_duplicates=False
+                )
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Failed to send notification for complaint {complaint.id}: {str(e)}")
+        
+        return Response({
+            'success': True,
+            'message': f'Complaint status updated to {status}',
+            'data': ComplaintDetailSerializer(complaint, context={'request': request}).data
+        })
+
+
+class ComplaintReplyView(generics.GenericAPIView):
+    """
+    Send a reply to a complaint.
+    Saves the response and updates status to 'in_progress' (replied) if currently 'open'.
+    """
+    permission_classes = [permissions.IsAuthenticated, IsLibraryAdmin | IsSystemAdmin | IsDeliveryAdmin]
+    
+    def get_queryset(self):
+        return Complaint.objects.all()
+    
+    def post(self, request, *args, **kwargs):
+        complaint = get_object_or_404(self.get_queryset(), pk=self.kwargs['pk'])
+        response_text = request.data.get('response')
+        
+        if not response_text:
+            return Response({
+                'success': False,
+                'message': 'response field is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Create complaint response
+        response = ComplaintResponse.objects.create(
+            complaint=complaint,
+            responder=request.user,
+            response_text=response_text,
+            is_internal=False
+        )
+        
+        # Update status to 'in_progress' (replied) if currently 'open'
+        if complaint.status == 'open':
+            complaint.status = 'in_progress'
+            complaint.save()
+        
+        # Send notification to customer
+        try:
+            NotificationService.create_notification(
+                user_id=complaint.customer.id,
+                title="Your complaint has been answered",
+                message="Your complaint has been answered. Please check the details.",
+                notification_type="complaint_replied",
+                prevent_duplicates=False
+            )
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to send notification for complaint {complaint.id}: {str(e)}")
+        
+        return Response({
+            'success': True,
+            'message': 'Reply sent successfully',
+            'data': ComplaintDetailSerializer(complaint, context={'request': request}).data
         })
 
 
@@ -283,19 +465,6 @@ class ComplaintStatsView(generics.GenericAPIView):
         in_progress_complaints = complaints.filter(status='in_progress').count()
         resolved_complaints = complaints.filter(status='resolved').count()
         closed_complaints = complaints.filter(status='closed').count()
-        
-        # Complaints by type
-        complaints_by_type = {}
-        for complaint_type, _ in Complaint.COMPLAINT_TYPE_CHOICES:
-            count = complaints.filter(complaint_type=complaint_type).count()
-            complaints_by_type[complaint_type] = count
-        
-        # Complaints by priority
-        complaints_by_priority = {}
-        for priority, _ in Complaint.PRIORITY_CHOICES:
-            count = complaints.filter(priority=priority).count()
-            complaints_by_priority[priority] = count
-        
         return Response({
             'success': True,
             'data': {
@@ -304,8 +473,6 @@ class ComplaintStatsView(generics.GenericAPIView):
                 'in_progress_complaints': in_progress_complaints,
                 'resolved_complaints': resolved_complaints,
                 'closed_complaints': closed_complaints,
-                'complaints_by_type': complaints_by_type,
-                'complaints_by_priority': complaints_by_priority,
                 'resolution_rate': round((resolved_complaints + closed_complaints) / total_complaints * 100, 2) if total_complaints > 0 else 0,
             }
         })

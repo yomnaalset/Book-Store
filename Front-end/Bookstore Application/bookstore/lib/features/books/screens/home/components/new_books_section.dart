@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../../../core/constants/app_colors.dart';
+import '../../../../../../core/localization/app_localizations.dart';
 import '../../../models/book.dart';
 import '../../../../cart/providers/cart_provider.dart';
 import '../../../../favorites/providers/favorites_provider.dart';
@@ -350,12 +351,17 @@ class _NewBooksSectionState extends State<NewBooksSection> {
                             color: AppColors.uranianBlue,
                           ),
                         ),
-                      Text(
-                        'Borrow: \$${book.borrowPriceAsDouble.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                          fontSize: 9,
-                          color: AppColors.secondaryText,
-                        ),
+                      Builder(
+                        builder: (context) {
+                          final localizations = AppLocalizations.of(context);
+                          return Text(
+                            '${localizations.borrowPrefix} \$${book.borrowPriceAsDouble.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              fontSize: 9,
+                              color: AppColors.secondaryText,
+                            ),
+                          );
+                        },
                       ),
                     ],
                   ),

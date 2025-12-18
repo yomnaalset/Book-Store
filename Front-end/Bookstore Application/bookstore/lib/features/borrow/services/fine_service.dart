@@ -170,21 +170,264 @@ class FineService {
       final result = await getMyFines();
       final summary = result['summary'] as FineSummary;
 
+      // Note: This method doesn't have access to BuildContext, so we can't use localization here
+      // The calling code should translate the message based on the can_submit flag
       return {
         'can_submit': summary.canSubmitRequest,
         'has_unpaid_fines': summary.hasUnpaidFines,
         'total_unpaid': summary.totalUnpaid,
         'message': summary.canSubmitRequest
-            ? 'You can submit new borrow requests'
-            : 'You cannot submit a new borrowing request until your pending fine is paid.',
+            ? 'you_can_submit_new_borrow_requests'
+            : 'you_cannot_submit_borrow_request_until_fine_paid',
       };
     } catch (e) {
       return {
         'can_submit': true,
         'has_unpaid_fines': false,
         'total_unpaid': 0.0,
-        'message': 'Unable to check fine status',
+        'message': 'unable_to_check_fine_status',
       };
+    }
+  }
+
+  /// Select payment method for a fine
+  /// Endpoint: POST /api/borrowing/fines/select-payment-method/
+  Future<Map<String, dynamic>> selectPaymentMethod({
+    required int borrowRequestId,
+    required String paymentMethod, // 'cash' or 'mastercard'
+  }) async {
+    try {
+      final uri = Uri.parse('$_baseUrl/borrowing/fines/select-payment-method/');
+
+      final body = {
+        'borrow_request_id': borrowRequestId,
+        'payment_method': paymentMethod,
+      };
+
+      final response = await http.post(
+        uri,
+        headers: _headers,
+        body: json.encode(body),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          return {
+            'success': true,
+            'message': data['message'],
+            'data': data['data'],
+          };
+        } else {
+          throw Exception(data['message'] ?? 'Failed to select payment method');
+        }
+      } else {
+        throw Exception(
+          'Failed to select payment method: ${response.statusCode}',
+        );
+      }
+    } catch (e) {
+      throw Exception('Error selecting payment method: $e');
+    }
+  }
+
+  /// Process MasterCard payment for a fine
+  /// Endpoint: POST /api/borrowing/fines/process-payment/
+  Future<Map<String, dynamic>> processMasterCardPayment({
+    required int borrowRequestId,
+    required Map<String, dynamic> cardData,
+  }) async {
+    try {
+      final uri = Uri.parse('$_baseUrl/borrowing/fines/process-payment/');
+
+      final body = {
+        'borrow_request_id': borrowRequestId,
+        'payment_method': 'mastercard',
+        'card_data': cardData,
+      };
+
+      final response = await http.post(
+        uri,
+        headers: _headers,
+        body: json.encode(body),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          return {
+            'success': true,
+            'message': data['message'],
+            'data': data['data'],
+          };
+        } else {
+          throw Exception(data['message'] ?? 'Payment failed');
+        }
+      } else {
+        throw Exception('Payment failed: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error processing payment: $e');
+    }
+  }
+
+  /// Confirm cash payment (Delivery Manager only)
+  /// Endpoint: POST /api/borrowing/fines/confirm-cash-payment/
+  Future<Map<String, dynamic>> confirmCashPayment({
+    required int borrowRequestId,
+  }) async {
+    try {
+      final uri = Uri.parse('$_baseUrl/borrowing/fines/confirm-cash-payment/');
+
+      final body = {'borrow_request_id': borrowRequestId};
+
+      final response = await http.post(
+        uri,
+        headers: _headers,
+        body: json.encode(body),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          return {
+            'success': true,
+            'message': data['message'],
+            'data': data['data'],
+          };
+        } else {
+          throw Exception(data['message'] ?? 'Failed to confirm cash payment');
+        }
+      } else {
+        throw Exception(
+          'Failed to confirm cash payment: ${response.statusCode}',
+        );
+      }
+    } catch (e) {
+      throw Exception('Error confirming cash payment: $e');
+    }
+  }
+
+  // =====================================
+  // RETURN REQUEST FINE METHODS
+  // =====================================
+
+  /// Select payment method for a return request fine
+  /// Endpoint: POST /api/returns/fines/{fine_id}/select-payment-method/
+  Future<Map<String, dynamic>> selectReturnFinePaymentMethod({
+    required int fineId,
+    required String paymentMethod, // 'cash' or 'card'
+  }) async {
+    try {
+      final uri = Uri.parse(
+        '$_baseUrl/returns/fines/$fineId/select-payment-method/',
+      );
+
+      final body = {'payment_method': paymentMethod};
+
+      final response = await http.post(
+        uri,
+        headers: _headers,
+        body: json.encode(body),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          return {
+            'success': true,
+            'message': data['message'],
+            'data': data['data'],
+          };
+        } else {
+          throw Exception(data['message'] ?? 'Failed to select payment method');
+        }
+      } else {
+        throw Exception(
+          'Failed to select payment method: ${response.statusCode}',
+        );
+      }
+    } catch (e) {
+      throw Exception('Error selecting payment method: $e');
+    }
+  }
+
+  /// Confirm card payment for a return request fine
+  /// Endpoint: POST /api/returns/fines/{fine_id}/confirm-card-payment/
+  Future<Map<String, dynamic>> confirmReturnFineCardPayment({
+    required int fineId,
+    required Map<String, dynamic> cardData,
+    String? transactionId,
+  }) async {
+    try {
+      final uri = Uri.parse(
+        '$_baseUrl/returns/fines/$fineId/confirm-card-payment/',
+      );
+
+      final body = {
+        'card_data': cardData,
+        if (transactionId != null) 'transaction_id': transactionId,
+      };
+
+      final response = await http.post(
+        uri,
+        headers: _headers,
+        body: json.encode(body),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          return {
+            'success': true,
+            'message': data['message'],
+            'data': data['data'],
+          };
+        } else {
+          throw Exception(data['message'] ?? 'Payment failed');
+        }
+      } else {
+        throw Exception('Payment failed: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error processing payment: $e');
+    }
+  }
+
+  /// Confirm cash payment for a return request fine (Delivery Manager only)
+  /// Endpoint: POST /api/returns/fines/{fine_id}/confirm-cash-payment/
+  Future<Map<String, dynamic>> confirmReturnFineCashPayment({
+    required int fineId,
+  }) async {
+    try {
+      final uri = Uri.parse(
+        '$_baseUrl/returns/fines/$fineId/confirm-cash-payment/',
+      );
+
+      final response = await http.post(
+        uri,
+        headers: _headers,
+        body: json.encode({}),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          return {
+            'success': true,
+            'message': data['message'],
+            'data': data['data'],
+          };
+        } else {
+          throw Exception(data['message'] ?? 'Failed to confirm cash payment');
+        }
+      } else {
+        throw Exception(
+          'Failed to confirm cash payment: ${response.statusCode}',
+        );
+      }
+    } catch (e) {
+      throw Exception('Error confirming cash payment: $e');
     }
   }
 }

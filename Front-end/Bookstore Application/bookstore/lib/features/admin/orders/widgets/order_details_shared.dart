@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../orders/models/order.dart';
+import '../../../../core/localization/app_localizations.dart';
 
 class OrderDetailsShared {
   Widget buildSectionCard({
@@ -121,32 +122,55 @@ class OrderDetailsShared {
     return '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
   }
 
-  String getPaymentMethodDisplay(String? method) {
-    if (method == null) return 'Not specified';
+  String getPaymentMethodDisplay(String? method, BuildContext context) {
+    final localizations = AppLocalizations.of(context);
+    if (method == null) return localizations.notAvailable;
 
     switch (method.toLowerCase()) {
       case 'card':
-        return 'Credit/Debit Card';
+        return localizations.paymentMethodCard;
       case 'cash_on_delivery':
       case 'cod':
       case 'cash':
-        return 'Cash on Delivery';
+        return localizations.paymentMethodCashOnDelivery;
       default:
         return method;
     }
   }
 
-  String getPaymentStatusDisplay(String? status) {
-    if (status == null) return 'Pending';
+  String getPaymentStatusDisplay(String? status, BuildContext context) {
+    final localizations = AppLocalizations.of(context);
+    if (status == null) return localizations.paymentStatusPending;
 
-    switch (status.toLowerCase()) {
+    final lowerStatus = status.toLowerCase();
+
+    // Handle standard payment statuses
+    switch (lowerStatus) {
       case 'paid':
-        return 'Paid';
+        return localizations.paymentStatusPaid;
       case 'unpaid':
-        return 'Unpaid';
+        return localizations.paymentStatusUnpaid;
       case 'pending':
-        return 'Pending';
+        return localizations.paymentStatusPending;
+      case 'delivered':
+        // For payment status, "delivered" means payment was completed upon delivery
+        // Use statusDelivered which is already translated
+        return localizations.statusDelivered;
+      case 'completed':
+        return localizations.paymentStatusPaid;
       default:
+        // If it's not a standard payment status, check if it's an order status
+        // (sometimes payment status field contains order status values)
+        try {
+          final orderStatusLabel = localizations.getOrderStatusLabel(status);
+          // If getOrderStatusLabel returns a different value, it means it's an order status
+          if (orderStatusLabel.toLowerCase() != lowerStatus) {
+            return orderStatusLabel;
+          }
+        } catch (e) {
+          // getOrderStatusLabel might throw for invalid statuses, continue to fallback
+        }
+        // Final fallback: return the status as-is
         return status;
     }
   }

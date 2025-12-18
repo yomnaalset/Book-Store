@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.core.exceptions import ValidationError
-from ..models import Library, User, Book, BookImage, Category, Author, BookEvaluation, Favorite, ReviewLike, ReviewReply, ReplyLike
+from ..models import Library, User, Book, BookImage, Category, Author, BookEvaluation, Favorite, Like, ReviewReply
 
 
 class BookSerializer(serializers.ModelSerializer):
@@ -1426,8 +1426,8 @@ class EvaluationCreateSerializer(serializers.ModelSerializer):
         fields = ['book_id', 'rating', 'comment']
         extra_kwargs = {
             'rating': {
-                'required': True,
-                'help_text': 'Rating from 1 to 5 stars'
+                'required': False,
+                'help_text': 'Rating from 1 to 5 stars (optional)'
             },
             'comment': {
                 'required': False,
@@ -1436,10 +1436,32 @@ class EvaluationCreateSerializer(serializers.ModelSerializer):
         }
     
     def validate_rating(self, value):
-        """Validate that rating is between 1 and 5."""
-        if not (1 <= value <= 5):
+        """Validate that rating is between 1 and 5 if provided."""
+        if value is not None and not (1 <= value <= 5):
             raise serializers.ValidationError("Rating must be between 1 and 5 stars.")
         return value
+    
+    def validate(self, attrs):
+        """Validate that at least one of rating or comment is provided."""
+        rating = attrs.get('rating')
+        comment = attrs.get('comment')
+        
+        # Check if user hasn't already evaluated this book (existing validation)
+        request = self.context.get('request')
+        if request and request.user:
+            book_id = attrs.get('book_id')
+            if book_id and BookEvaluation.objects.filter(book_id=book_id, user=request.user).exists():
+                raise serializers.ValidationError({
+                    'book_id': 'You have already evaluated this book. You can update your existing evaluation.'
+                })
+        
+        # Validate that at least one of rating or comment is provided
+        if not rating and (not comment or not comment.strip()):
+            raise serializers.ValidationError({
+                'non_field_errors': 'Please provide either a rating or a comment (or both).'
+            })
+        
+        return attrs
     
     def validate_book_id(self, value):
         """Validate that the book exists and is available."""
@@ -1448,17 +1470,6 @@ class EvaluationCreateSerializer(serializers.ModelSerializer):
             return book.id
         except Book.DoesNotExist:
             raise serializers.ValidationError("Book not found or not available for evaluation.")
-    
-    def validate(self, attrs):
-        """Validate that user hasn't already evaluated this book."""
-        request = self.context.get('request')
-        if request and request.user:
-            book_id = attrs.get('book_id')
-            if BookEvaluation.objects.filter(book_id=book_id, user=request.user).exists():
-                raise serializers.ValidationError({
-                    'book_id': 'You have already evaluated this book. You can update your existing evaluation.'
-                })
-        return attrs
     
     def create(self, validated_data):
         """Create evaluation with book_id converted to book instance."""
@@ -1499,7 +1510,7 @@ class EvaluationUpdateSerializer(serializers.ModelSerializer):
         }
     
     def validate_rating(self, value):
-        """Validate that rating is between 1 and 5."""
+        """Validate that rating is between 1 and 5 if provided."""
         if value is not None and not (1 <= value <= 5):
             raise serializers.ValidationError("Rating must be between 1 and 5 stars.")
         return value
@@ -1507,6 +1518,16 @@ class EvaluationUpdateSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         """Update evaluation using the service."""
         from ..services.library_services import EvaluationManagementService
+        
+        # Validate that at least one of rating or comment will remain after update
+        rating = validated_data.get('rating', instance.rating)
+        comment = validated_data.get('comment', instance.comment)
+        
+        # Check if both will be None/empty after update
+        if rating is None and (not comment or not comment.strip()):
+            raise serializers.ValidationError({
+                'non_field_errors': 'Please provide either a rating or a comment (or both).'
+            })
         
         # Get the user from request
         request = self.context.get('request')
@@ -1553,13 +1574,20 @@ class EvaluationDetailSerializer(serializers.ModelSerializer):
 
 class ReviewLikeSerializer(serializers.ModelSerializer):
     """
-    Serializer for review likes.
+    Serializer for review likes (now part of unified Like model).
+    Backward compatibility serializer.
     """
+    review = serializers.PrimaryKeyRelatedField(source='review', read_only=False, queryset=BookEvaluation.objects.all())
     
     class Meta:
-        model = ReviewLike
-        fields = ['id', 'user', 'review', 'created_at']
-        read_only_fields = ['id', 'created_at']
+        model = Like
+        fields = ['id', 'user', 'review', 'created_at', 'target_type']
+        read_only_fields = ['id', 'created_at', 'target_type']
+    
+    def validate(self, attrs):
+        """Set target_type to 'review'."""
+        attrs['target_type'] = 'review'
+        return attrs
 
 
 class ReviewReplySerializer(serializers.ModelSerializer):
@@ -1579,13 +1607,13 @@ class ReviewReplySerializer(serializers.ModelSerializer):
     
     def get_likes_count(self, obj):
         """Get the number of likes for this reply."""
-        return obj.likes.count()
+        return obj.likes.filter(target_type='reply').count()
     
     def get_is_liked(self, obj):
         """Check if the current user has liked this reply."""
         request = self.context.get('request')
         if request and request.user.is_authenticated:
-            return obj.likes.filter(user=request.user).exists()
+            return obj.likes.filter(target_type='reply', user=request.user).exists()
         return False
     
     def validate_content(self, value):
@@ -1627,13 +1655,20 @@ class ReviewReplyCreateSerializer(serializers.ModelSerializer):
 
 class ReplyLikeSerializer(serializers.ModelSerializer):
     """
-    Serializer for reply likes.
+    Serializer for reply likes (now part of unified Like model).
+    Backward compatibility serializer.
     """
+    reply = serializers.PrimaryKeyRelatedField(source='reply', read_only=False, queryset=ReviewReply.objects.all())
     
     class Meta:
-        model = ReplyLike
-        fields = ['id', 'reply', 'user', 'created_at']
-        read_only_fields = ['id', 'created_at']
+        model = Like
+        fields = ['id', 'user', 'reply', 'created_at', 'target_type']
+        read_only_fields = ['id', 'created_at', 'target_type']
+    
+    def validate(self, attrs):
+        """Set target_type to 'reply'."""
+        attrs['target_type'] = 'reply'
+        return attrs
 
 
 class EvaluationListSerializer(serializers.ModelSerializer):
@@ -1664,7 +1699,7 @@ class EvaluationListSerializer(serializers.ModelSerializer):
     
     def get_likes_count(self, obj):
         """Get the number of likes for this review."""
-        return obj.likes.count()
+        return obj.likes.filter(target_type='review').count()
     
     def get_replies_count(self, obj):
         """Get the number of replies for this review."""
@@ -1674,7 +1709,7 @@ class EvaluationListSerializer(serializers.ModelSerializer):
         """Check if the current user has liked this review."""
         request = self.context.get('request')
         if request and request.user.is_authenticated:
-            return obj.likes.filter(user=request.user).exists()
+            return obj.likes.filter(target_type='review', user=request.user).exists()
         return False
 
 

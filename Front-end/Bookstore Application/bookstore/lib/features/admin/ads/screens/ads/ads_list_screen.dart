@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/ad.dart';
 import '../../providers/ads_provider.dart';
+import '../../../../../core/localization/app_localizations.dart';
 import '../../../../../shared/widgets/admin_search_bar.dart';
 import '../../../../../shared/widgets/filters_bar.dart';
 import '../../../../../shared/widgets/empty_state.dart';
@@ -92,9 +93,10 @@ class _AdsListScreenState extends State<AdsListScreen> {
       debugPrint('Error loading ads: $e');
       // Show error in UI
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error loading ads: $e'),
+            content: Text('${localizations.errorLoadingAdvertisements}: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -140,22 +142,21 @@ class _AdsListScreenState extends State<AdsListScreen> {
   }
 
   Future<void> _deleteAd(Ad ad) async {
+    final localizations = AppLocalizations.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Advertisement'),
-        content: const Text(
-          'Are you sure you want to delete this advertisement? This action cannot be undone.',
-        ),
+        title: Text(localizations.deleteAdvertisement),
+        content: Text(localizations.deleteAdvertisementConfirmation),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(localizations.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
+            child: Text(localizations.delete),
           ),
         ],
       ),
@@ -168,9 +169,10 @@ class _AdsListScreenState extends State<AdsListScreen> {
         await provider.deleteAd(ad.id);
 
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Advertisement deleted successfully'),
+            SnackBar(
+              content: Text(localizations.advertisementDeletedSuccessfully),
               backgroundColor: Colors.green,
             ),
           );
@@ -178,9 +180,10 @@ class _AdsListScreenState extends State<AdsListScreen> {
         }
       } catch (e) {
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Failed to delete advertisement: $e'),
+              content: Text('${localizations.failedToDeleteAdvertisement}: $e'),
               backgroundColor: Colors.red,
             ),
           );
@@ -200,14 +203,15 @@ class _AdsListScreenState extends State<AdsListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Advertisements'),
+        title: Text(localizations.advertisements),
         actions: [
           IconButton(
             onPressed: () => _navigateToAdForm(),
             icon: const Icon(Icons.add),
-            tooltip: 'Add New Advertisement',
+            tooltip: localizations.addNewAdvertisement,
           ),
         ],
       ),
@@ -219,7 +223,7 @@ class _AdsListScreenState extends State<AdsListScreen> {
             child: Column(
               children: [
                 AdminSearchBar(
-                  hintText: 'Search advertisements...',
+                  hintText: localizations.searchAdvertisements,
                   controller: _searchController,
                   onChanged: _onSearch,
                   onClear: _onClearSearch,
@@ -227,15 +231,15 @@ class _AdsListScreenState extends State<AdsListScreen> {
                 const SizedBox(height: 16),
                 // Advertisement Type Filter Bar
                 FiltersBar(
-                  filterOptions: const [
+                  filterOptions: [
                     FilterOption(
                       key: 'general',
-                      label: 'General Advertisement',
+                      label: localizations.generalAdvertisement,
                       defaultValue: 'general',
                     ),
                     FilterOption(
                       key: 'discount_code',
-                      label: 'Discount Code Advertisement',
+                      label: localizations.discountCodeAdvertisement,
                       defaultValue: 'discount_code',
                     ),
                   ],
@@ -260,25 +264,25 @@ class _AdsListScreenState extends State<AdsListScreen> {
                 const SizedBox(height: 16),
                 // Status Filter Bar
                 FiltersBar(
-                  filterOptions: const [
+                  filterOptions: [
                     FilterOption(
                       key: 'active',
-                      label: 'Active',
+                      label: localizations.advertisementStatusActive,
                       defaultValue: 'active',
                     ),
                     FilterOption(
                       key: 'inactive',
-                      label: 'Inactive',
+                      label: localizations.advertisementStatusInactive,
                       defaultValue: 'inactive',
                     ),
                     FilterOption(
                       key: 'scheduled',
-                      label: 'Scheduled',
+                      label: localizations.advertisementStatusScheduled,
                       defaultValue: 'scheduled',
                     ),
                     FilterOption(
                       key: 'expired',
-                      label: 'Expired',
+                      label: localizations.advertisementStatusExpired,
                       defaultValue: 'expired',
                     ),
                   ],
@@ -334,8 +338,8 @@ class _AdsListScreenState extends State<AdsListScreen> {
                         const SizedBox(height: 16),
                         Text(
                           isPermissionError
-                              ? 'Access Restricted'
-                              : 'Error Loading Advertisements',
+                              ? localizations.accessRestricted
+                              : localizations.errorLoadingAdvertisementsTitle,
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
@@ -349,10 +353,12 @@ class _AdsListScreenState extends State<AdsListScreen> {
                           padding: const EdgeInsets.symmetric(horizontal: 32),
                           child: Text(
                             isPermissionError
-                                ? 'Only library administrators can manage advertisements. Please contact your administrator if you need access.'
+                                ? localizations.onlyLibraryAdminsManageAds
                                 : provider.error!,
                             style: TextStyle(
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
                             ),
                             textAlign: TextAlign.center,
                           ),
@@ -364,7 +370,7 @@ class _AdsListScreenState extends State<AdsListScreen> {
                               provider.clearError();
                               _loadAds();
                             },
-                            child: const Text('Retry'),
+                            child: Text(localizations.retry),
                           ),
                       ],
                     ),
@@ -373,9 +379,9 @@ class _AdsListScreenState extends State<AdsListScreen> {
 
                 if (provider.ads.isEmpty) {
                   return EmptyState(
-                    message: 'There are no advertisements at the moment.',
+                    message: localizations.noAdvertisementsAtMoment,
                     icon: Icons.campaign,
-                    actionText: 'Add Advertisement',
+                    actionText: localizations.addAdvertisement,
                     onAction: () => _navigateToAdForm(),
                   );
                 }
@@ -439,9 +445,9 @@ class _AdsListScreenState extends State<AdsListScreen> {
                         color: Colors.red,
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Text(
-                        'EXPIRED',
-                        style: TextStyle(
+                      child: Text(
+                        AppLocalizations.of(context).advertisementStatusExpired,
+                        style: const TextStyle(
                           color: Colors.white,
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
@@ -461,7 +467,7 @@ class _AdsListScreenState extends State<AdsListScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  ad.adTypeDisplayName,
+                  _getAdTypeDisplayName(ad),
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 10,
@@ -512,7 +518,7 @@ class _AdsListScreenState extends State<AdsListScreen> {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        'Discount Code: ',
+                        '${AppLocalizations.of(context).discountCodeLabel}: ',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           color: Theme.of(context).brightness == Brightness.dark
@@ -563,7 +569,7 @@ class _AdsListScreenState extends State<AdsListScreen> {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      'Start: ${_formatDate(ad.startDate!)}',
+                      '${AppLocalizations.of(context).startLabelColon}: ${_formatDate(ad.startDate!)}',
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
@@ -585,7 +591,7 @@ class _AdsListScreenState extends State<AdsListScreen> {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      'End: ${_formatDate(ad.endDate!)}',
+                      '${AppLocalizations.of(context).endLabelColon}: ${_formatDate(ad.endDate!)}',
                       style: TextStyle(
                         color: isExpired
                             ? Colors.red
@@ -622,10 +628,12 @@ class _AdsListScreenState extends State<AdsListScreen> {
                     child: ElevatedButton.icon(
                       onPressed: () => _navigateToAdForm(ad),
                       icon: const Icon(Icons.edit, size: 18),
-                      label: const Text('Edit'),
+                      label: Text(AppLocalizations.of(context).edit),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Theme.of(context).colorScheme.primary,
-                        foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                        foregroundColor: Theme.of(
+                          context,
+                        ).colorScheme.onPrimary,
                       ),
                     ),
                   ),
@@ -634,7 +642,7 @@ class _AdsListScreenState extends State<AdsListScreen> {
                     child: OutlinedButton.icon(
                       onPressed: () => _deleteAd(ad),
                       icon: const Icon(Icons.delete, size: 18),
-                      label: const Text('Delete'),
+                      label: Text(AppLocalizations.of(context).delete),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.red,
                         side: const BorderSide(color: Colors.red),
@@ -660,5 +668,13 @@ class _AdsListScreenState extends State<AdsListScreen> {
 
   String _formatDate(DateTime date) {
     return '${date.day}/${date.month}/${date.year}';
+  }
+
+  String _getAdTypeDisplayName(Ad ad) {
+    final localizations = AppLocalizations.of(context);
+    if (ad.isDiscountCodeAd) {
+      return localizations.discountCodeAdvertisement;
+    }
+    return localizations.generalAdvertisement;
   }
 }

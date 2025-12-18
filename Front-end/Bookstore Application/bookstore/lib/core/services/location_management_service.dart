@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:bookstore/core/services/api_config.dart';
+import 'package:readgo/core/services/api_config.dart';
 
 class LocationManagementService {
   static String get _baseUrl => ApiConfig.getBaseUrl();

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../../borrow/models/return_request.dart';
 import '../../../../borrow/providers/return_request_provider.dart';
 import '../../../../auth/providers/auth_provider.dart';
+import '../../../../../core/localization/app_localizations.dart';
 import '../../../widgets/admin_search_bar.dart';
 import '../../../widgets/empty_state.dart';
 import '../../../widgets/library_manager/status_chip.dart';
@@ -25,13 +26,22 @@ class _AdminReturnRequestsListScreenState
   Timer? _searchDebounceTimer;
   late TabController _tabController;
 
-  // Status tabs
-  final List<String> _statusTabs = ['All', 'Requested', 'Approved', 'Assigned'];
+  // Status tabs - will be localized in build method
+  List<String> _getStatusTabs(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
+    return [
+      localizations.all,
+      localizations.requested,
+      localizations.approved,
+      localizations.assigned,
+    ];
+  }
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: _statusTabs.length, vsync: this);
+    // Initialize with default length, will be updated in build
+    _tabController = TabController(length: 4, vsync: this);
 
     _tabController.addListener(() {
       if (!_tabController.indexIsChanging) {
@@ -53,22 +63,19 @@ class _AdminReturnRequestsListScreenState
   }
 
   void _onTabChanged(int index) {
-    final selectedTab = _statusTabs[index];
+    final localizations = AppLocalizations.of(context);
+    final statusTabs = _getStatusTabs(context);
+    final selectedTab = statusTabs[index];
     String? status;
 
-    switch (selectedTab) {
-      case 'All':
-        status = null;
-        break;
-      case 'Requested':
-        status = 'PENDING'; // ReturnRequest status, not BorrowRequest status
-        break;
-      case 'Approved':
-        status = 'APPROVED'; // ReturnRequest status
-        break;
-      case 'Assigned':
-        status = 'ASSIGNED'; // ReturnRequest status
-        break;
+    if (selectedTab == localizations.all) {
+      status = null;
+    } else if (selectedTab == localizations.requested) {
+      status = 'PENDING'; // ReturnRequest status, not BorrowRequest status
+    } else if (selectedTab == localizations.approved) {
+      status = 'APPROVED'; // ReturnRequest status
+    } else if (selectedTab == localizations.assigned) {
+      status = 'ASSIGNED'; // ReturnRequest status
     }
 
     if (mounted) {
@@ -86,9 +93,10 @@ class _AdminReturnRequestsListScreenState
     await Future.microtask(() async {
       if (authProvider.token == null || authProvider.token!.isEmpty) {
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Authentication required. Please login again.'),
+            SnackBar(
+              content: Text(localizations.authenticationRequired),
               backgroundColor: Colors.red,
             ),
           );
@@ -134,22 +142,25 @@ class _AdminReturnRequestsListScreenState
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Return Requests'),
+        title: Text(localizations.returnRequests),
         backgroundColor: Theme.of(context).primaryColor,
         foregroundColor: Colors.white,
         actions: [
           IconButton(
             onPressed: () => _loadReturnRequests(),
             icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh Requests',
+            tooltip: localizations.refreshRequests,
           ),
         ],
         bottom: TabBar(
           controller: _tabController,
           isScrollable: true,
-          tabs: _statusTabs.map((status) => Tab(text: status)).toList(),
+          tabs: _getStatusTabs(
+            context,
+          ).map((status) => Tab(text: status)).toList(),
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white70,
           indicatorColor: Colors.white,
@@ -166,7 +177,7 @@ class _AdminReturnRequestsListScreenState
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: AdminSearchBar(
-              hintText: 'Search return requests...',
+              hintText: localizations.searchReturnRequests,
               controller: _searchController,
               onChanged: _onSearch,
               onSubmitted: _onSearchImmediate,
@@ -185,6 +196,7 @@ class _AdminReturnRequestsListScreenState
                 // Show error message if there's an error and no data
                 if (provider.errorMessage != null &&
                     provider.returnRequests.isEmpty) {
+                  final localizations = AppLocalizations.of(context);
                   return Center(
                     child: Padding(
                       padding: const EdgeInsets.all(24.0),
@@ -198,7 +210,7 @@ class _AdminReturnRequestsListScreenState
                           ),
                           const SizedBox(height: 16),
                           Text(
-                            'Error: ${provider.errorMessage}',
+                            '${localizations.error}: ${provider.errorMessage}',
                             style: const TextStyle(
                               color: Colors.red,
                               fontSize: 16,
@@ -212,7 +224,7 @@ class _AdminReturnRequestsListScreenState
                               _loadReturnRequests();
                             },
                             icon: const Icon(Icons.refresh),
-                            label: const Text('Retry'),
+                            label: Text(localizations.retry),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFFB5E7FF),
                               foregroundColor: Colors.white,
@@ -230,17 +242,18 @@ class _AdminReturnRequestsListScreenState
 
                 // Show empty state when no return requests
                 if (provider.returnRequests.isEmpty && !provider.isLoading) {
-                  return const EmptyState(
-                    title: 'No Return Requests',
+                  final localizations = AppLocalizations.of(context);
+                  return EmptyState(
+                    title: localizations.noReturnRequests,
                     icon: Icons.assignment_return_outlined,
-                    message: 'There are no return requests at the moment.',
-                    iconColor: Color(0xFF6C757D),
-                    titleStyle: TextStyle(
+                    message: localizations.noReturnRequestsAtMoment,
+                    iconColor: const Color(0xFF6C757D),
+                    titleStyle: const TextStyle(
                       color: Color(0xFF2C3E50),
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
                     ),
-                    messageStyle: TextStyle(
+                    messageStyle: const TextStyle(
                       color: Color(0xFF6C757D),
                       fontSize: 14,
                     ),
@@ -269,6 +282,7 @@ class _AdminReturnRequestsListScreenState
   }
 
   Widget _buildReturnRequestCard(ReturnRequest returnRequest) {
+    final localizations = AppLocalizations.of(context);
     final borrowRequest = returnRequest.borrowRequest;
     final status = returnRequest.status;
 
@@ -288,13 +302,18 @@ class _AdminReturnRequestsListScreenState
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'Request #${returnRequest.id}',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue,
-                    ),
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Text(
+                        '${localizations.requestPrefix} #${returnRequest.id}',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue,
+                        ),
+                      );
+                    },
                   ),
                   StatusChip(status: status),
                 ],
@@ -308,7 +327,7 @@ class _AdminReturnRequestsListScreenState
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
-                      'User: ${borrowRequest.customerName?.isNotEmpty == true ? borrowRequest.customerName : (borrowRequest.customer?.fullName.isNotEmpty == true ? borrowRequest.customer!.fullName : 'Unknown User')}',
+                      '${localizations.userLabel}: ${borrowRequest.customerName?.isNotEmpty == true ? borrowRequest.customerName : (borrowRequest.customer?.fullName.isNotEmpty == true ? borrowRequest.customer!.fullName : localizations.unknownUser)}',
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
@@ -330,7 +349,7 @@ class _AdminReturnRequestsListScreenState
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    'Requested: ${_formatDate(returnRequest.requestedAt)}',
+                    '${localizations.requestedLabel}: ${_formatDate(returnRequest.requestedAt)}',
                     style: const TextStyle(fontSize: 14, color: Colors.grey),
                   ),
                 ],
@@ -343,7 +362,7 @@ class _AdminReturnRequestsListScreenState
                   const Icon(Icons.event, size: 16, color: Colors.grey),
                   const SizedBox(width: 4),
                   Text(
-                    'Expected Return: ${borrowRequest.dueDate != null ? _formatDate(borrowRequest.dueDate!) : 'Not set'}',
+                    '${localizations.expectedReturnLabel}: ${borrowRequest.dueDate != null ? _formatDate(borrowRequest.dueDate!) : localizations.notSet}',
                     style: const TextStyle(fontSize: 14, color: Colors.grey),
                   ),
                 ],
@@ -357,7 +376,7 @@ class _AdminReturnRequestsListScreenState
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
-                      'Book: ${(borrowRequest.bookTitle?.isNotEmpty == true) ? borrowRequest.bookTitle : (borrowRequest.book?.title.isNotEmpty == true ? borrowRequest.book!.title : 'Unknown Book')}',
+                      '${localizations.bookLabel}: ${(borrowRequest.bookTitle?.isNotEmpty == true) ? borrowRequest.bookTitle : (borrowRequest.book?.title.isNotEmpty == true ? borrowRequest.book!.title : localizations.unknownBook)}',
                       style: const TextStyle(fontSize: 14, color: Colors.grey),
                       overflow: TextOverflow.ellipsis,
                     ),

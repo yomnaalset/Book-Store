@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:convert';
 import '../../../../../../core/constants/app_colors.dart';
+import '../../../../../../core/localization/app_localizations.dart';
 import '../../../../../../core/services/api_client.dart';
 import '../../../../auth/providers/auth_provider.dart';
 import '../../../models/book.dart';
@@ -109,11 +110,17 @@ class _DiscountedBooksSectionState extends State<DiscountedBooksSection> {
                     color: Theme.of(context).colorScheme.error,
                   ),
                   const SizedBox(height: 16),
-                  Text(
-                    'Error loading discounted books',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Text(
+                        localizations.errorLoadingDiscountedBooks,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                      );
+                    },
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -154,18 +161,33 @@ class _DiscountedBooksSectionState extends State<DiscountedBooksSection> {
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                   const SizedBox(height: 16),
-                  Text(
-                    'No discounted books available',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Check back later for special offers',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Column(
+                        children: [
+                          Text(
+                            localizations.noDiscountedBooksAvailable,
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            localizations.checkBackLaterForSpecialOffers,
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ],
               ),
@@ -219,25 +241,35 @@ class _DiscountedBooksSectionState extends State<DiscountedBooksSection> {
               ),
             ),
             const SizedBox(width: 12),
-            Text(
-              'Discounted Books',
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Text(
+                  localizations.discountedBooks,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                );
+              },
             ),
           ],
         ),
-        TextButton(
-          onPressed: () {
-            Navigator.pushNamed(context, '/all-discounted-books');
+        Builder(
+          builder: (context) {
+            final localizations = AppLocalizations.of(context);
+            return TextButton(
+              onPressed: () {
+                Navigator.pushNamed(context, '/all-discounted-books');
+              },
+              child: Text(
+                localizations.viewAll,
+                style: const TextStyle(
+                  color: AppColors.warning,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            );
           },
-          child: const Text(
-            'View All',
-            style: TextStyle(
-              color: AppColors.warning,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
         ),
       ],
     );
@@ -326,15 +358,20 @@ class _DiscountedBooksSectionState extends State<DiscountedBooksSection> {
                         color: AppColors.error,
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Text(
-                        book.discountPercentage != null
-                            ? '${book.discountPercentage!.toInt()}% OFF'
-                            : 'SALE',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      child: Builder(
+                        builder: (context) {
+                          final localizations = AppLocalizations.of(context);
+                          return Text(
+                            book.discountPercentage != null
+                                ? localizations.discountOff(book.discountPercentage!.toInt())
+                                : localizations.saleBadge,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          );
+                        },
                       ),
                     ),
                   ),
@@ -419,24 +456,29 @@ class _DiscountedBooksSectionState extends State<DiscountedBooksSection> {
                     _buildPriceDisplay(book),
                     const SizedBox(height: 8),
                     // Action Button
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: () => _addToCart(book),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.warning,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          minimumSize: const Size(0, 28),
-                        ),
-                        child: const Text(
-                          'Add to Cart',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
+                    Builder(
+                      builder: (context) {
+                        final localizations = AppLocalizations.of(context);
+                        return SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: () => _addToCart(book),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.warning,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 4),
+                              minimumSize: const Size(0, 28),
+                            ),
+                            child: Text(
+                              localizations.addToCartButton,
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
+                        );
+                      },
                     ),
                   ],
                 ),

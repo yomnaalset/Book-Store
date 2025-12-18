@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 import '../../../core/extensions/theme_extensions.dart';
+import '../../../core/localization/app_localizations.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/review.dart';
 import '../models/reply.dart';
@@ -87,35 +88,38 @@ class _ReviewCardState extends State<ReviewCard> {
                           break;
                       }
                     },
-                    itemBuilder: (context) => [
-                      const PopupMenuItem(
-                        value: 'edit',
-                        child: Row(
-                          children: [
-                            Icon(Icons.edit, size: 16),
-                            SizedBox(width: 8),
-                            Text('Edit'),
-                          ],
+                    itemBuilder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return [
+                        PopupMenuItem(
+                          value: 'edit',
+                          child: Row(
+                            children: [
+                              const Icon(Icons.edit, size: 16),
+                              const SizedBox(width: 8),
+                              Text(localizations.edit),
+                            ],
+                          ),
                         ),
-                      ),
-                      const PopupMenuItem(
-                        value: 'delete',
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.delete,
-                              size: 16,
-                              color: AppColors.error,
-                            ),
-                            SizedBox(width: 8),
-                            Text(
-                              'Delete',
-                              style: TextStyle(color: AppColors.error),
-                            ),
-                          ],
+                        PopupMenuItem(
+                          value: 'delete',
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.delete,
+                                size: 16,
+                                color: AppColors.error,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                localizations.delete,
+                                style: const TextStyle(color: AppColors.error),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                      ];
+                    },
                   ),
               ],
             ),
@@ -215,24 +219,29 @@ class _ReviewCardState extends State<ReviewCard> {
                         color: AppColors.primary.withValues(alpha: 0.3),
                       ),
                     ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.reply_outlined,
-                          size: 16,
-                          color: AppColors.primary,
-                        ),
-                        SizedBox(width: 4),
-                        Text(
-                          'Reply',
-                          style: TextStyle(
-                            fontSize: AppDimensions.fontSizeS,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                      ],
+                    child: Builder(
+                      builder: (context) {
+                        final localizations = AppLocalizations.of(context);
+                        return Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.reply_outlined,
+                              size: 16,
+                              color: AppColors.primary,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              localizations.reply,
+                              style: const TextStyle(
+                                fontSize: AppDimensions.fontSizeS,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   ),
                 ),
@@ -256,52 +265,61 @@ class _ReviewCardState extends State<ReviewCard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Text(
-                          'Replies (${widget.review.replies!.length})',
-                          style: const TextStyle(
-                            fontSize: AppDimensions.fontSizeS,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                        const Spacer(),
-                        GestureDetector(
-                          onTap: () => _showReplyDialog(context),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: AppDimensions.spacingS,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(
-                                AppDimensions.radiusS,
+                    Builder(
+                      builder: (context) {
+                        final localizations = AppLocalizations.of(context);
+                        return Row(
+                          children: [
+                            Text(
+                              localizations.repliesCountWithNumber(
+                                widget.review.replies!.length,
+                              ),
+                              style: const TextStyle(
+                                fontSize: AppDimensions.fontSizeS,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textSecondary,
                               ),
                             ),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.add,
-                                  size: 12,
-                                  color: AppColors.primary,
+                            const Spacer(),
+                            GestureDetector(
+                              onTap: () => _showReplyDialog(context),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: AppDimensions.spacingS,
+                                  vertical: 2,
                                 ),
-                                SizedBox(width: 2),
-                                Text(
-                                  'Add Reply',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w500,
-                                    color: AppColors.primary,
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary.withValues(
+                                    alpha: 0.1,
+                                  ),
+                                  borderRadius: BorderRadius.circular(
+                                    AppDimensions.radiusS,
                                   ),
                                 ),
-                              ],
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.add,
+                                      size: 12,
+                                      color: AppColors.primary,
+                                    ),
+                                    const SizedBox(width: 2),
+                                    Text(
+                                      localizations.addReply,
+                                      style: const TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w500,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                      ],
+                          ],
+                        );
+                      },
                     ),
                     const SizedBox(height: AppDimensions.spacingS),
                     ...widget.review.replies!.map(
@@ -320,19 +338,24 @@ class _ReviewCardState extends State<ReviewCard> {
   String _formatDate(DateTime date) {
     final now = DateTime.now();
     final difference = now.difference(date);
+    final localizations = AppLocalizations.of(context);
 
     if (difference.inDays == 0) {
-      return 'Today';
+      return localizations.today;
     } else if (difference.inDays == 1) {
-      return 'Yesterday';
+      return localizations.yesterday;
     } else if (difference.inDays < 7) {
-      return '${difference.inDays} days ago';
+      return localizations.daysAgoWithNumber(difference.inDays);
     } else if (difference.inDays < 30) {
-      return '${(difference.inDays / 7).floor()} weeks ago';
+      return localizations.weeksAgoWithNumber((difference.inDays / 7).floor());
     } else if (difference.inDays < 365) {
-      return '${(difference.inDays / 30).floor()} months ago';
+      return localizations.monthsAgoWithNumber(
+        (difference.inDays / 30).floor(),
+      );
     } else {
-      return '${(difference.inDays / 365).floor()} years ago';
+      return localizations.yearsAgoWithNumber(
+        (difference.inDays / 365).floor(),
+      );
     }
   }
 
@@ -341,6 +364,7 @@ class _ReviewCardState extends State<ReviewCard> {
     ReviewsProvider reviewsProvider,
   ) async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final localizations = AppLocalizations.of(context);
 
     try {
       await reviewsProvider.likeReview(widget.review.id, authProvider.token);
@@ -350,8 +374,8 @@ class _ReviewCardState extends State<ReviewCard> {
           SnackBar(
             content: Text(
               widget.review.isLiked == true
-                  ? 'Review unliked!'
-                  : 'Review liked!',
+                  ? localizations.reviewUnliked
+                  : localizations.reviewLiked,
             ),
             backgroundColor: AppColors.success,
             duration: const Duration(seconds: 2),
@@ -372,15 +396,16 @@ class _ReviewCardState extends State<ReviewCard> {
 
   void _showReplyDialog(BuildContext context) {
     final TextEditingController replyController = TextEditingController();
+    final localizations = AppLocalizations.of(context);
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.reply, color: AppColors.primary),
-            SizedBox(width: 8),
-            Text('Reply to Review'),
+            const Icon(Icons.reply, color: AppColors.primary),
+            const SizedBox(width: 8),
+            Text(localizations.replyToReview),
           ],
         ),
         content: Column(
@@ -396,14 +421,18 @@ class _ReviewCardState extends State<ReviewCard> {
                   color: AppColors.primary.withValues(alpha: 0.3),
                 ),
               ),
-              child: const Row(
+              child: Row(
                 children: [
-                  Icon(Icons.info_outline, size: 16, color: AppColors.primary),
-                  SizedBox(width: 8),
+                  const Icon(
+                    Icons.info_outline,
+                    size: 16,
+                    color: AppColors.primary,
+                  ),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'You can reply multiple times to continue the conversation',
-                      style: TextStyle(
+                      localizations.replyConversationHint,
+                      style: const TextStyle(
                         fontSize: AppDimensions.fontSizeS,
                         color: AppColors.primary,
                         fontWeight: FontWeight.w500,
@@ -416,10 +445,10 @@ class _ReviewCardState extends State<ReviewCard> {
             const SizedBox(height: AppDimensions.spacingM),
             TextField(
               controller: replyController,
-              decoration: const InputDecoration(
-                hintText: 'Write your reply...',
-                border: OutlineInputBorder(),
-                labelText: 'Your Reply',
+              decoration: InputDecoration(
+                hintText: localizations.writeYourReply,
+                border: const OutlineInputBorder(),
+                labelText: localizations.yourReply,
               ),
               maxLines: 4,
               minLines: 2,
@@ -429,14 +458,14 @@ class _ReviewCardState extends State<ReviewCard> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(localizations.cancel),
           ),
           ElevatedButton(
             onPressed: () async {
               if (replyController.text.trim().isEmpty) {
                 ScaffoldMessenger.of(this.context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Please enter a reply'),
+                  SnackBar(
+                    content: Text(localizations.pleaseEnterReply),
                     backgroundColor: AppColors.error,
                   ),
                 );
@@ -463,12 +492,10 @@ class _ReviewCardState extends State<ReviewCard> {
 
                 if (mounted) {
                   ScaffoldMessenger.of(this.context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Reply added successfully! You can continue the conversation by replying again.',
-                      ),
+                    SnackBar(
+                      content: Text(localizations.replyAddedSuccessfully),
                       backgroundColor: AppColors.success,
-                      duration: Duration(seconds: 3),
+                      duration: const Duration(seconds: 3),
                     ),
                   );
                 }
@@ -483,7 +510,7 @@ class _ReviewCardState extends State<ReviewCard> {
                 }
               }
             },
-            child: const Text('Reply'),
+            child: Text(localizations.reply),
           ),
         ],
       ),
@@ -612,6 +639,7 @@ class _ReviewCardState extends State<ReviewCard> {
     Reply reply,
   ) async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final localizations = AppLocalizations.of(context);
 
     try {
       await reviewsProvider.likeReply(reply.id, authProvider.token);
@@ -620,7 +648,9 @@ class _ReviewCardState extends State<ReviewCard> {
         ScaffoldMessenger.of(this.context).showSnackBar(
           SnackBar(
             content: Text(
-              reply.isLiked == true ? 'Reply unliked!' : 'Reply liked!',
+              reply.isLiked == true
+                  ? localizations.replyUnliked
+                  : localizations.replyLiked,
             ),
             backgroundColor: AppColors.success,
             duration: const Duration(seconds: 2),

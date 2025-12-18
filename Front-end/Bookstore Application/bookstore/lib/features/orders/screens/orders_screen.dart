@@ -4,6 +4,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 import '../../../core/extensions/theme_extensions.dart';
 import '../../../core/widgets/common/loading_indicator.dart';
+import '../../../core/localization/app_localizations.dart';
 import '../providers/orders_provider.dart';
 
 class OrdersScreen extends StatefulWidget {
@@ -29,14 +30,15 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Orders'),
+        title: Text(localizations.myOrders),
         actions: [
           IconButton(
             onPressed: _loadOrders,
             icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh',
+            tooltip: localizations.refresh,
           ),
         ],
       ),
@@ -92,33 +94,51 @@ class _OrdersScreenState extends State<OrdersScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'Order #${order.orderNumber ?? order.id}',
-                    style: TextStyle(
-                      fontSize: AppDimensions.fontSizeM,
-                      fontWeight: FontWeight.w600,
-                      color: context.textColor,
-                    ),
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            localizations.orderNumberPrefix(
+                              '${order.orderNumber ?? order.id}',
+                            ),
+                            style: TextStyle(
+                              fontSize: AppDimensions.fontSizeM,
+                              fontWeight: FontWeight.w600,
+                              color: context.textColor,
+                            ),
+                          ),
+                          const SizedBox(height: AppDimensions.spacingS),
+                          Text(
+                            localizations.totalPrefix(
+                              '\$${order.totalAmount?.toStringAsFixed(2) ?? '0.00'}',
+                            ),
+                            style: const TextStyle(
+                              fontSize: AppDimensions.fontSizeM,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                          const SizedBox(height: AppDimensions.spacingS),
+                          Text(
+                            localizations.statusPrefix(
+                              localizations.getOrderStatusLabel(
+                                order.status ?? 'pending',
+                              ),
+                            ),
+                            style: TextStyle(
+                              fontSize: AppDimensions.fontSizeS,
+                              color: context.secondaryTextColor,
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
-                  _buildStatusChip(order.status ?? 'pending'),
+                  _buildStatusChip(order.status ?? 'pending', context),
                 ],
-              ),
-              const SizedBox(height: AppDimensions.spacingS),
-              Text(
-                'Total: \$${order.totalAmount?.toStringAsFixed(2) ?? '0.00'}',
-                style: const TextStyle(
-                  fontSize: AppDimensions.fontSizeM,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.primary,
-                ),
-              ),
-              const SizedBox(height: AppDimensions.spacingS),
-              Text(
-                'Status: ${order.status ?? 'Unknown'}',
-                style: TextStyle(
-                  fontSize: AppDimensions.fontSizeS,
-                  color: context.secondaryTextColor,
-                ),
               ),
               const SizedBox(height: AppDimensions.spacingS),
               Row(
@@ -138,7 +158,8 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
   }
 
-  Widget _buildStatusChip(String status) {
+  Widget _buildStatusChip(String status, BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     Color backgroundColor;
     Color textColor;
 
@@ -174,7 +195,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
         borderRadius: BorderRadius.circular(AppDimensions.radiusL),
       ),
       child: Text(
-        status.toUpperCase(),
+        localizations.getOrderStatusLabel(status).toUpperCase(),
         style: TextStyle(
           fontSize: AppDimensions.fontSizeXS,
           fontWeight: FontWeight.w600,
@@ -185,6 +206,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
   }
 
   Widget _buildEmptyState() {
+    final localizations = AppLocalizations.of(context);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(AppDimensions.paddingL),
@@ -198,7 +220,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
             ),
             const SizedBox(height: AppDimensions.spacingL),
             Text(
-              'No orders found',
+              localizations.noOrdersFoundOrders,
               style: TextStyle(
                 fontSize: AppDimensions.fontSizeL,
                 fontWeight: FontWeight.w600,
@@ -207,7 +229,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
             ),
             const SizedBox(height: AppDimensions.spacingM),
             Text(
-              'Your orders will appear here once you place them',
+              localizations.ordersWillAppearHere,
               style: TextStyle(
                 fontSize: AppDimensions.fontSizeM,
                 color: context.secondaryTextColor,
@@ -217,7 +239,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
             const SizedBox(height: AppDimensions.spacingXL),
             ElevatedButton(
               onPressed: () => Navigator.pushNamed(context, '/home'),
-              child: const Text('Browse Books'),
+              child: Text(localizations.browseBooks),
             ),
           ],
         ),
@@ -234,27 +256,36 @@ class _OrdersScreenState extends State<OrdersScreen> {
           children: [
             const Icon(Icons.error_outline, size: 80, color: AppColors.error),
             const SizedBox(height: AppDimensions.spacingL),
-            Text(
-              'Failed to load orders',
-              style: TextStyle(
-                fontSize: AppDimensions.fontSizeL,
-                fontWeight: FontWeight.w600,
-                color: context.textColor,
-              ),
-            ),
-            const SizedBox(height: AppDimensions.spacingM),
-            Text(
-              error,
-              style: TextStyle(
-                fontSize: AppDimensions.fontSizeM,
-                color: context.secondaryTextColor,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: AppDimensions.spacingXL),
-            ElevatedButton(
-              onPressed: _loadOrders,
-              child: const Text('Try Again'),
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Column(
+                  children: [
+                    Text(
+                      localizations.failedToLoadOrders,
+                      style: TextStyle(
+                        fontSize: AppDimensions.fontSizeL,
+                        fontWeight: FontWeight.w600,
+                        color: context.textColor,
+                      ),
+                    ),
+                    const SizedBox(height: AppDimensions.spacingM),
+                    Text(
+                      error,
+                      style: TextStyle(
+                        fontSize: AppDimensions.fontSizeM,
+                        color: context.secondaryTextColor,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: AppDimensions.spacingXL),
+                    ElevatedButton(
+                      onPressed: _loadOrders,
+                      child: Text(localizations.tryAgain),
+                    ),
+                  ],
+                );
+              },
             ),
           ],
         ),

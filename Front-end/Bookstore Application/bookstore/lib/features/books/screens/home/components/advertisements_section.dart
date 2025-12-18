@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:carousel_slider/carousel_slider.dart';
 import '../../../../../core/constants/app_colors.dart';
+import '../../../../../core/localization/app_localizations.dart';
 import '../../../../admin/ads/models/ad.dart';
 import '../../../../admin/ads/services/ads_service.dart';
 import '../../advertisement_details_screen.dart';
@@ -138,29 +139,34 @@ class _AdvertisementsSectionState extends State<AdvertisementsSection>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Section Header
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Special Offers',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primaryText,
-                  ),
-                ),
-                TextButton(
-                  onPressed: () {
-                    Navigator.pushNamed(context, '/all-ads');
-                  },
-                  child: const Text(
-                    'View All',
-                    style: TextStyle(
-                      color: AppColors.uranianBlue,
-                      fontWeight: FontWeight.w600,
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      localizations.specialOffers,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primaryText,
+                      ),
                     ),
-                  ),
-                ),
-              ],
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pushNamed(context, '/all-ads');
+                      },
+                      child: Text(
+                        localizations.viewAll,
+                        style: const TextStyle(
+                          color: AppColors.uranianBlue,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
 
             const SizedBox(height: 16),
@@ -298,14 +304,21 @@ class _AdvertisementsSectionState extends State<AdvertisementsSection>
                                 width: 1,
                               ),
                             ),
-                            child: const Text(
-                              'SPECIAL OFFER',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 0.5,
-                              ),
+                            child: Builder(
+                              builder: (context) {
+                                final localizations = AppLocalizations.of(
+                                  context,
+                                );
+                                return Text(
+                                  localizations.specialOffer,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 0.5,
+                                  ),
+                                );
+                              },
                             ),
                           ),
                           Container(
@@ -374,38 +387,54 @@ class _AdvertisementsSectionState extends State<AdvertisementsSection>
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            'Limited Time',
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.8),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 8,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(25),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.1),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 2),
+                          Builder(
+                            builder: (context) {
+                              final localizations = AppLocalizations.of(
+                                context,
+                              );
+                              return Text(
+                                localizations.limitedTime,
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.8),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
                                 ),
-                              ],
-                            ),
-                            child: const Text(
-                              'Shop Now',
-                              style: TextStyle(
-                                color: AppColors.uranianBlue,
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
+                              );
+                            },
+                          ),
+                          Builder(
+                            builder: (context) {
+                              final localizations = AppLocalizations.of(
+                                context,
+                              );
+                              return Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(25),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(
+                                        alpha: 0.1,
+                                      ),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: Text(
+                                  localizations.shopNow,
+                                  style: const TextStyle(
+                                    color: AppColors.uranianBlue,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              );
+                            },
                           ),
                         ],
                       ),

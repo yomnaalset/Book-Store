@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../core/constants/app_dimensions.dart';
 import '../../../core/services/theme_service.dart' as theme;
 import '../../../core/translations.dart';
+import '../../../core/localization/app_localizations.dart';
 
 import '../../../features/auth/providers/auth_provider.dart';
 import '../../profile/providers/language_preference_provider.dart';
@@ -45,6 +46,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       debugPrint('SettingsScreen: Loading all settings data...');
 
       // Load language options
+      // Note: loadLanguageOptions() now handles syncing internally
       await languageProvider.loadLanguageOptions();
       debugPrint('SettingsScreen: Language options loaded');
 
@@ -105,14 +107,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildAccountSection() {
+    final localizations = AppLocalizations.of(context);
     return _buildSection(
-      title: 'Account',
+      title: localizations.account,
       icon: Icons.person_outline,
       children: [
         _buildListTile(
           icon: Icons.lock_outline,
-          title: 'Change Password',
-          subtitle: 'Update your password',
+          title: localizations.changePassword,
+          subtitle: localizations.updateYourPassword,
           onTap: () => Navigator.pushNamed(context, '/change-password'),
         ),
       ],
@@ -122,17 +125,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildAppearanceSection() {
     return Consumer<theme.ThemeService>(
       builder: (context, themeService, child) {
+        final localizations = AppLocalizations.of(context);
         debugPrint(
           '_buildAppearanceSection rebuilding - isDarkMode: ${themeService.isDarkMode}',
         );
         return _buildSection(
-          title: 'Appearance',
+          title: localizations.appearance,
           icon: Icons.palette_outlined,
           children: [
             _buildListTile(
               icon: Icons.dark_mode_outlined,
-              title: 'Dark Mode',
-              subtitle: themeService.isDarkMode ? 'Enabled' : 'Disabled',
+              title: localizations.darkMode,
+              subtitle: themeService.isDarkMode
+                  ? localizations.enabled
+                  : localizations.disabled,
               trailing: Switch(
                 value: themeService.isDarkMode,
                 onChanged: (value) async {
@@ -146,6 +152,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   // Store context values before async operation
                   final scaffoldMessenger = ScaffoldMessenger.of(context);
                   final currentTheme = Theme.of(context);
+                  final localizations = AppLocalizations.of(context);
 
                   await themeService.setThemeMode(
                     value ? ThemeMode.dark : ThemeMode.light,
@@ -164,7 +171,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     scaffoldMessenger.showSnackBar(
                       SnackBar(
                         content: Text(
-                          value ? 'Dark mode enabled' : 'Light mode enabled',
+                          value
+                              ? localizations.darkModeEnabled
+                              : localizations.lightModeEnabled,
                         ),
                         backgroundColor: currentTheme.colorScheme.primary,
                         duration: const Duration(seconds: 2),
@@ -184,14 +193,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildLanguageSection() {
     return Consumer2<LanguagePreferenceProvider, TranslationsProvider>(
       builder: (context, languageProvider, translationsProvider, child) {
+        final localizations = AppLocalizations.of(context);
         return _buildSection(
-          title: 'Language',
+          title: localizations.language,
           icon: Icons.language_outlined,
           children: [
             _buildListTile(
               icon: Icons.translate,
-              title: 'App Language',
-              subtitle: languageProvider.currentLanguageDisplayName,
+              title: localizations.appLanguage,
+              subtitle: _getLocalizedLanguageName(
+                languageProvider.currentLanguage ??
+                    translationsProvider.currentLocale.languageCode,
+                localizations,
+              ),
               onTap: () =>
                   _showLanguageDialog(languageProvider, translationsProvider),
             ),
@@ -202,14 +216,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildPreferencesSection() {
+    final localizations = AppLocalizations.of(context);
     return _buildSection(
-      title: 'Preferences',
+      title: localizations.preferences,
       icon: Icons.settings_outlined,
       children: [
         _buildListTile(
           icon: Icons.notifications_outlined,
-          title: 'Notification Settings',
-          subtitle: 'Manage your notification preferences',
+          title: localizations.notificationSettings,
+          subtitle: localizations.manageYourNotificationPreferences,
           onTap: () => Navigator.pushNamed(context, '/notification-settings'),
         ),
         // Privacy Settings removed as per user request
@@ -218,15 +233,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildSupportSection() {
+    final localizations = AppLocalizations.of(context);
     return _buildSection(
-      title: 'Support',
+      title: localizations.supportLabel,
       icon: Icons.help_outline,
       children: [
         // Help & Support removed as per user request
         _buildListTile(
           icon: Icons.info_outline,
-          title: 'About',
-          subtitle: 'App version and information',
+          title: localizations.aboutLabel,
+          subtitle: localizations.appVersionAndInformation,
           onTap: _showAboutDialog,
         ),
       ],
@@ -234,14 +250,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildAccountActionsSection() {
+    final localizations = AppLocalizations.of(context);
     return _buildSection(
-      title: 'Account Actions',
+      title: localizations.accountActions,
       icon: Icons.account_circle_outlined,
       children: [
         _buildListTile(
           icon: Icons.logout,
-          title: 'Sign Out',
-          subtitle: 'Sign out of your account',
+          title: localizations.signOut,
+          subtitle: localizations.signOutSubtitle,
           onTap: _showSignOutDialog,
           textColor: Theme.of(context).colorScheme.error,
         ),
@@ -321,27 +338,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _showAboutDialog() {
+    final localizations = AppLocalizations.of(context);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('About'),
-        content: const Column(
+        title: Text(localizations.about),
+        content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Bookstore App'),
-            SizedBox(height: 8),
-            Text('Version 1.0.0'),
-            SizedBox(height: 8),
-            Text(
-              'A modern bookstore application for browsing, purchasing, and borrowing books.',
-            ),
+            Text(localizations.bookstoreApp),
+            const SizedBox(height: 8),
+            Text(localizations.appVersion),
+            const SizedBox(height: 8),
+            Text(localizations.appDescription),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+            child: Text(localizations.close),
           ),
         ],
       ),
@@ -349,15 +365,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _showSignOutDialog() {
+    final localizations = AppLocalizations.of(context);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Sign Out'),
-        content: const Text('Are you sure you want to sign out?'),
+        title: Text(localizations.signOut),
+        content: Text(localizations.signOutConfirmation),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(localizations.cancel),
           ),
           ElevatedButton(
             onPressed: () {
@@ -367,7 +384,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: Theme.of(context).colorScheme.error,
             ),
-            child: const Text('Sign Out'),
+            child: Text(localizations.signOut),
           ),
         ],
       ),
@@ -380,14 +397,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
     Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
   }
 
+  String _getLocalizedLanguageName(
+    String languageCode,
+    AppLocalizations localizations,
+  ) {
+    switch (languageCode) {
+      case 'en':
+        return localizations.englishLanguage;
+      case 'ar':
+        return localizations.arabicLanguage;
+      default:
+        return languageCode;
+    }
+  }
+
   void _showLanguageDialog(
     LanguagePreferenceProvider languageProvider,
     TranslationsProvider translationsProvider,
   ) {
+    final localizations = AppLocalizations.of(context);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Choose Language'),
+        title: Text(localizations.chooseLanguage),
         content: Consumer<LanguagePreferenceProvider>(
           builder: (context, languageProvider, child) {
             if (languageProvider.isLoading) {
@@ -408,48 +440,75 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     final navigator = Navigator.of(context);
                     final scaffoldMessenger = ScaffoldMessenger.of(context);
                     final theme = Theme.of(context);
+                    final localizations = AppLocalizations.of(context);
 
                     final success = await languageProvider
                         .updateLanguagePreference(token, value);
 
-                    if (success && mounted) {
+                    if (success && mounted && context.mounted) {
                       navigator.pop();
-                      if (mounted) {
+                      if (mounted && context.mounted) {
+                        try {
+                          scaffoldMessenger.showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                '${localizations.languageChanged} ${languageProvider.availableLanguages.firstWhere((lang) => lang['code'] == value)['name']}',
+                              ),
+                              backgroundColor: theme.colorScheme.primary,
+                            ),
+                          );
+                        } catch (_) {
+                          // Widget disposed, ignore
+                        }
+                      }
+                    } else if (mounted && context.mounted) {
+                      try {
                         scaffoldMessenger.showSnackBar(
                           SnackBar(
                             content: Text(
-                              'Language changed to ${languageProvider.availableLanguages.firstWhere((lang) => lang['code'] == value)['name']}',
+                              languageProvider.errorMessage ??
+                                  localizations.failedToChangeLanguage,
                             ),
-                            backgroundColor: theme.colorScheme.primary,
+                            backgroundColor: theme.colorScheme.error,
                           ),
                         );
+                      } catch (_) {
+                        // Widget disposed, ignore
                       }
-                    } else if (mounted) {
-                      scaffoldMessenger.showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            languageProvider.errorMessage ??
-                                'Failed to change language',
-                          ),
-                          backgroundColor: theme.colorScheme.error,
-                        ),
-                      );
                     }
                   } else {
                     final navigator = Navigator.of(context);
                     // Update local language preference even without token
                     await translationsProvider.changeLocale(Locale(value));
-                    if (mounted) {
+                    // Sync the language provider with the new locale
+                    languageProvider.syncWithTranslationsProvider();
+                    if (mounted && context.mounted) {
                       navigator.pop();
                     }
                   }
                 }
               },
-              child: Column(
+              child: Builder(
+                builder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return Column(
                 mainAxisSize: MainAxisSize.min,
-                children: languageProvider.availableLanguages.map((language) {
+                    children: languageProvider.availableLanguages.map((
+                      language,
+                    ) {
                   final languageCode = language['code'] as String;
-                  final languageName = language['name'] as String;
+                      // Use localized language names
+                      String languageName;
+                      switch (languageCode) {
+                        case 'en':
+                          languageName = localizations.englishLanguage;
+                          break;
+                        case 'ar':
+                          languageName = localizations.arabicLanguage;
+                          break;
+                        default:
+                          languageName = language['name'] as String;
+                      }
 
                   return RadioListTile<String>(
                     title: Text(languageName),
@@ -457,6 +516,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     value: languageCode,
                   );
                 }).toList(),
+                  );
+                },
               ),
             );
           },
@@ -464,7 +525,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(AppLocalizations.of(context).cancel),
           ),
         ],
       ),

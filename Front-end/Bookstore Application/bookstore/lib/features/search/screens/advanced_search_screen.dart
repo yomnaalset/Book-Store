@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
+import '../../../core/localization/app_localizations.dart';
 import '../../../core/widgets/common/custom_button.dart';
 import '../../../core/widgets/common/custom_text_field.dart';
 
@@ -50,9 +51,10 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Advanced Search'),
+        title: Text(localizations.advancedSearch),
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Theme.of(context).colorScheme.onPrimary,
         elevation: 0,
@@ -65,52 +67,52 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Search by Name
-              _buildSectionTitle('Search by Book Name'),
+              _buildSectionTitle(localizations.searchByBookName),
               CustomTextField(
                 controller: _searchController,
-                label: 'Book Title or Name',
-                hint: 'Enter book title or name',
+                label: localizations.bookTitleOrName,
+                hint: localizations.enterBookTitleOrName,
                 prefixIcon: const Icon(Icons.search),
               ),
               const SizedBox(height: AppDimensions.spacingL),
 
               // Search by Author
-              _buildSectionTitle('Search by Author'),
+              _buildSectionTitle(localizations.searchByAuthor),
               CustomTextField(
                 controller: _authorController,
-                label: 'Author Name',
-                hint: 'Enter author name (partial matches supported)',
+                label: localizations.authorNameLabel,
+                hint: localizations.enterAuthorName,
                 prefixIcon: const Icon(Icons.person),
               ),
               const SizedBox(height: AppDimensions.spacingL),
 
               // Search by Category
-              _buildSectionTitle('Search by Category'),
+              _buildSectionTitle(localizations.searchByCategory),
               CustomTextField(
                 controller: _categoryController,
-                label: 'Category Name',
-                hint: 'Enter category name',
+                label: localizations.categoryNameLabel,
+                hint: localizations.enterCategoryName,
                 prefixIcon: const Icon(Icons.category),
               ),
               const SizedBox(height: AppDimensions.spacingL),
 
               // Price Range Filter
-              _buildSectionTitle('Price Range'),
+              _buildSectionTitle(localizations.priceRange),
               _buildPriceRangeSelector(),
               const SizedBox(height: AppDimensions.spacingL),
 
               // Rating Filter
-              _buildSectionTitle('Minimum Rating'),
+              _buildSectionTitle(localizations.minimumRating),
               _buildRatingSelector(),
               const SizedBox(height: AppDimensions.spacingL),
 
               // Availability Filter
-              _buildSectionTitle('Availability'),
+              _buildSectionTitle(localizations.availabilityFilter),
               _buildAvailabilitySelector(),
               const SizedBox(height: AppDimensions.spacingL),
 
               // Sort Options
-              _buildSectionTitle('Sort By'),
+              _buildSectionTitle(localizations.sortByLabel),
               _buildSortSelector(),
               const SizedBox(height: AppDimensions.spacingXL),
 
@@ -118,7 +120,7 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
               SizedBox(
                 width: double.infinity,
                 child: CustomButton(
-                  text: 'Search Books',
+                  text: localizations.searchBooks,
                   onPressed: _performSearch,
                   isLoading: _isSearching,
                 ),
@@ -144,6 +146,7 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
   }
 
   Widget _buildPriceRangeSelector() {
+    final localizations = AppLocalizations.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: AppDimensions.paddingM),
       decoration: BoxDecoration(
@@ -157,13 +160,31 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
           isExpanded: true,
           dropdownColor: Theme.of(context).cardColor,
           style: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color),
-          items: const [
-            DropdownMenuItem(value: 'all', child: Text('All Prices')),
-            DropdownMenuItem(value: '0-10', child: Text('\$0 - \$10')),
-            DropdownMenuItem(value: '10-25', child: Text('\$10 - \$25')),
-            DropdownMenuItem(value: '25-50', child: Text('\$25 - \$50')),
-            DropdownMenuItem(value: '50-100', child: Text('\$50 - \$100')),
-            DropdownMenuItem(value: '100+', child: Text('\$100+')),
+          items: [
+            DropdownMenuItem(
+              value: 'all',
+              child: Text(localizations.allPrices),
+            ),
+            DropdownMenuItem(
+              value: '0-10',
+              child: Text(localizations.priceRange010),
+            ),
+            DropdownMenuItem(
+              value: '10-25',
+              child: Text(localizations.priceRange1025),
+            ),
+            DropdownMenuItem(
+              value: '25-50',
+              child: Text(localizations.priceRange2550),
+            ),
+            DropdownMenuItem(
+              value: '50-100',
+              child: Text(localizations.priceRange50100),
+            ),
+            DropdownMenuItem(
+              value: '100+',
+              child: Text(localizations.priceRange100Plus),
+            ),
           ],
           onChanged: (value) {
             setState(() {
@@ -176,6 +197,7 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
   }
 
   Widget _buildRatingSelector() {
+    final localizations = AppLocalizations.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: AppDimensions.paddingM),
       decoration: BoxDecoration(
@@ -189,12 +211,27 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
           isExpanded: true,
           dropdownColor: Theme.of(context).cardColor,
           style: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color),
-          items: const [
-            DropdownMenuItem(value: 'all', child: Text('All Ratings')),
-            DropdownMenuItem(value: '4', child: Text('4+ Stars')),
-            DropdownMenuItem(value: '3', child: Text('3+ Stars')),
-            DropdownMenuItem(value: '2', child: Text('2+ Stars')),
-            DropdownMenuItem(value: '1', child: Text('1+ Stars')),
+          items: [
+            DropdownMenuItem(
+              value: 'all',
+              child: Text(localizations.allRatings),
+            ),
+            DropdownMenuItem(
+              value: '4',
+              child: Text(localizations.rating4Plus),
+            ),
+            DropdownMenuItem(
+              value: '3',
+              child: Text(localizations.rating3Plus),
+            ),
+            DropdownMenuItem(
+              value: '2',
+              child: Text(localizations.rating2Plus),
+            ),
+            DropdownMenuItem(
+              value: '1',
+              child: Text(localizations.rating1Plus),
+            ),
           ],
           onChanged: (value) {
             setState(() {
@@ -207,6 +244,7 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
   }
 
   Widget _buildAvailabilitySelector() {
+    final localizations = AppLocalizations.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: AppDimensions.paddingM),
       decoration: BoxDecoration(
@@ -220,13 +258,19 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
           isExpanded: true,
           dropdownColor: Theme.of(context).cardColor,
           style: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color),
-          items: const [
-            DropdownMenuItem(value: 'all', child: Text('All Books')),
-            DropdownMenuItem(value: 'available', child: Text('Available Only')),
-            DropdownMenuItem(value: 'borrow_only', child: Text('Borrow Only')),
+          items: [
+            DropdownMenuItem(value: 'all', child: Text(localizations.allBooks)),
+            DropdownMenuItem(
+              value: 'available',
+              child: Text(localizations.availableOnly),
+            ),
+            DropdownMenuItem(
+              value: 'borrow_only',
+              child: Text(localizations.borrowOnlyFilter),
+            ),
             DropdownMenuItem(
               value: 'purchase_only',
-              child: Text('Purchase Only'),
+              child: Text(localizations.purchaseOnly),
             ),
           ],
           onChanged: (value) {
@@ -240,6 +284,7 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
   }
 
   Widget _buildSortSelector() {
+    final localizations = AppLocalizations.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: AppDimensions.paddingM),
       decoration: BoxDecoration(
@@ -253,25 +298,43 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
           isExpanded: true,
           dropdownColor: Theme.of(context).cardColor,
           style: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color),
-          items: const [
-            DropdownMenuItem(value: 'relevance', child: Text('Most Relevant')),
-            DropdownMenuItem(value: 'newest', child: Text('Newest First')),
-            DropdownMenuItem(value: 'oldest', child: Text('Oldest First')),
+          items: [
+            DropdownMenuItem(
+              value: 'relevance',
+              child: Text(localizations.mostRelevant),
+            ),
+            DropdownMenuItem(
+              value: 'newest',
+              child: Text(localizations.newestFirstSort),
+            ),
+            DropdownMenuItem(
+              value: 'oldest',
+              child: Text(localizations.oldestFirstSort),
+            ),
             DropdownMenuItem(
               value: 'price_low',
-              child: Text('Price: Low to High'),
+              child: Text(localizations.priceLowToHighSort),
             ),
             DropdownMenuItem(
               value: 'price_high',
-              child: Text('Price: High to Low'),
+              child: Text(localizations.priceHighToLowSort),
             ),
-            DropdownMenuItem(value: 'rating', child: Text('Highest Rated')),
+            DropdownMenuItem(
+              value: 'rating',
+              child: Text(localizations.highestRatedSort),
+            ),
             DropdownMenuItem(
               value: 'most_borrowed',
-              child: Text('Most Borrowed'),
+              child: Text(localizations.mostBorrowedSort),
             ),
-            DropdownMenuItem(value: 'title', child: Text('Title A-Z')),
-            DropdownMenuItem(value: 'author', child: Text('Author A-Z')),
+            DropdownMenuItem(
+              value: 'title',
+              child: Text(localizations.titleAZ),
+            ),
+            DropdownMenuItem(
+              value: 'author',
+              child: Text(localizations.authorAZ),
+            ),
           ],
           onChanged: (value) {
             setState(() {
@@ -319,9 +382,10 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
       });
 
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Search failed: ${e.toString()}'),
+            content: Text(localizations.searchFailedError(e.toString())),
             backgroundColor: AppColors.error,
           ),
         );

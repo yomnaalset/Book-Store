@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:bookstore/core/constants/app_colors.dart';
+import 'package:readgo/core/constants/app_colors.dart';
 
 class DeliveryTrackingWidget extends StatelessWidget {
   final Map<String, dynamic> deliveryRep;

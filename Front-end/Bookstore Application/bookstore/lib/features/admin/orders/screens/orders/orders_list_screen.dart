@@ -8,6 +8,7 @@ import '../../../widgets/library_manager/status_chip.dart';
 import '../../../widgets/library_manager/empty_state.dart';
 import '../../../../../routes/app_routes.dart';
 import '../../../../auth/providers/auth_provider.dart';
+import '../../../../../core/localization/app_localizations.dart';
 
 class OrdersListScreen extends StatefulWidget {
   const OrdersListScreen({super.key});
@@ -84,13 +85,15 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Orders'),
+        title: Text(localizations.orders),
         actions: [
           IconButton(
             onPressed: () => _loadOrders(),
             icon: const Icon(Icons.refresh),
+            tooltip: localizations.refreshOrders,
           ),
         ],
       ),
@@ -101,7 +104,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: AdminSearchBar(
-              hintText: 'Search orders...',
+              hintText: localizations.searchOrders,
               onChanged: (query) {
                 // Cancel previous timer
                 _searchDebounceTimer?.cancel();
@@ -128,28 +131,43 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
             child: DropdownButtonFormField<String>(
               initialValue: _selectedStatus,
-              decoration: const InputDecoration(
-                labelText: 'Status',
-                border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.symmetric(
+              decoration: InputDecoration(
+                labelText: localizations.status,
+                border: const OutlineInputBorder(),
+                contentPadding: const EdgeInsets.symmetric(
                   horizontal: 12,
                   vertical: 8,
                 ),
               ),
-              items: const [
-                DropdownMenuItem(value: null, child: Text('All Statuses')),
-                DropdownMenuItem(value: 'pending', child: Text('Pending')),
+              items: [
+                DropdownMenuItem(
+                  value: null,
+                  child: Text(localizations.allStatuses),
+                ),
+                DropdownMenuItem(
+                  value: 'pending',
+                  child: Text(localizations.statusPending),
+                ),
                 DropdownMenuItem(
                   value: 'pending_assignment',
-                  child: Text('Pending Assignment'),
+                  child: Text(localizations.pendingAssignment),
                 ),
-                DropdownMenuItem(value: 'confirmed', child: Text('Confirmed')),
+                DropdownMenuItem(
+                  value: 'confirmed',
+                  child: Text(localizations.confirmed),
+                ),
                 DropdownMenuItem(
                   value: 'in_delivery',
-                  child: Text('In Delivery'),
+                  child: Text(localizations.inDelivery),
                 ),
-                DropdownMenuItem(value: 'delivered', child: Text('Delivered')),
-                DropdownMenuItem(value: 'returned', child: Text('Returned')),
+                DropdownMenuItem(
+                  value: 'delivered',
+                  child: Text(localizations.delivered),
+                ),
+                DropdownMenuItem(
+                  value: 'returned',
+                  child: Text(localizations.statusReturned),
+                ),
               ],
               onChanged: _onFilterChanged,
             ),
@@ -171,13 +189,13 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          'Error: ${provider.error}',
+                          '${localizations.error}: ${provider.error}',
                           style: const TextStyle(color: Colors.red),
                         ),
                         const SizedBox(height: 16),
                         ElevatedButton(
                           onPressed: _loadOrders,
-                          child: const Text('Retry'),
+                          child: Text(localizations.retry),
                         ),
                       ],
                     ),
@@ -185,9 +203,9 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
                 }
 
                 if (provider.orders.isEmpty) {
-                  return const EmptyState(
-                    title: 'No Orders',
-                    message: 'No orders found',
+                  return EmptyState(
+                    title: localizations.noOrders,
+                    message: localizations.noOrdersFound,
                     icon: Icons.shopping_cart,
                   );
                 }
@@ -213,6 +231,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
   }
 
   Widget _buildOrderCard(Order order) {
+    final localizations = AppLocalizations.of(context);
     return Card(
       margin: const EdgeInsets.only(bottom: 12.0),
       child: ListTile(
@@ -224,7 +243,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
           ),
         ),
         title: Text(
-          'Order #${order.id}',
+          '${localizations.orders} #${order.id}',
           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
         subtitle: Column(
@@ -233,7 +252,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
           children: [
             const SizedBox(height: 4),
             Text(
-              'Customer: ${order.customerName}',
+              '${localizations.customerLabel}: ${order.customerName}',
               style: const TextStyle(fontWeight: FontWeight.w500),
               overflow: TextOverflow.ellipsis,
             ),
@@ -271,7 +290,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
-                    'Ordered: ${_formatDate(order.createdAt)}',
+                    '${localizations.orderedLabel}: ${_formatDate(order.createdAt)}',
                     style: const TextStyle(fontSize: 12, color: Colors.grey),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -286,7 +305,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
-                      '${order.items.length} item${order.items.length == 1 ? '' : 's'}',
+                      '${order.items.length} ${order.items.length == 1 ? localizations.itemsLabel : localizations.itemsLabelPlural}',
                       style: const TextStyle(fontSize: 12, color: Colors.grey),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -307,13 +326,19 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
                 break;
             }
           },
-          itemBuilder: (context) => [
-            const PopupMenuItem(value: 'view', child: Text('View Details')),
-            const PopupMenuItem(
-              value: 'update_status',
-              child: Text('Update Status'),
-            ),
-          ],
+          itemBuilder: (context) {
+            final localizations = AppLocalizations.of(context);
+            return [
+              PopupMenuItem(
+                value: 'view',
+                child: Text(localizations.viewDetails),
+              ),
+              PopupMenuItem(
+                value: 'update_status',
+                child: Text(localizations.updateStatus),
+              ),
+            ];
+          },
         ),
         onTap: () => _navigateToOrderDetails(order),
       ),
@@ -340,14 +365,15 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
   }
 
   void _showStatusUpdateDialog(Order order) {
+    final localizations = AppLocalizations.of(context);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Order Action'),
+        title: Text(localizations.orderAction),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('What action would you like to take for this order?'),
+            Text(localizations.whatActionForOrder),
             const SizedBox(height: 20),
             Row(
               children: [
@@ -358,7 +384,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
                       _showApprovalDialog(order);
                     },
                     icon: const Icon(Icons.check_circle, color: Colors.white),
-                    label: const Text('Approve'),
+                    label: Text(localizations.approve),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.green,
                       foregroundColor: Colors.white,
@@ -373,7 +399,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
                       _showRejectDialog(order);
                     },
                     icon: const Icon(Icons.cancel, color: Colors.white),
-                    label: const Text('Reject'),
+                    label: Text(localizations.reject),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.red,
                       foregroundColor: Colors.white,
@@ -387,7 +413,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(localizations.cancel),
           ),
         ],
       ),
@@ -416,9 +442,12 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
           .toList();
     } catch (e) {
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to load delivery managers: ${e.toString()}'),
+            content: Text(
+              localizations.errorLoadingDeliveryManagers(e.toString()),
+            ),
           ),
         );
       }
@@ -426,6 +455,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
     }
 
     if (!mounted) return;
+    final localizations = AppLocalizations.of(context);
 
     showModalBottomSheet(
       context: context,
@@ -456,14 +486,19 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
               const SizedBox(height: 20),
 
               // Title
-              const Text(
-                'Assign Delivery Manager',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              Text(
+                localizations.assignDeliveryManager,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 8),
 
               Text(
-                'Select a delivery manager to assign order #${order.id}',
+                localizations.selectDeliveryManagerToAssignOrder(
+                  int.parse(order.id),
+                ),
                 style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                 textAlign: TextAlign.center,
               ),
@@ -486,7 +521,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          'No delivery managers available',
+                          localizations.noDeliveryManagersAvailable,
                           style: TextStyle(
                             color: Colors.red[700],
                             fontWeight: FontWeight.w500,
@@ -523,7 +558,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
                         Expanded(
                           child: selectedDeliveryManagerId == null
                               ? Text(
-                                  'Choose a delivery manager',
+                                  localizations.chooseDeliveryManager,
                                   style: TextStyle(
                                     color: Colors.grey[600],
                                     fontSize: 16,
@@ -560,9 +595,9 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      child: const Text(
-                        'Cancel',
-                        style: TextStyle(fontWeight: FontWeight.w600),
+                      child: Text(
+                        localizations.cancel,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
                     ),
                   ),
@@ -594,9 +629,9 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
                         ),
                         elevation: 0,
                       ),
-                      child: const Text(
-                        'Approve Order',
-                        style: TextStyle(
+                      child: Text(
+                        localizations.approveOrderButton,
+                        style: const TextStyle(
                           fontWeight: FontWeight.w600,
                           fontSize: 16,
                         ),
@@ -680,9 +715,9 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
             ),
             const SizedBox(height: 20),
 
-            const Text(
-              'Select Delivery Manager',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            Text(
+              AppLocalizations.of(context).selectDeliveryManager,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 20),
 
@@ -767,23 +802,24 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
   }
 
   void _showRejectDialog(Order order) {
+    final localizations = AppLocalizations.of(context);
     final TextEditingController reasonController = TextEditingController();
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Reject Order'),
+        title: Text(localizations.rejectOrder),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Please provide a reason for rejecting this order:'),
+            Text(localizations.pleaseProvideReasonForRejecting),
             const SizedBox(height: 16),
             TextField(
               controller: reasonController,
-              decoration: const InputDecoration(
-                labelText: 'Rejection Reason',
-                hintText: 'Enter reason for rejection...',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: localizations.rejectionReason,
+                hintText: localizations.enterReasonForRejection,
+                border: const OutlineInputBorder(),
               ),
               maxLines: 3,
             ),
@@ -792,7 +828,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(localizations.cancel),
           ),
           ElevatedButton(
             onPressed: () {
@@ -801,8 +837,8 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
                 _rejectOrder(order, reasonController.text.trim());
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Please provide a reason for rejection'),
+                  SnackBar(
+                    content: Text(localizations.pleaseProvideRejectionReason),
                     backgroundColor: Colors.orange,
                   ),
                 );
@@ -812,7 +848,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
               backgroundColor: Colors.red,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Reject Order'),
+            child: Text(localizations.rejectOrder),
           ),
         ],
       ),
@@ -820,6 +856,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
   }
 
   Future<void> _approveOrder(Order order, int deliveryManagerId) async {
+    final localizations = AppLocalizations.of(context);
     try {
       final provider = context.read<admin_orders_provider.OrdersProvider>();
       final success = await provider.approveOrder(
@@ -828,20 +865,18 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
       );
 
       if (mounted) {
-        if (success) {
+        if (success != null && success['success'] == true) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Order approved successfully! Order sent to delivery.',
-              ),
+            SnackBar(
+              content: Text(localizations.orderApprovedSuccessfully),
               backgroundColor: Colors.green,
             ),
           );
           _loadOrders(); // Refresh the orders list
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Failed to approve order'),
+            SnackBar(
+              content: Text(localizations.failedToApproveOrder),
               backgroundColor: Colors.red,
             ),
           );
@@ -850,13 +885,16 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error approving order: ${e.toString()}')),
+          SnackBar(
+            content: Text(localizations.errorApprovingOrder(e.toString())),
+          ),
         );
       }
     }
   }
 
   Future<void> _rejectOrder(Order order, String reason) async {
+    final localizations = AppLocalizations.of(context);
     try {
       final provider = context.read<admin_orders_provider.OrdersProvider>();
       final success = await provider.rejectOrder(int.parse(order.id), reason);
@@ -865,15 +903,17 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
         if (success) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Order rejected. Reason: $reason'),
+              content: Text(
+                '${localizations.orderRejectedSuccessfully}. ${localizations.rejectionReason}: $reason',
+              ),
               backgroundColor: Colors.red,
             ),
           );
           _loadOrders(); // Refresh the orders list
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Failed to reject order'),
+            SnackBar(
+              content: Text(localizations.failedToRejectOrder),
               backgroundColor: Colors.red,
             ),
           );
@@ -882,7 +922,9 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error rejecting order: ${e.toString()}')),
+          SnackBar(
+            content: Text(localizations.errorRejectingOrder(e.toString())),
+          ),
         );
       }
     }

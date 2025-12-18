@@ -9,6 +9,7 @@ import '../../../../core/widgets/common/custom_text_field.dart';
 import '../../../../core/widgets/common/loading_indicator.dart';
 import '../../../../core/utils/validators.dart';
 import '../../../../core/services/auth_service.dart';
+import '../../../../core/localization/app_localizations.dart';
 import '../../../auth/providers/auth_provider.dart';
 import '../../../profile/providers/profile_provider.dart';
 import '../../../../routes/app_routes.dart';
@@ -168,12 +169,11 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
 
       // Get the current token from AuthProvider
       final token = authProvider.token;
+      final localizations = AppLocalizations.of(context);
       if (token == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Authentication token not available. Please log in again.',
-            ),
+          SnackBar(
+            content: Text(localizations.authenticationTokenNotAvailable),
             backgroundColor: AppColors.error,
           ),
         );
@@ -185,8 +185,8 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
       final currentUser = authProvider.user;
       if (currentUser == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('User data not available. Please log in again.'),
+          SnackBar(
+            content: Text(localizations.userDataNotAvailable),
             backgroundColor: AppColors.error,
           ),
         );
@@ -219,11 +219,10 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
       } else if (newEmail != currentUser.email) {
         // Same email but different case - show warning
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Email is the same as current email. No changes needed.',
-              ),
+            SnackBar(
+              content: Text(localizations.emailSameNoChanges),
               backgroundColor: AppColors.warning,
             ),
           );
@@ -290,9 +289,10 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
 
       // Check if there are any changes
       if (changedFields.isEmpty) {
+        final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No changes detected.'),
+          SnackBar(
+            content: Text(localizations.noChangesDetected),
             backgroundColor: AppColors.warning,
           ),
         );
@@ -335,10 +335,12 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
             setState(() {});
           }
         } else {
+          final localizations = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                profileProvider.errorMessage ?? 'Failed to update profile',
+                profileProvider.errorMessage ??
+                    localizations.failedToUpdateProfile,
               ),
               backgroundColor: AppColors.error,
             ),
@@ -347,9 +349,10 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
       }
     } catch (e) {
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error updating profile: ${e.toString()}'),
+            content: Text(localizations.errorUpdatingProfile(e.toString())),
             backgroundColor: AppColors.error,
           ),
         );
@@ -363,40 +366,44 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
 
   // Helper method to generate appropriate success messages
   String _getSuccessMessage(Map<String, dynamic> changedFields) {
+    final localizations = AppLocalizations.of(context);
     if (changedFields.isEmpty) {
-      return 'No changes detected.';
+      return localizations.noChangesDetected;
     }
 
     if (changedFields.length == 1) {
       final field = changedFields.keys.first;
       switch (field) {
         case 'phone_number':
-          return 'Phone number updated successfully.';
+          return localizations.phoneNumberUpdatedSuccessfully;
         case 'first_name':
-          return 'First name updated successfully.';
+          return localizations.firstNameUpdatedSuccessfully;
         case 'last_name':
-          return 'Last name updated successfully.';
+          return localizations.lastNameUpdatedSuccessfully;
         case 'address':
-          return 'Address updated successfully.';
+          return localizations.addressUpdatedSuccessfully;
         case 'city':
-          return 'City updated successfully.';
+          return localizations.cityUpdatedSuccessfully;
         case 'zip_code':
-          return 'ZIP code updated successfully.';
+          return localizations.zipCodeUpdatedSuccessfully;
         case 'country':
-          return 'Country updated successfully.';
+          return localizations.countryUpdatedSuccessfully;
         default:
-          return 'Profile updated successfully.';
+          return localizations.profileUpdatedSuccessfully;
       }
     } else {
-      return 'Profile updated successfully! Updated ${changedFields.length} field(s).';
+      return localizations.profileUpdatedSuccessfullyFields(
+        changedFields.length,
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Personal Profile'),
+        title: Text(localizations.personalProfile),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         actions: [
@@ -414,6 +421,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
           }
 
           return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(AppDimensions.paddingL),
             child: Form(
               key: _formKey,
@@ -510,6 +518,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
   }
 
   Widget _buildPersonalInfoSection() {
+    final localizations = AppLocalizations.of(context);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(AppDimensions.paddingM),
@@ -521,7 +530,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
                 const Icon(Icons.person, color: AppColors.primary),
                 const SizedBox(width: 8),
                 Text(
-                  'Personal Information',
+                  localizations.personalInformation,
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.bold,
                     color: AppColors.primary,
@@ -535,7 +544,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
                 Expanded(
                   child: CustomTextField(
                     controller: _firstNameController,
-                    label: 'First Name',
+                    label: localizations.firstNameLabel,
                     enabled: _isEditing,
                     validator: Validators.name,
                   ),
@@ -544,7 +553,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
                 Expanded(
                   child: CustomTextField(
                     controller: _lastNameController,
-                    label: 'Last Name',
+                    label: localizations.lastNameLabel,
                     enabled: _isEditing,
                     validator: Validators.name,
                   ),
@@ -554,8 +563,10 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
             const SizedBox(height: AppDimensions.spacingM),
             CustomTextField(
               controller: _emailController,
-              label: 'Email',
-              hint: _isEditing ? 'Enter new email address' : null,
+              label: localizations.emailLabel,
+              hint: _isEditing
+                  ? localizations.pleaseEnterNewEmailAddress
+                  : null,
               enabled: _isEditing,
               keyboardType: TextInputType.emailAddress,
               validator: Validators.email,
@@ -567,6 +578,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
   }
 
   Widget _buildContactInfoSection() {
+    final localizations = AppLocalizations.of(context);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(AppDimensions.paddingM),
@@ -578,7 +590,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
                 const Icon(Icons.contact_phone, color: AppColors.primary),
                 const SizedBox(width: 8),
                 Text(
-                  'Contact Information',
+                  localizations.contactInformation,
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.bold,
                     color: AppColors.primary,
@@ -589,7 +601,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
             const SizedBox(height: AppDimensions.spacingM),
             CustomTextField(
               controller: _phoneController,
-              label: 'Phone Number',
+              label: localizations.phoneNumber,
               enabled: _isEditing,
               keyboardType: TextInputType.phone,
               validator: (value) {
@@ -598,7 +610,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
                   // ignore: deprecated_member_use
                   final phoneRegex = RegExp(r'^\+?[\d\s\-\(\)]{7,20}$');
                   if (!phoneRegex.hasMatch(value.trim())) {
-                    return 'Please enter a valid phone number (e.g., +1234567890)';
+                    return localizations.pleaseEnterValidPhone;
                   }
                 }
                 return null;
@@ -607,10 +619,10 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
             const SizedBox(height: AppDimensions.spacingM),
             CustomTextField(
               controller: _dateOfBirthController,
-              label: 'Date of Birth',
+              label: localizations.dateOfBirthLabel,
               enabled: _isEditing,
               keyboardType: TextInputType.datetime,
-              hint: 'DD/MM/YYYY',
+              hint: localizations.dateFormatHint,
               onTap: _isEditing ? _selectDateOfBirth : null,
               readOnly: true,
               validator: (value) {
@@ -619,7 +631,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
                   // ignore: deprecated_member_use
                   final dateRegex = RegExp(r'^\d{2}/\d{2}/\d{4}$');
                   if (!dateRegex.hasMatch(value.trim())) {
-                    return 'Please enter date in DD/MM/YYYY format';
+                    return localizations.pleaseEnterDateFormat;
                   }
                   // Additional validation for valid date
                   try {
@@ -635,14 +647,14 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
                       if (date.year != year ||
                           date.month != month ||
                           date.day != day) {
-                        return 'Please enter a valid date';
+                        return localizations.invalidDateFormat;
                       }
                       if (date.isAfter(DateTime.now())) {
-                        return 'Date of birth cannot be in the future';
+                        return localizations.invalidDateFormat;
                       }
                     }
                   } catch (e) {
-                    return 'Please enter a valid date';
+                    return localizations.invalidDateFormat;
                   }
                 }
                 return null;
@@ -655,6 +667,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
   }
 
   Widget _buildAddressSection() {
+    final localizations = AppLocalizations.of(context);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(AppDimensions.paddingM),
@@ -666,7 +679,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
                 const Icon(Icons.location_on, color: AppColors.primary),
                 const SizedBox(width: AppDimensions.spacingM),
                 Text(
-                  'Address Information',
+                  localizations.addressInformation,
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.bold,
                     color: AppColors.primary,
@@ -677,7 +690,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
             const SizedBox(height: AppDimensions.spacingM),
             CustomTextField(
               controller: _addressController,
-              label: 'Street Address',
+              label: localizations.streetAddress,
               enabled: _isEditing,
             ),
             const SizedBox(height: AppDimensions.spacingM),
@@ -686,7 +699,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
                 Expanded(
                   child: CustomTextField(
                     controller: _cityController,
-                    label: 'City',
+                    label: localizations.cityLabel,
                     enabled: _isEditing,
                   ),
                 ),
@@ -694,7 +707,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
                 Expanded(
                   child: CustomTextField(
                     controller: _stateController,
-                    label: 'State/Province',
+                    label: localizations.stateProvince,
                     enabled: _isEditing,
                   ),
                 ),
@@ -706,7 +719,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
                 Expanded(
                   child: CustomTextField(
                     controller: _zipCodeController,
-                    label: 'ZIP/Postal Code',
+                    label: localizations.zipPostalCode,
                     enabled: _isEditing,
                   ),
                 ),
@@ -714,7 +727,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
                 Expanded(
                   child: CustomTextField(
                     controller: _countryController,
-                    label: 'Country',
+                    label: localizations.countryLabel,
                     enabled: _isEditing,
                   ),
                 ),
@@ -727,11 +740,12 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
   }
 
   Widget _buildActionButtons() {
+    final localizations = AppLocalizations.of(context);
     return Row(
       children: [
         Expanded(
           child: CustomButton(
-            text: 'Cancel',
+            text: localizations.cancel,
             onPressed: () {
               setState(() {
                 _isEditing = false;
@@ -744,7 +758,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
         const SizedBox(width: AppDimensions.spacingM),
         Expanded(
           child: CustomButton(
-            text: _isLoading ? 'Saving...' : 'Save Changes',
+            text: _isLoading ? localizations.saving : localizations.saveChanges,
             onPressed: _isLoading ? null : _saveProfile,
           ),
         ),
@@ -753,6 +767,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
   }
 
   Widget _buildOtherOptions() {
+    final localizations = AppLocalizations.of(context);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(AppDimensions.paddingM),
@@ -760,7 +775,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Account Options',
+              localizations.accountOptions,
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.bold,
                 color: AppColors.primary,
@@ -769,7 +784,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
             const SizedBox(height: AppDimensions.spacingM),
             ListTile(
               leading: const Icon(Icons.lock, color: AppColors.primary),
-              title: const Text('Change Password'),
+              title: Text(localizations.changePassword),
               trailing: const Icon(Icons.arrow_forward_ios),
               onTap: () {
                 Navigator.pushNamed(context, AppRoutes.changePassword);
@@ -781,7 +796,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
                 Icons.notifications,
                 color: AppColors.primary,
               ),
-              title: const Text('Notification Settings'),
+              title: Text(localizations.notificationSettings),
               trailing: const Icon(Icons.arrow_forward_ios),
               onTap: () {
                 Navigator.pushNamed(context, AppRoutes.notificationSettings);
@@ -790,9 +805,9 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
             const Divider(),
             ListTile(
               leading: const Icon(Icons.logout, color: AppColors.error),
-              title: const Text(
-                'Sign Out',
-                style: TextStyle(color: AppColors.error),
+              title: Text(
+                localizations.signOut,
+                style: const TextStyle(color: AppColors.error),
               ),
               trailing: const Icon(Icons.arrow_forward_ios),
               onTap: _showLogoutDialog,
@@ -805,6 +820,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
 
   void _showLogoutDialog() {
     final theme = Theme.of(context);
+    final localizations = AppLocalizations.of(context);
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -815,7 +831,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
             borderRadius: BorderRadius.circular(16),
           ),
           title: Text(
-            'Sign Out',
+            localizations.signOut,
             style: TextStyle(
               color: theme.colorScheme.onSurface,
               fontWeight: FontWeight.bold,
@@ -823,7 +839,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
             ),
           ),
           content: Text(
-            'Are you sure you want to sign out?',
+            localizations.signOutConfirmation,
             style: TextStyle(
               color: theme.colorScheme.onSurfaceVariant,
               fontSize: 16,
@@ -839,9 +855,12 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
                   vertical: 12,
                 ),
               ),
-              child: const Text(
-                'Cancel',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              child: Text(
+                localizations.cancel,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
             ElevatedButton(
@@ -860,9 +879,12 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
-              child: const Text(
-                'Sign Out',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              child: Text(
+                localizations.signOut,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ],
@@ -886,9 +908,10 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
       }
     } catch (e) {
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Sign out failed: $e'),
+            content: Text('${localizations.signOutFailed}: $e'),
             backgroundColor: AppColors.error,
           ),
         );
@@ -992,12 +1015,11 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
 
       if (!mounted) return;
 
+      final localizations = AppLocalizations.of(context);
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Email changed successfully! Please log in again with your new email.',
-            ),
+          SnackBar(
+            content: Text(localizations.emailChangedSuccessfully),
             backgroundColor: AppColors.success,
           ),
         );
@@ -1016,7 +1038,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              profileProvider.errorMessage ?? 'Failed to change email',
+              profileProvider.errorMessage ?? localizations.failedToChangeEmail,
             ),
             backgroundColor: AppColors.error,
           ),
@@ -1024,9 +1046,10 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
       }
     } catch (e) {
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error changing email: ${e.toString()}'),
+            content: Text(localizations.errorUpdatingProfile(e.toString())),
             backgroundColor: AppColors.error,
           ),
         );
@@ -1036,25 +1059,26 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
 
   Future<String?> _showPasswordDialog() async {
     final passwordController = TextEditingController();
+    final localizations = AppLocalizations.of(context);
 
     return await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Verify Password'),
+        title: Text(localizations.verifyPassword),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              'Please enter your current password to change your email address.',
-              style: TextStyle(fontSize: 14),
+            Text(
+              localizations.verifyPasswordMessage,
+              style: const TextStyle(fontSize: 14),
             ),
             const SizedBox(height: 16),
             TextField(
               controller: passwordController,
               obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'Current Password',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: localizations.currentPassword,
+                border: const OutlineInputBorder(),
               ),
             ),
           ],
@@ -1062,7 +1086,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
+            child: Text(localizations.cancel),
           ),
           ElevatedButton(
             onPressed: () {
@@ -1070,7 +1094,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
                 Navigator.of(context).pop(passwordController.text.trim());
               }
             },
-            child: const Text('Verify'),
+            child: Text(localizations.verify),
           ),
         ],
       ),
@@ -1127,9 +1151,10 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
     } catch (e) {
       debugPrint('Error picking image: $e');
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error picking image: ${e.toString()}'),
+            content: Text(localizations.errorPickingImage(e.toString())),
             backgroundColor: AppColors.error,
           ),
         );
@@ -1152,12 +1177,11 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
       final token = authProvider.token;
+      final localizations = AppLocalizations.of(context);
       if (token == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Authentication token not available. Please log in again.',
-            ),
+          SnackBar(
+            content: Text(localizations.authenticationTokenNotAvailable),
             backgroundColor: AppColors.error,
           ),
         );
@@ -1172,10 +1196,11 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
       );
 
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         if (success) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Profile picture updated successfully!'),
+            SnackBar(
+              content: Text(localizations.profilePictureUpdatedSuccessfully),
               backgroundColor: AppColors.success,
             ),
           );
@@ -1192,7 +1217,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
             SnackBar(
               content: Text(
                 profileProvider.errorMessage ??
-                    'Failed to upload profile picture',
+                    localizations.failedToUploadProfilePicture,
               ),
               backgroundColor: AppColors.error,
             ),
@@ -1202,9 +1227,12 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
     } catch (e) {
       debugPrint('Error uploading profile picture: $e');
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error uploading profile picture: ${e.toString()}'),
+            content: Text(
+              localizations.errorUploadingProfilePicture(e.toString()),
+            ),
             backgroundColor: AppColors.error,
           ),
         );

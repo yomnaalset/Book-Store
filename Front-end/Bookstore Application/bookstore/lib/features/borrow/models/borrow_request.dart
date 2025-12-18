@@ -46,6 +46,7 @@ class BorrowRequest {
   final String? rejectionReason;
   final double? fineAmount;
   final String? fineStatus; // 'paid' or 'unpaid'
+  final String? paymentMethod; // 'cash' or 'mastercard'
   final bool isOverdue;
   final String? deliveryNotes;
   final String? pickupNotes;
@@ -79,6 +80,7 @@ class BorrowRequest {
     this.rejectionReason,
     this.fineAmount,
     this.fineStatus,
+    this.paymentMethod,
     this.isOverdue = false,
     this.deliveryNotes,
     this.pickupNotes,
@@ -133,6 +135,7 @@ class BorrowRequest {
       rejectionReason: json['rejection_reason'],
       fineAmount: json['fine_amount']?.toDouble(),
       fineStatus: json['fine_status'],
+      paymentMethod: json['payment_method'],
       isOverdue: json['is_overdue'] ?? false,
       deliveryNotes: json['delivery_notes'],
       pickupNotes: json['pickup_notes'],
@@ -177,6 +180,8 @@ class BorrowRequest {
       'status': status,
       'rejection_reason': rejectionReason,
       'fine_amount': fineAmount,
+      'fine_status': fineStatus,
+      'payment_method': paymentMethod,
       'is_overdue': isOverdue,
       'delivery_notes': deliveryNotes,
       'pickup_notes': pickupNotes,
@@ -205,6 +210,8 @@ class BorrowRequest {
     String? status,
     String? rejectionReason,
     double? fineAmount,
+    String? fineStatus,
+    String? paymentMethod,
     bool? isOverdue,
     String? deliveryNotes,
     String? pickupNotes,
@@ -231,6 +238,8 @@ class BorrowRequest {
       status: status ?? this.status,
       rejectionReason: rejectionReason ?? this.rejectionReason,
       fineAmount: fineAmount ?? this.fineAmount,
+      fineStatus: fineStatus ?? this.fineStatus,
+      paymentMethod: paymentMethod ?? this.paymentMethod,
       isOverdue: isOverdue ?? this.isOverdue,
       deliveryNotes: deliveryNotes ?? this.deliveryNotes,
       pickupNotes: pickupNotes ?? this.pickupNotes,

@@ -144,12 +144,17 @@ class _BorrowRequestsScreenState extends State<BorrowRequestsScreen> {
           return Column(
             children: [
               // Search and Filter Bar
-              SearchFilterBar(
-                searchHint: 'Search borrow requests...',
-                filterLabel: 'Status',
-                filterOptions: borrowProvider.statusFilterOptions,
-                onSearchChanged: _onSearchChanged,
-                onFilterChanged: _onFilterChanged,
+              Builder(
+                builder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return SearchFilterBar(
+                    searchHint: localizations.searchBorrowRequests,
+                    filterLabel: localizations.status,
+                    filterOptions: borrowProvider.statusFilterOptions,
+                    onSearchChanged: _onSearchChanged,
+                    onFilterChanged: _onFilterChanged,
+                  );
+                },
               ),
 
               // Orders List
@@ -167,25 +172,44 @@ class _BorrowRequestsScreenState extends State<BorrowRequestsScreen> {
                                 color: theme.colorScheme.outline,
                               ),
                               const SizedBox(height: 16),
-                              Text(
-                                _searchQuery.isNotEmpty ||
-                                        _selectedStatus != null
-                                    ? 'No matching borrow requests found'
-                                    : 'No borrow requests available',
-                                style: theme.textTheme.headlineSmall?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
+                              Builder(
+                                builder: (context) {
+                                  final localizations = AppLocalizations.of(
+                                    context,
+                                  );
+                                  return Text(
+                                    _searchQuery.isNotEmpty ||
+                                            _selectedStatus != null
+                                        ? localizations.noMatchingBorrowRequests
+                                        : localizations.noBorrowRequests,
+                                    style: theme.textTheme.headlineSmall
+                                        ?.copyWith(
+                                          color: theme
+                                              .colorScheme
+                                              .onSurfaceVariant,
+                                        ),
+                                  );
+                                },
                               ),
                               const SizedBox(height: 8),
-                              Text(
-                                _searchQuery.isNotEmpty ||
-                                        _selectedStatus != null
-                                    ? 'Try adjusting your search or filter criteria'
-                                    : 'No borrowing requests have been assigned yet',
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                                textAlign: TextAlign.center,
+                              Builder(
+                                builder: (context) {
+                                  final localizations = AppLocalizations.of(
+                                    context,
+                                  );
+                                  return Text(
+                                    _searchQuery.isNotEmpty ||
+                                            _selectedStatus != null
+                                        ? localizations
+                                              .tryAdjustingSearchOrFilter
+                                        : localizations
+                                              .noBorrowRequestsDescription,
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  );
+                                },
                               ),
                             ],
                           ),

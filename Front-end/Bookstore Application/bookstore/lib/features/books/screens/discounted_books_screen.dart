@@ -2,9 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:convert';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/localization/app_localizations.dart';
 import '../../../../core/services/api_client.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../screens/home/components/discounted_books_section.dart';
+import '../models/book.dart';
+import '../models/author.dart';
+import '../models/category.dart' as book_category;
 
 class DiscountedBooksScreen extends StatefulWidget {
   const DiscountedBooksScreen({super.key});
@@ -103,7 +107,12 @@ class _DiscountedBooksScreenState extends State<DiscountedBooksScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Discounted Books'),
+        title: Builder(
+          builder: (context) {
+            final localizations = AppLocalizations.of(context);
+            return Text(localizations.discountedBooks);
+          },
+        ),
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Theme.of(context).colorScheme.onPrimary,
         elevation: 0,
@@ -120,32 +129,37 @@ class _DiscountedBooksScreenState extends State<DiscountedBooksScreen> {
           Container(
             padding: const EdgeInsets.all(16),
             color: Theme.of(context).colorScheme.surface,
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Search discounted books...',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() {
-                            _searchQuery = '';
-                          });
-                        },
-                      )
-                    : null,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                filled: true,
-                fillColor: Theme.of(context).colorScheme.surface,
-              ),
-              onChanged: (value) {
-                setState(() {
-                  _searchQuery = value;
-                });
+            child: Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: localizations.searchDiscountedBooksPlaceholder,
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() {
+                                _searchQuery = '';
+                              });
+                            },
+                          )
+                        : null,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    filled: true,
+                    fillColor: Theme.of(context).colorScheme.surface,
+                  ),
+                  onChanged: (value) {
+                    setState(() {
+                      _searchQuery = value;
+                    });
+                  },
+                );
               },
             ),
           ),
@@ -237,11 +251,16 @@ class _DiscountedBooksScreenState extends State<DiscountedBooksScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
             children: [
-              Text(
-                '${_filteredBooks.length} discounted books found',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
+              Builder(
+                builder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return Text(
+                    localizations.discountedBooksFound(_filteredBooks.length),
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  );
+                },
               ),
               const Spacer(),
               if (_searchQuery.isNotEmpty)
@@ -279,7 +298,12 @@ class _DiscountedBooksScreenState extends State<DiscountedBooksScreen> {
   Widget _buildDiscountedBookCard(DiscountedBook book) {
     return GestureDetector(
       onTap: () {
-        Navigator.pushNamed(context, '/book-detail', arguments: {'book': book});
+        final bookObject = _convertDiscountedBookToBook(book);
+        Navigator.pushNamed(
+          context,
+          '/book-detail',
+          arguments: {'book': bookObject},
+        );
       },
       child: Container(
         decoration: BoxDecoration(
@@ -351,15 +375,22 @@ class _DiscountedBooksScreenState extends State<DiscountedBooksScreen> {
                         color: AppColors.error,
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Text(
-                        book.discountPercentage != null
-                            ? '${book.discountPercentage!.toInt()}% OFF'
-                            : 'SALE',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      child: Builder(
+                        builder: (context) {
+                          final localizations = AppLocalizations.of(context);
+                          return Text(
+                            book.discountPercentage != null
+                                ? localizations.discountOff(
+                                    book.discountPercentage!.toInt(),
+                                  )
+                                : localizations.saleBadge,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          );
+                        },
                       ),
                     ),
                   ),
@@ -395,50 +426,62 @@ class _DiscountedBooksScreenState extends State<DiscountedBooksScreen> {
             Expanded(
               flex: 2,
               child: Padding(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(6),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      book.title,
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
+                    Flexible(
+                      child: Text(
+                        book.title,
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 11,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 2),
                     Text(
                       book.author,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 9,
+                        height: 1.0,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const Spacer(),
+                    const SizedBox(height: 3),
                     // Price Display
-                    _buildPriceDisplay(book),
-                    const SizedBox(height: 8),
+                    Flexible(child: _buildPriceDisplay(book)),
+                    const SizedBox(height: 3),
                     // Action Button
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: () => _addToCart(book),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.warning,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          minimumSize: const Size(0, 28),
-                        ),
-                        child: const Text(
-                          'Add to Cart',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
+                    Builder(
+                      builder: (context) {
+                        final localizations = AppLocalizations.of(context);
+                        return SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: () => _addToCart(book),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.warning,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 2),
+                              minimumSize: const Size(0, 24),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: Text(
+                              localizations.addToCartButton,
+                              style: const TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -453,34 +496,54 @@ class _DiscountedBooksScreenState extends State<DiscountedBooksScreen> {
   Widget _buildPriceDisplay(DiscountedBook book) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        // Original Price (Crossed out)
-        if (book.originalPrice > 0)
-          Text(
-            '\$${book.originalPrice.toStringAsFixed(2)}',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              decoration: TextDecoration.lineThrough,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-              fontSize: 10,
+        // Original Price (Crossed out) and Final Price in a Row
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (book.originalPrice > 0) ...[
+              Text(
+                '\$${book.originalPrice.toStringAsFixed(2)}',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  decoration: TextDecoration.lineThrough,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontSize: 8,
+                  height: 1.0,
+                ),
+              ),
+              const SizedBox(width: 3),
+            ],
+            Flexible(
+              child: Text(
+                '\$${book.finalPrice.toStringAsFixed(2)}',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: AppColors.success,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 10,
+                  height: 1.0,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-          ),
-        // Final Price (Green)
-        Text(
-          '\$${book.finalPrice.toStringAsFixed(2)}',
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-            color: AppColors.success,
-            fontWeight: FontWeight.bold,
-            fontSize: 12,
-          ),
+          ],
         ),
-        // Savings
+        // Savings - only show if there's space, make it very compact
         if (book.discountAmount > 0)
-          Text(
-            'Save \$${book.discountAmount.toStringAsFixed(2)}',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: AppColors.success,
-              fontSize: 9,
-              fontWeight: FontWeight.w500,
+          Padding(
+            padding: const EdgeInsets.only(top: 1),
+            child: Text(
+              'Save \$${book.discountAmount.toStringAsFixed(2)}',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: AppColors.success,
+                fontSize: 7,
+                fontWeight: FontWeight.w500,
+                height: 1.0,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
       ],
@@ -488,7 +551,52 @@ class _DiscountedBooksScreenState extends State<DiscountedBooksScreen> {
   }
 
   void _addToCart(DiscountedBook book) {
-    // Navigate to book detail page or show add to cart dialog
-    Navigator.pushNamed(context, '/book-detail', arguments: {'book': book});
+    // Convert DiscountedBook to Book and navigate to book detail page
+    final bookObject = _convertDiscountedBookToBook(book);
+    Navigator.pushNamed(
+      context,
+      '/book-detail',
+      arguments: {'book': bookObject},
+    );
+  }
+
+  Book _convertDiscountedBookToBook(DiscountedBook discountedBook) {
+    return Book(
+      id: discountedBook.id.toString(),
+      title: discountedBook.title,
+      description: discountedBook.description,
+      author: Author(
+        id: null, // Not available in DiscountedBook
+        name: discountedBook.author,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      ),
+      category: book_category.Category(
+        id: null, // Not available in DiscountedBook
+        name: discountedBook.category,
+      ),
+      primaryImageUrl: discountedBook.thumbnailUrl,
+      additionalImages: null,
+      price: discountedBook.finalPrice.toString(),
+      borrowPrice: null, // Not available in DiscountedBook
+      availableCopies: discountedBook.isAvailableForPurchase ? 1 : 0,
+      averageRating: null,
+      evaluationsCount: null,
+      isActive: discountedBook.isActive,
+      createdAt: null,
+      updatedAt: null,
+      isNew: false,
+      isAvailable: discountedBook.isAvailableForPurchase,
+      isAvailableForBorrow: discountedBook.isAvailableForBorrow,
+      quantity: discountedBook.isAvailableForPurchase ? 1 : 0,
+      borrowCount: null,
+      images: null,
+      name: discountedBook.title,
+      originalPrice: discountedBook.originalPrice,
+      discountedPrice: discountedBook.finalPrice,
+      discountAmount: discountedBook.discountAmount,
+      discountPercentage: discountedBook.discountPercentage,
+      hasActiveDiscount: discountedBook.isActive,
+    );
   }
 }

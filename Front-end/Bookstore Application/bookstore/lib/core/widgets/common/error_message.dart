@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../localization/app_localizations.dart';
 
 class ErrorMessage extends StatelessWidget {
   final String message;
@@ -31,14 +32,19 @@ class ErrorMessage extends StatelessWidget {
             ),
             if (onRetry != null) ...[
               const SizedBox(height: 16),
-              ElevatedButton.icon(
+              Builder(
+                builder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return ElevatedButton.icon(
                 onPressed: onRetry,
                 icon: const Icon(Icons.refresh),
-                label: const Text('Retry'),
+                    label: Text(localizations.retry),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Theme.of(context).primaryColor,
                   foregroundColor: Colors.white,
                 ),
+                  );
+                },
               ),
             ],
           ],

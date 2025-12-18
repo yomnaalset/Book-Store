@@ -5,6 +5,7 @@ import '../../../core/constants/app_dimensions.dart';
 import '../../../core/widgets/common/custom_button.dart';
 import '../../../core/widgets/common/custom_text_field.dart';
 import '../../../core/widgets/common/loading_indicator.dart';
+import '../../../core/localization/app_localizations.dart';
 import '../../books/providers/books_provider.dart';
 import '../../books/models/book.dart';
 import '../../books/screens/book_detail_screen.dart';
@@ -255,7 +256,13 @@ class _BookManagementScreenState extends State<BookManagementScreen> {
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (book.author != null) Text('By ${book.author!.name}'),
+                if (book.author != null)
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Text(localizations.byAuthor(book.author!.name));
+                    },
+                  ),
                 Row(
                   children: [
                     Text('Price: \$${book.priceAsDouble.toStringAsFixed(2)}'),

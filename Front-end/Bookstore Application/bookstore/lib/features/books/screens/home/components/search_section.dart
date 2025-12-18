@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../../../core/constants/app_colors.dart';
+import '../../../../../../core/localization/app_localizations.dart';
 
 class SearchSection extends StatefulWidget {
   const SearchSection({super.key});
@@ -38,97 +39,110 @@ class _SearchSectionState extends State<SearchSection> {
                 ),
               ],
             ),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Search books, authors...',
-                hintStyle: const TextStyle(
-                  color: AppColors.hintText,
-                  fontSize: 16,
-                ),
-                prefixIcon: const Icon(
-                  Icons.search,
-                  color: AppColors.uranianBlue,
-                  size: 24,
-                ),
-                suffixIcon: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Voice Search Button
-                    IconButton(
-                      onPressed: _startVoiceSearch,
-                      icon: const Icon(
-                        Icons.mic_outlined,
-                        color: AppColors.uranianBlue,
-                        size: 22,
-                      ),
-                      tooltip: 'Voice Search',
+            child: Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: localizations.searchBooksAuthorsPlaceholder,
+                    hintStyle: const TextStyle(
+                      color: AppColors.hintText,
+                      fontSize: 16,
                     ),
-                    const SizedBox(width: 8),
-                    // Camera Search Button
-                    IconButton(
-                      onPressed: _startImageSearch,
-                      icon: const Icon(
-                        Icons.camera_alt_outlined,
-                        color: AppColors.uranianBlue,
-                        size: 22,
-                      ),
-                      tooltip: 'Search by Image',
+                    prefixIcon: const Icon(
+                      Icons.search,
+                      color: AppColors.uranianBlue,
+                      size: 24,
                     ),
-                    const SizedBox(width: 8),
-                  ],
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(15),
-                  borderSide: BorderSide.none,
-                ),
-                filled: true,
-                fillColor: Theme.of(context).cardColor,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 16,
-                ),
-              ),
-              style: const TextStyle(
-                fontSize: 16,
-                color: AppColors.primaryText,
-              ),
+                    suffixIcon: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Voice Search Button
+                        IconButton(
+                          onPressed: _startVoiceSearch,
+                          icon: const Icon(
+                            Icons.mic_outlined,
+                            color: AppColors.uranianBlue,
+                            size: 22,
+                          ),
+                          tooltip: 'Voice Search',
+                        ),
+                        const SizedBox(width: 8),
+                        // Camera Search Button
+                        IconButton(
+                          onPressed: _startImageSearch,
+                          icon: const Icon(
+                            Icons.camera_alt_outlined,
+                            color: AppColors.uranianBlue,
+                            size: 22,
+                          ),
+                          tooltip: 'Search by Image',
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(15),
+                      borderSide: BorderSide.none,
+                    ),
+                    filled: true,
+                    fillColor: Theme.of(context).cardColor,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 16,
+                    ),
+                  ),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    color: AppColors.primaryText,
+                  ),
+                );
+              },
             ),
           ),
 
           const SizedBox(height: 12),
 
           // Search Field
-          TextField(
-            controller: _searchController,
-            decoration: InputDecoration(
-              hintText: 'Search books, authors...',
-              hintStyle: const TextStyle(
-                color: AppColors.hintText,
-                fontSize: 16,
-              ),
-              prefixIcon: const Icon(
-                Icons.search,
-                color: AppColors.uranianBlue,
-                size: 24,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(15),
-                borderSide: BorderSide.none,
-              ),
-              filled: true,
-              fillColor: AppColors.white,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 16,
-              ),
-            ),
-            style: const TextStyle(fontSize: 16, color: AppColors.primaryText),
-            onChanged: (value) {
-              // Handle search input
-              if (value.isNotEmpty) {
-                _onSearch(value);
-              }
+          Builder(
+            builder: (context) {
+              final localizations = AppLocalizations.of(context);
+              return TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: localizations.searchBooksAuthorsPlaceholder,
+                  hintStyle: const TextStyle(
+                    color: AppColors.hintText,
+                    fontSize: 16,
+                  ),
+                  prefixIcon: const Icon(
+                    Icons.search,
+                    color: AppColors.uranianBlue,
+                    size: 24,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(15),
+                    borderSide: BorderSide.none,
+                  ),
+                  filled: true,
+                  fillColor: AppColors.white,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 16,
+                  ),
+                ),
+                style: const TextStyle(
+                  fontSize: 16,
+                  color: AppColors.primaryText,
+                ),
+                onChanged: (value) {
+                  // Handle search input
+                  if (value.isNotEmpty) {
+                    _onSearch(value);
+                  }
+                },
+              );
             },
           ),
 
@@ -139,13 +153,50 @@ class _SearchSectionState extends State<SearchSection> {
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                _buildQuickFilterChip('All Books', true),
-                _buildQuickFilterChip('New Arrivals', false),
-                _buildQuickFilterChip('Most Popular', false),
-                _buildQuickFilterChip('Fiction', false),
-                _buildQuickFilterChip('Non-Fiction', false),
-                _buildQuickFilterChip('Science', false),
-                _buildQuickFilterChip('Technology', false),
+                Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return Row(
+                      children: [
+                        _buildQuickFilterChip(
+                          'all_books',
+                          localizations.allBooks,
+                          true,
+                        ),
+                        _buildQuickFilterChip(
+                          'new_arrivals',
+                          localizations.newArrivals,
+                          false,
+                        ),
+                        _buildQuickFilterChip(
+                          'most_popular',
+                          localizations.mostPopular,
+                          false,
+                        ),
+                        _buildQuickFilterChip(
+                          'fiction',
+                          localizations.fiction,
+                          false,
+                        ),
+                        _buildQuickFilterChip(
+                          'non_fiction',
+                          localizations.nonFiction,
+                          false,
+                        ),
+                        _buildQuickFilterChip(
+                          'science',
+                          localizations.science,
+                          false,
+                        ),
+                        _buildQuickFilterChip(
+                          'technology',
+                          localizations.technology,
+                          false,
+                        ),
+                      ],
+                    );
+                  },
+                ),
               ],
             ),
           ),
@@ -154,7 +205,7 @@ class _SearchSectionState extends State<SearchSection> {
     );
   }
 
-  Widget _buildQuickFilterChip(String label, bool isSelected) {
+  Widget _buildQuickFilterChip(String key, String label, bool isSelected) {
     return Container(
       margin: const EdgeInsets.only(right: 8),
       child: FilterChip(

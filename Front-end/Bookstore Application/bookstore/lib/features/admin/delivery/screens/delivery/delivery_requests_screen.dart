@@ -8,6 +8,7 @@ import '../../../widgets/admin_search_bar.dart';
 import '../../../widgets/library_manager/filters_bar.dart';
 import '../../../widgets/empty_state.dart';
 import '../../../../../routes/app_routes.dart';
+import '../../../../../../core/localization/app_localizations.dart';
 
 class DeliveryRequestsScreen extends StatefulWidget {
   const DeliveryRequestsScreen({super.key});
@@ -54,11 +55,12 @@ class _DeliveryRequestsScreenState extends State<DeliveryRequestsScreen> {
     // Check for authentication error
     if (provider.error != null && provider.error!.contains('401')) {
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Session expired. Please log in again.'),
+          SnackBar(
+            content: Text(localizations.sessionExpiredPleaseLogInAgain),
             backgroundColor: Colors.red,
-            duration: Duration(seconds: 3),
+            duration: const Duration(seconds: 3),
           ),
         );
         // Navigate to login screen
@@ -100,9 +102,10 @@ class _DeliveryRequestsScreenState extends State<DeliveryRequestsScreen> {
 
   void _navigateToMonitoringDetails(DeliveryRequest request) {
     // Delivery functionality has been removed from admin account
+    final localizations = AppLocalizations.of(context);
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Delivery monitoring is no longer available'),
+      SnackBar(
+        content: Text(localizations.deliveryMonitoringNoLongerAvailable),
         backgroundColor: Colors.orange,
       ),
     );
@@ -110,9 +113,10 @@ class _DeliveryRequestsScreenState extends State<DeliveryRequestsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Delivery Requests'),
+        title: Text(localizations.deliveryRequests),
         backgroundColor: const Color(0xFFB5E7FF),
         foregroundColor: Colors.white,
       ),
@@ -124,49 +128,53 @@ class _DeliveryRequestsScreenState extends State<DeliveryRequestsScreen> {
             child: Column(
               children: [
                 AdminSearchBar(
-                  hintText: 'Search delivery requests...',
+                  hintText: localizations.searchDeliveryRequests,
                   onSubmitted: _onSearchImmediate,
                   onChanged: _onSearch,
                 ),
                 const SizedBox(height: 16),
-                FiltersBar(
-                  filterOptions: const [
-                    'Pending',
-                    'Assigned',
-                    'In Progress',
-                    'Completed',
-                  ],
-                  selectedFilter: _getDisplayStatus(_selectedStatus),
-                  onFilterChanged: (filter) {
-                    if (filter == 'All') {
-                      _onFilterChanged(null);
-                    } else {
-                      // Map UI filter values to backend status values
-                      String? statusValue;
-                      switch (filter) {
-                        case 'Pending':
-                          statusValue = 'pending';
-                          break;
-                        case 'Assigned':
-                          statusValue = 'assigned';
-                          break;
-                        case 'In Progress':
-                          statusValue = 'in_progress';
-                          break;
-                        case 'Completed':
-                          statusValue = 'delivered';
-                          break;
-                        default:
-                          statusValue = filter?.toLowerCase().replaceAll(
-                            ' ',
-                            '_',
-                          );
-                      }
-                      _onFilterChanged(statusValue);
-                    }
-                  },
-                  onClearFilters: () {
-                    _onFilterChanged(null);
+                Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return FiltersBar(
+                      filterOptions: [
+                        localizations.statusPending,
+                        localizations.assigned,
+                        localizations.inProgress,
+                        localizations.statusCompleted,
+                      ],
+                      selectedFilter: _getDisplayStatus(
+                        _selectedStatus,
+                        localizations,
+                      ),
+                      onFilterChanged: (filter) {
+                        final localizations = AppLocalizations.of(context);
+                        if (filter == localizations.all) {
+                          _onFilterChanged(null);
+                        } else {
+                          // Map UI filter values (localized) to backend status values
+                          String? statusValue;
+                          if (filter == localizations.statusPending) {
+                            statusValue = 'pending';
+                          } else if (filter == localizations.assigned) {
+                            statusValue = 'assigned';
+                          } else if (filter == localizations.inProgress) {
+                            statusValue = 'in_progress';
+                          } else if (filter == localizations.statusCompleted) {
+                            statusValue = 'delivered';
+                          } else {
+                            statusValue = filter?.toLowerCase().replaceAll(
+                              ' ',
+                              '_',
+                            );
+                          }
+                          _onFilterChanged(statusValue);
+                        }
+                      },
+                      onClearFilters: () {
+                        _onFilterChanged(null);
+                      },
+                    );
                   },
                 ),
               ],
@@ -193,37 +201,47 @@ class _DeliveryRequestsScreenState extends State<DeliveryRequestsScreen> {
                           color: Colors.red,
                         ),
                         const SizedBox(height: 16),
-                        Text(
-                          'Error: ${provider.error}',
-                          style: const TextStyle(
-                            color: Colors.red,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 8),
-                        if (provider.error!.contains('401'))
-                          const Text(
-                            'Authentication failed. Please log in again.',
-                            style: TextStyle(
-                              color: Colors.orange,
-                              fontSize: 14,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        const SizedBox(height: 16),
-                        ElevatedButton.icon(
-                          onPressed: () {
-                            provider.clearError();
-                            _loadDeliveryRequests();
+                        Builder(
+                          builder: (context) {
+                            final localizations = AppLocalizations.of(context);
+                            return Column(
+                              children: [
+                                Text(
+                                  '${localizations.error}: ${provider.error}',
+                                  style: const TextStyle(
+                                    color: Colors.red,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 8),
+                                if (provider.error!.contains('401'))
+                                  Text(
+                                    localizations
+                                        .sessionExpiredPleaseLogInAgain,
+                                    style: const TextStyle(
+                                      color: Colors.orange,
+                                      fontSize: 14,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                const SizedBox(height: 16),
+                                ElevatedButton.icon(
+                                  onPressed: () {
+                                    provider.clearError();
+                                    _loadDeliveryRequests();
+                                  },
+                                  icon: const Icon(Icons.refresh),
+                                  label: Text(localizations.retry),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.blue,
+                                    foregroundColor: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            );
                           },
-                          icon: const Icon(Icons.refresh),
-                          label: const Text('Retry'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue,
-                            foregroundColor: Colors.white,
-                          ),
                         ),
                       ],
                     ),
@@ -231,10 +249,10 @@ class _DeliveryRequestsScreenState extends State<DeliveryRequestsScreen> {
                 }
 
                 if (provider.deliveryRequests.isEmpty) {
-                  return const EmptyState(
-                    title: 'No Delivery Requests',
+                  return EmptyState(
+                    title: localizations.noDeliveryRequests,
                     icon: Icons.local_shipping,
-                    message: 'There are no delivery requests at the moment.',
+                    message: localizations.thereAreNoDeliveryRequests,
                   );
                 }
 
@@ -427,18 +445,18 @@ class _DeliveryRequestsScreenState extends State<DeliveryRequestsScreen> {
     return '${date.day}/${date.month}/${date.year}';
   }
 
-  String? _getDisplayStatus(String? status) {
+  String? _getDisplayStatus(String? status, AppLocalizations localizations) {
     if (status == null) return null;
 
     switch (status) {
       case 'pending':
-        return 'Pending';
+        return localizations.statusPending;
       case 'assigned':
-        return 'Assigned';
+        return localizations.assigned;
       case 'in_progress':
-        return 'In Progress';
+        return localizations.inProgress;
       case 'delivered':
-        return 'Completed';
+        return localizations.statusCompleted;
       default:
         return status;
     }

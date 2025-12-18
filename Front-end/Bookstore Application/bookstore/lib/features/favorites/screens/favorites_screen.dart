@@ -4,6 +4,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 import '../../../core/extensions/theme_extensions.dart';
 import '../../../core/widgets/common/loading_indicator.dart';
+import '../../../core/localization/app_localizations.dart';
 import '../../books/models/book.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/favorites_provider.dart';
@@ -50,9 +51,10 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Favorites'),
+        title: Text(localizations.myFavorites),
         actions: [
           PopupMenuButton<String>(
             onSelected: (value) {
@@ -104,6 +106,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
   }
 
   Widget _buildEmptyFavorites() {
+    final localizations = AppLocalizations.of(context);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(AppDimensions.paddingL),
@@ -117,7 +120,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
             ),
             const SizedBox(height: AppDimensions.spacingL),
             Text(
-              'No favorites yet',
+              localizations.emptyFavorites,
               style: TextStyle(
                 fontSize: AppDimensions.fontSizeXL,
                 fontWeight: FontWeight.w600,
@@ -126,7 +129,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
             ),
             const SizedBox(height: AppDimensions.spacingM),
             Text(
-              'Start adding books to your favorites to see them here',
+              localizations.emptyFavoritesDescription,
               style: TextStyle(
                 fontSize: AppDimensions.fontSizeM,
                 color: context.secondaryTextColor,
@@ -154,7 +157,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
               controller: _searchController,
               onChanged: (value) => setState(() => _searchQuery = value),
               decoration: InputDecoration(
-                hintText: 'Search favorites...',
+                hintText: AppLocalizations.of(context).searchFavorites,
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: _searchQuery.isNotEmpty
                     ? IconButton(
@@ -394,13 +397,18 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                     icon: const Icon(Icons.favorite, color: AppColors.error),
                     tooltip: 'Remove from favorites',
                   ),
-                  IconButton(
-                    onPressed: () => _addToCart(book),
-                    icon: const Icon(
-                      Icons.add_shopping_cart,
-                      color: AppColors.primary,
-                    ),
-                    tooltip: 'Add to cart',
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return IconButton(
+                        onPressed: () => _addToCart(book),
+                        icon: const Icon(
+                          Icons.add_shopping_cart,
+                          color: AppColors.primary,
+                        ),
+                        tooltip: localizations.addToCartButton,
+                      );
+                    },
                   ),
                 ],
               ),
@@ -415,8 +423,8 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+          begin: AlignmentDirectional.topStart,
+          end: AlignmentDirectional.bottomEnd,
           colors: [
             AppColors.primary.withValues(alpha: 0.1),
             AppColors.uranianBlue.withValues(alpha: 0.1),
@@ -507,31 +515,30 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
   }
 
   void _showClearAllDialog(FavoritesProvider favoritesProvider) {
+    final localizations = AppLocalizations.of(context);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Clear All Favorites'),
-        content: const Text(
-          'Are you sure you want to remove all books from your favorites?',
-        ),
+        title: Text(localizations.clearAllFavorites),
+        content: Text(localizations.confirmClearFavorites),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(localizations.cancel),
           ),
           TextButton(
             onPressed: () {
               Navigator.pop(context);
               favoritesProvider.clearFavorites();
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('All favorites cleared'),
+                SnackBar(
+                  content: Text(localizations.favoritesCleared),
                   backgroundColor: AppColors.success,
                 ),
               );
             },
             child: Text(
-              'Clear All',
+              localizations.clearAll,
               style: TextStyle(color: context.errorColor),
             ),
           ),

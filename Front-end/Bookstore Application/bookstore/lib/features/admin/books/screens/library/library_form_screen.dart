@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../../../providers/library_manager/library_provider.dart';
 import '../../../../../../features/admin/models/library.dart';
+import '../../../../../../core/localization/app_localizations.dart';
 
 class LibraryFormScreen extends StatefulWidget {
   final Library? library;
@@ -65,9 +66,12 @@ class _LibraryFormScreenState extends State<LibraryFormScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error picking image: $e')));
+        final localizations = AppLocalizations.of(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(localizations.errorPickingImage(e.toString())),
+          ),
+        );
       }
     }
   }
@@ -88,9 +92,12 @@ class _LibraryFormScreenState extends State<LibraryFormScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error taking picture: $e')));
+        final localizations = AppLocalizations.of(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(localizations.errorTakingPicture(e.toString())),
+          ),
+        );
       }
     }
   }
@@ -127,9 +134,10 @@ class _LibraryFormScreenState extends State<LibraryFormScreen> {
           logoFile: _selectedImage,
         );
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           if (success) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Library created successfully')),
+              SnackBar(content: Text(localizations.libraryCreatedSuccessfully)),
             );
             Navigator.pop(context);
           } else {
@@ -143,9 +151,10 @@ class _LibraryFormScreenState extends State<LibraryFormScreen> {
           logoFile: _selectedImage,
         );
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           if (success) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Library updated successfully')),
+              SnackBar(content: Text(localizations.libraryUpdatedSuccessfully)),
             );
             Navigator.pop(context);
           } else {
@@ -171,9 +180,14 @@ class _LibraryFormScreenState extends State<LibraryFormScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.library == null ? 'Create Library' : 'Edit Library'),
+        title: Text(
+          widget.library == null
+              ? localizations.createLibrary
+              : localizations.editLibrary,
+        ),
         actions: [
           if (widget.library != null)
             IconButton(
@@ -194,19 +208,19 @@ class _LibraryFormScreenState extends State<LibraryFormScreen> {
                   children: [
                     // Basic Information
                     _buildSectionCard(
-                      title: 'Basic Information',
+                      title: localizations.basicInformation,
                       icon: Icons.info,
                       children: [
                         TextFormField(
                           controller: _nameController,
-                          decoration: const InputDecoration(
-                            labelText: 'Library Name *',
-                            border: OutlineInputBorder(),
-                            hintText: 'Enter library name',
+                          decoration: InputDecoration(
+                            labelText: '${localizations.libraryName} *',
+                            border: const OutlineInputBorder(),
+                            hintText: localizations.enterLibraryName,
                           ),
                           validator: (value) {
                             if (value == null || value.trim().isEmpty) {
-                              return 'Library name is required';
+                              return localizations.libraryNameRequired;
                             }
                             return null;
                           },
@@ -214,24 +228,24 @@ class _LibraryFormScreenState extends State<LibraryFormScreen> {
                         const SizedBox(height: 16),
                         TextFormField(
                           controller: _descriptionController,
-                          decoration: const InputDecoration(
-                            labelText: 'Details *',
-                            border: OutlineInputBorder(),
-                            hintText: 'Enter library details',
+                          decoration: InputDecoration(
+                            labelText: '${localizations.description} *',
+                            border: const OutlineInputBorder(),
+                            hintText: localizations.enterLibraryDetails,
                           ),
                           maxLines: 3,
                           validator: (value) {
                             if (value == null || value.trim().isEmpty) {
-                              return 'Details are required';
+                              return localizations.detailsRequired;
                             }
                             return null;
                           },
                         ),
                         const SizedBox(height: 16),
                         // Logo Image Picker Section
-                        const Text(
-                          'Library Logo',
-                          style: TextStyle(
+                        Text(
+                          localizations.libraryLogo,
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w500,
                           ),
@@ -252,8 +266,8 @@ class _LibraryFormScreenState extends State<LibraryFormScreen> {
                             ? const CircularProgressIndicator()
                             : Text(
                                 widget.library == null
-                                    ? 'Create Library'
-                                    : 'Update Library',
+                                    ? localizations.createLibrary
+                                    : localizations.updateLibrary,
                               ),
                       ),
                     ),
@@ -295,23 +309,33 @@ class _LibraryFormScreenState extends State<LibraryFormScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  ElevatedButton.icon(
-                    onPressed: _removeImage,
-                    icon: const Icon(Icons.delete, size: 18),
-                    label: const Text('Remove'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
-                      foregroundColor: Colors.white,
-                    ),
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return ElevatedButton.icon(
+                        onPressed: _removeImage,
+                        icon: const Icon(Icons.delete, size: 18),
+                        label: Text(localizations.remove),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          foregroundColor: Colors.white,
+                        ),
+                      );
+                    },
                   ),
-                  ElevatedButton.icon(
-                    onPressed: _pickImage,
-                    icon: const Icon(Icons.edit, size: 18),
-                    label: const Text('Change'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      foregroundColor: Colors.white,
-                    ),
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return ElevatedButton.icon(
+                        onPressed: _pickImage,
+                        icon: const Icon(Icons.edit, size: 18),
+                        label: Text(localizations.change),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -324,33 +348,46 @@ class _LibraryFormScreenState extends State<LibraryFormScreen> {
                 children: [
                   const Icon(Icons.image, size: 48, color: Colors.grey),
                   const SizedBox(height: 12),
-                  const Text(
-                    'No logo selected',
-                    style: TextStyle(fontSize: 16, color: Colors.grey),
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Text(
+                        localizations.noLogoSelected,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          color: Colors.grey,
+                        ),
+                      );
+                    },
                   ),
                   const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      ElevatedButton.icon(
-                        onPressed: _pickImage,
-                        icon: const Icon(Icons.photo_library, size: 18),
-                        label: const Text('Gallery'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue,
-                          foregroundColor: Colors.white,
-                        ),
-                      ),
-                      ElevatedButton.icon(
-                        onPressed: _takePicture,
-                        icon: const Icon(Icons.camera_alt, size: 18),
-                        label: const Text('Camera'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          foregroundColor: Colors.white,
-                        ),
-                      ),
-                    ],
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          ElevatedButton.icon(
+                            onPressed: _pickImage,
+                            icon: const Icon(Icons.photo_library, size: 18),
+                            label: Text(localizations.gallery),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                          ElevatedButton.icon(
+                            onPressed: _takePicture,
+                            icon: const Icon(Icons.camera_alt, size: 18),
+                            label: Text(localizations.camera),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ],
               ),
@@ -394,22 +431,21 @@ class _LibraryFormScreenState extends State<LibraryFormScreen> {
   }
 
   Future<void> _deleteLibrary() async {
+    final localizations = AppLocalizations.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Library'),
-        content: const Text(
-          'Are you sure you want to delete this library? This action cannot be undone.',
-        ),
+        title: Text(localizations.deleteLibrary),
+        content: Text(localizations.areYouSureDeleteLibrary),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text(localizations.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
+            child: Text(localizations.delete),
           ),
         ],
       ),
@@ -426,8 +462,9 @@ class _LibraryFormScreenState extends State<LibraryFormScreen> {
         await provider.deleteLibrary();
 
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Library deleted successfully')),
+            SnackBar(content: Text(localizations.libraryDeletedSuccessfully)),
           );
           Navigator.pop(context);
         }

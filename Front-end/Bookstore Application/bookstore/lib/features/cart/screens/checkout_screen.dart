@@ -6,6 +6,7 @@ import '../../../core/extensions/theme_extensions.dart';
 import '../../../core/widgets/common/custom_button.dart';
 import '../../../core/widgets/common/custom_text_field.dart';
 import '../../../core/widgets/common/loading_indicator.dart';
+import '../../../core/localization/app_localizations.dart';
 import '../providers/cart_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 
@@ -89,11 +90,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Checkout',
-          style: TextStyle(color: AppColors.white, fontWeight: FontWeight.bold),
+        title: Text(
+          localizations.checkout,
+          style: const TextStyle(
+            color: AppColors.white,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.white,
@@ -102,7 +107,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           child: Container(
             color: AppColors.primary,
             padding: const EdgeInsets.all(AppDimensions.paddingM),
-            child: _buildCustomStepper(),
+            child: _buildCustomStepper(context),
           ),
         ),
       ),
@@ -134,26 +139,27 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     );
   }
 
-  Widget _buildCustomStepper() {
+  Widget _buildCustomStepper(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Row(
       children: [
         _buildStep(
           stepNumber: 1,
-          title: 'Delivering',
+          title: localizations.delivering,
           isActive: _currentStep == 0,
           isCompleted: _currentStep > 0,
         ),
         _buildStepConnector(),
         _buildStep(
           stepNumber: 2,
-          title: 'Payment',
+          title: localizations.paymentMethod,
           isActive: _currentStep == 1,
           isCompleted: _currentStep > 1,
         ),
         _buildStepConnector(),
         _buildStep(
           stepNumber: 3,
-          title: 'Invoice',
+          title: localizations.invoice,
           isActive: _currentStep == 2,
           isCompleted: _currentStep > 2,
         ),
@@ -225,7 +231,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   Widget _buildShippingStep() {
+    final localizations = AppLocalizations.of(context);
     return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(AppDimensions.paddingL),
       child: Form(
         key: _formKey,
@@ -236,7 +244,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Delivery Information',
+                  localizations.deliveryInformation,
                   style: TextStyle(
                     fontSize: AppDimensions.fontSizeL,
                     fontWeight: FontWeight.bold,
@@ -246,7 +254,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 TextButton.icon(
                   onPressed: _navigateToProfile,
                   icon: const Icon(Icons.edit, size: 16),
-                  label: const Text('Edit Profile'),
+                  label: Text(localizations.editProfile),
                   style: TextButton.styleFrom(
                     foregroundColor: AppColors.primary,
                     textStyle: const TextStyle(fontSize: 14),
@@ -268,18 +276,18 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     color: AppColors.warning.withValues(alpha: 0.3),
                   ),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.info_outline,
                       color: AppColors.warning,
                       size: 20,
                     ),
-                    SizedBox(width: AppDimensions.spacingS),
+                    const SizedBox(width: AppDimensions.spacingS),
                     Expanded(
                       child: Text(
-                        'No delivery information found. Please click "Edit Profile" above to add your address information.',
-                        style: TextStyle(
+                        localizations.noDeliveryInfoFound,
+                        style: const TextStyle(
                           color: AppColors.warning,
                           fontSize: AppDimensions.fontSizeS,
                           fontWeight: FontWeight.w500,
@@ -301,18 +309,18 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     color: AppColors.primary.withValues(alpha: 0.3),
                   ),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.info_outline,
                       color: AppColors.primary,
                       size: 20,
                     ),
-                    SizedBox(width: AppDimensions.spacingS),
+                    const SizedBox(width: AppDimensions.spacingS),
                     Expanded(
                       child: Text(
-                        'Delivery information is read-only. Click "Edit Profile" above to modify your address.',
-                        style: TextStyle(
+                        localizations.deliveryInfoReadonly,
+                        style: const TextStyle(
                           color: AppColors.primary,
                           fontSize: AppDimensions.fontSizeS,
                         ),
@@ -324,21 +332,22 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
             // All fields are always disabled/read-only
             CustomTextField(
-              label: 'Address',
+              label: localizations.addressLabel,
               controller: _addressController,
               enabled: false,
-              validator: (value) =>
-                  value?.isEmpty == true ? 'Please enter your address' : null,
+              validator: (value) => value?.isEmpty == true
+                  ? localizations.pleaseEnterAddress
+                  : null,
               maxLines: 2,
             ),
             const SizedBox(height: AppDimensions.spacingM),
 
             CustomTextField(
-              label: 'City',
+              label: localizations.cityLabel,
               controller: _cityController,
               enabled: false,
               validator: (value) =>
-                  value?.isEmpty == true ? 'Please enter city' : null,
+                  value?.isEmpty == true ? localizations.pleaseEnterCity : null,
             ),
             const SizedBox(height: AppDimensions.spacingM),
 
@@ -346,22 +355,24 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               children: [
                 Expanded(
                   child: CustomTextField(
-                    label: 'ZIP Code',
+                    label: localizations.zipCodeLabel,
                     controller: _zipController,
                     enabled: false,
-                    validator: (value) =>
-                        value?.isEmpty == true ? 'Please enter ZIP code' : null,
+                    validator: (value) => value?.isEmpty == true
+                        ? localizations.pleaseEnterZip
+                        : null,
                     keyboardType: TextInputType.number,
                   ),
                 ),
                 const SizedBox(width: AppDimensions.spacingM),
                 Expanded(
                   child: CustomTextField(
-                    label: 'Country',
+                    label: localizations.countryLabel,
                     controller: _countryController,
                     enabled: false,
-                    validator: (value) =>
-                        value?.isEmpty == true ? 'Please enter country' : null,
+                    validator: (value) => value?.isEmpty == true
+                        ? localizations.pleaseEnterCountry
+                        : null,
                   ),
                 ),
               ],
@@ -373,13 +384,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   Widget _buildPaymentStep() {
+    final localizations = AppLocalizations.of(context);
     return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(AppDimensions.paddingL),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Payment Method',
+            localizations.paymentMethod,
             style: TextStyle(
               fontSize: AppDimensions.fontSizeL,
               fontWeight: FontWeight.bold,
@@ -406,14 +419,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
               ),
-              child: const Row(
+              child: Row(
                 children: [
-                  Icon(Icons.error_outline, color: Colors.red, size: 20),
-                  SizedBox(width: AppDimensions.spacingS),
+                  const Icon(Icons.error_outline, color: Colors.red, size: 20),
+                  const SizedBox(width: AppDimensions.spacingS),
                   Expanded(
                     child: Text(
-                      'Please fill in all card details to continue',
-                      style: TextStyle(
+                      localizations.fillAllCardDetails,
+                      style: const TextStyle(
                         color: Colors.red,
                         fontSize: AppDimensions.fontSizeS,
                       ),
@@ -428,9 +441,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   Widget _buildPaymentMethods() {
+    final localizations = AppLocalizations.of(context);
     final methods = [
-      {'id': 'mastercard', 'name': 'Mastercard', 'icon': Icons.credit_card},
-      {'id': 'cash', 'name': 'Cash Payment', 'icon': Icons.money},
+      {
+        'id': 'mastercard',
+        'name': localizations.mastercard,
+        'icon': Icons.credit_card,
+      },
+      {'id': 'cash', 'name': localizations.cashPayment, 'icon': Icons.money},
     ];
 
     return RadioGroup<String>(
@@ -453,13 +471,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   Widget _buildCardDetails() {
+    final localizations = AppLocalizations.of(context);
     return Form(
       key: _paymentFormKey,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Card Details',
+            localizations.cardDetails,
             style: TextStyle(
               fontSize: AppDimensions.fontSizeM,
               fontWeight: FontWeight.w600,
@@ -469,11 +488,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           const SizedBox(height: AppDimensions.spacingM),
 
           CustomTextField(
-            label: 'Card Number',
+            label: localizations.cardNumber,
             controller: _cardNumberController,
             validator: (value) {
               if (_showPaymentValidation && (value?.isEmpty == true)) {
-                return 'Required';
+                return localizations.required;
               }
               return null;
             },
@@ -486,11 +505,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           const SizedBox(height: AppDimensions.spacingM),
 
           CustomTextField(
-            label: 'Cardholder Name',
+            label: localizations.cardholderName,
             controller: _cardHolderController,
             validator: (value) {
               if (_showPaymentValidation && (value?.isEmpty == true)) {
-                return 'Required';
+                return localizations.required;
               }
               return null;
             },
@@ -505,11 +524,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             children: [
               Expanded(
                 child: CustomTextField(
-                  label: 'Expiry (MM/YY)',
+                  label: localizations.expiryDate,
                   controller: _expiryController,
                   validator: (value) {
                     if (_showPaymentValidation && (value?.isEmpty == true)) {
-                      return 'Required';
+                      return localizations.required;
                     }
                     return null;
                   },
@@ -523,11 +542,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               const SizedBox(width: AppDimensions.spacingM),
               Expanded(
                 child: CustomTextField(
-                  label: 'CVV',
+                  label: localizations.cvv,
                   controller: _cvvController,
                   validator: (value) {
                     if (_showPaymentValidation && (value?.isEmpty == true)) {
-                      return 'Required';
+                      return localizations.required;
                     }
                     return null;
                   },
@@ -547,13 +566,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   Widget _buildReviewStep(CartProvider cartProvider) {
+    final localizations = AppLocalizations.of(context);
     return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(AppDimensions.paddingL),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Order Summary',
+            localizations.orderSummary,
             style: TextStyle(
               fontSize: AppDimensions.fontSizeL,
               fontWeight: FontWeight.bold,
@@ -606,27 +627,27 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               child: Column(
                 children: [
                   _buildSummaryRow(
-                    'Subtotal',
+                    localizations.subtotal,
                     '\$${cartProvider.subtotal.toStringAsFixed(2)}',
                   ),
                   _buildSummaryRow(
-                    'Tax',
+                    localizations.tax,
                     '\$${cartProvider.taxAmount.toStringAsFixed(2)}',
                   ),
                   _buildSummaryRow(
-                    'Delivery',
+                    localizations.delivery,
                     '\$${cartProvider.deliveryCost.toStringAsFixed(2)}',
                   ),
                   if (cartProvider.discountAmount > 0) ...[
                     const Divider(),
                     _buildSummaryRow(
-                      'Discount',
+                      localizations.discount,
                       '-\$${cartProvider.discountAmount.toStringAsFixed(2)}',
                       color: AppColors.success,
                     ),
                   ],
                   _buildSummaryRow(
-                    'Total',
+                    localizations.total,
                     '\$${cartProvider.total.toStringAsFixed(2)}',
                     isTotal: true,
                   ),
@@ -676,6 +697,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   Widget _buildBottomNavigation(CartProvider cartProvider) {
+    final localizations = AppLocalizations.of(context);
     return Container(
       padding: const EdgeInsets.all(AppDimensions.paddingM),
       decoration: BoxDecoration(
@@ -694,7 +716,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             if (_currentStep > 0)
               Expanded(
                 child: CustomButton(
-                  text: 'Back',
+                  text: localizations.back,
                   onPressed: () => _previousStep(),
                   type: ButtonType.secondary,
                 ),
@@ -703,7 +725,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             Expanded(
               flex: 2,
               child: CustomButton(
-                text: _currentStep < 2 ? 'Continue' : 'Place Order',
+                text: _currentStep < 2
+                    ? localizations.continueButton
+                    : localizations.placeOrder,
                 onPressed: () =>
                     _currentStep < 2 ? _nextStep() : _placeOrder(cartProvider),
                 type: ButtonType.primary,
@@ -865,11 +889,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
         // Show success dialog
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           showDialog(
             context: context,
             builder: (context) => AlertDialog(
-              title: const Text('Order Placed'),
-              content: const Text('Your order has been placed successfully!'),
+              title: Text(localizations.orderPlaced),
+              content: Text(localizations.orderPlacedSuccessfully),
               actions: [
                 TextButton(
                   onPressed: () {
@@ -880,7 +905,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       (route) => route.isFirst,
                     );
                   },
-                  child: const Text('View Orders'),
+                  child: Text(localizations.viewOrders),
                 ),
               ],
             ),
@@ -889,17 +914,18 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       } else {
         // Show error dialog
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           showDialog(
             context: context,
             builder: (context) => AlertDialog(
-              title: const Text('Order Failed'),
+              title: Text(localizations.orderFailed),
               content: Text(
-                cartProvider.errorMessage ?? 'Failed to place order',
+                cartProvider.errorMessage ?? localizations.failedToPlaceOrder,
               ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('OK'),
+                  child: Text(localizations.ok),
                 ),
               ],
             ),
@@ -909,15 +935,16 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     } catch (e) {
       // Show error dialog
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
-            title: const Text('Order Failed'),
-            content: Text('Error: ${e.toString()}'),
+            title: Text(localizations.orderFailed),
+            content: Text('${localizations.error}: ${e.toString()}'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('OK'),
+                child: Text(localizations.ok),
               ),
             ],
           ),

@@ -8,6 +8,7 @@ import '../../../widgets/library_manager/admin_search_bar.dart';
 import '../../../widgets/library_manager/empty_state.dart';
 import '../../../../../routes/app_routes.dart';
 import '../../../../auth/providers/auth_provider.dart';
+import '../../../../../core/localization/app_localizations.dart';
 
 class DiscountsListScreen extends StatefulWidget {
   const DiscountsListScreen({super.key});
@@ -219,9 +220,10 @@ class _DiscountsListScreenState extends State<DiscountsListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Discounts'),
+        title: Text(localizations.discounts),
         actions: [
           IconButton(
             onPressed: () => _loadDiscounts(),
@@ -235,7 +237,7 @@ class _DiscountsListScreenState extends State<DiscountsListScreen> {
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: AdminSearchBar(
-              hintText: 'Search discounts...',
+              hintText: localizations.searchDiscounts,
               onChanged: _onSearch,
               onSubmitted: _onSearch,
             ),
@@ -244,24 +246,32 @@ class _DiscountsListScreenState extends State<DiscountsListScreen> {
           // Discount Type Filter
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: DropdownButtonFormField<String>(
-              initialValue: _discountType,
-              decoration: const InputDecoration(
-                labelText: 'Discount Type',
-                border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-              ),
-              items: const [
-                DropdownMenuItem(
-                  value: 'invoice',
-                  child: Text('Invoice Discounts'),
-                ),
-                DropdownMenuItem(value: 'book', child: Text('Book Discounts')),
-              ],
-              onChanged: _onDiscountTypeChanged,
+            child: Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return DropdownButtonFormField<String>(
+                  initialValue: _discountType,
+                  decoration: InputDecoration(
+                    labelText: localizations.discountType,
+                    border: const OutlineInputBorder(),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                  ),
+                  items: [
+                    DropdownMenuItem(
+                      value: 'invoice',
+                      child: Text(localizations.invoiceDiscounts),
+                    ),
+                    DropdownMenuItem(
+                      value: 'book',
+                      child: Text(localizations.bookDiscounts),
+                    ),
+                  ],
+                  onChanged: _onDiscountTypeChanged,
+                );
+              },
             ),
           ),
 
@@ -270,22 +280,36 @@ class _DiscountsListScreenState extends State<DiscountsListScreen> {
           // Status Filter
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: DropdownButtonFormField<String>(
-              initialValue: _selectedStatus,
-              decoration: const InputDecoration(
-                labelText: 'Status',
-                border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-              ),
-              items: const [
-                DropdownMenuItem(value: 'all', child: Text('All')),
-                DropdownMenuItem(value: 'active', child: Text('Active')),
-                DropdownMenuItem(value: 'inactive', child: Text('Inactive')),
-              ],
-              onChanged: _onFilterChanged,
+            child: Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return DropdownButtonFormField<String>(
+                  initialValue: _selectedStatus,
+                  decoration: InputDecoration(
+                    labelText: localizations.status,
+                    border: const OutlineInputBorder(),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                  ),
+                  items: [
+                    DropdownMenuItem(
+                      value: 'all',
+                      child: Text(localizations.all),
+                    ),
+                    DropdownMenuItem(
+                      value: 'active',
+                      child: Text(localizations.active),
+                    ),
+                    DropdownMenuItem(
+                      value: 'inactive',
+                      child: Text(localizations.inactive),
+                    ),
+                  ],
+                  onChanged: _onFilterChanged,
+                );
+              },
             ),
           ),
 
@@ -314,9 +338,14 @@ class _DiscountsListScreenState extends State<DiscountsListScreen> {
                           style: const TextStyle(color: Colors.red),
                         ),
                         const SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: _loadDiscounts,
-                          child: const Text('Retry'),
+                        Builder(
+                          builder: (context) {
+                            final localizations = AppLocalizations.of(context);
+                            return ElevatedButton(
+                              onPressed: _loadDiscounts,
+                              child: Text(localizations.retry),
+                            );
+                          },
                         ),
                       ],
                     ),
@@ -324,9 +353,9 @@ class _DiscountsListScreenState extends State<DiscountsListScreen> {
                 }
 
                 if (discounts.isEmpty) {
-                  return const EmptyState(
-                    title: 'No Discounts',
-                    message: 'No discounts found',
+                  return EmptyState(
+                    title: localizations.noDiscounts,
+                    message: localizations.noDiscountsFound,
                     icon: Icons.local_offer,
                   );
                 }
@@ -335,9 +364,9 @@ class _DiscountsListScreenState extends State<DiscountsListScreen> {
                 final filteredDiscounts = _filterDiscountsByStatus(discounts);
 
                 if (filteredDiscounts.isEmpty) {
-                  return const EmptyState(
-                    title: 'No Discounts',
-                    message: 'No discounts found for the selected filter',
+                  return EmptyState(
+                    title: localizations.noDiscounts,
+                    message: localizations.noDiscountsFoundFilter,
                     icon: Icons.local_offer,
                   );
                 }
@@ -360,7 +389,7 @@ class _DiscountsListScreenState extends State<DiscountsListScreen> {
           debugPrint('DEBUG: FAB pressed - attempting to navigate');
           _navigateToDiscountForm();
         },
-        tooltip: 'Create Discount',
+        tooltip: localizations.createDiscount,
         child: const Icon(Icons.add),
       ),
     );
@@ -396,38 +425,58 @@ class _DiscountsListScreenState extends State<DiscountsListScreen> {
 
             // Show book name for book discounts
             if (_discountType == 'book' && discount.bookName != null) ...[
-              Text(
-                'Book: ${discount.bookName}',
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey,
-                  fontWeight: FontWeight.bold,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              Builder(
+                builder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return Text(
+                    '${localizations.book}: ${discount.bookName}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  );
+                },
               ),
               const SizedBox(height: 4),
             ],
 
             Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    _getDisplayValue(discount),
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Colors.blue,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    String displayValue;
+                    if (discount is Discount) {
+                      displayValue = localizations.discountOff(
+                        discount.value.toInt(),
+                      );
+                    } else if (discount is BookDiscount) {
+                      displayValue = '\$${discount.discountedPrice}';
+                    } else {
+                      displayValue = 'N/A';
+                    }
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        displayValue,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.blue,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -445,12 +494,19 @@ class _DiscountsListScreenState extends State<DiscountsListScreen> {
                         ),
                         const SizedBox(width: 4),
                         Expanded(
-                          child: Text(
-                            'Start: ${_formatDate(discount.createdAt)}',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey,
-                            ),
+                          child: Builder(
+                            builder: (context) {
+                              final localizations = AppLocalizations.of(
+                                context,
+                              );
+                              return Text(
+                                '${localizations.start}: ${_formatDate(discount.createdAt)}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey,
+                                ),
+                              );
+                            },
                           ),
                         ),
                       ],
@@ -469,12 +525,19 @@ class _DiscountsListScreenState extends State<DiscountsListScreen> {
                         ),
                         const SizedBox(width: 4),
                         Expanded(
-                          child: Text(
-                            'End: ${_formatDate(discount.endDate!)}',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey,
-                            ),
+                          child: Builder(
+                            builder: (context) {
+                              final localizations = AppLocalizations.of(
+                                context,
+                              );
+                              return Text(
+                                '${localizations.end}: ${_formatDate(discount.endDate!)}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey,
+                                ),
+                              );
+                            },
                           ),
                         ),
                       ],
@@ -489,9 +552,17 @@ class _DiscountsListScreenState extends State<DiscountsListScreen> {
                 children: [
                   const Icon(Icons.shopping_cart, size: 16, color: Colors.grey),
                   const SizedBox(width: 4),
-                  Text(
-                    'Max Uses: ${_getUsageLimit(discount)}',
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Text(
+                        '${localizations.maxUses}: ${_getUsageLimit(discount)}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -503,12 +574,17 @@ class _DiscountsListScreenState extends State<DiscountsListScreen> {
                   const Icon(Icons.attach_money, size: 16, color: Colors.grey),
                   const SizedBox(width: 4),
                   _discountType == 'invoice'
-                      ? Text(
-                          'Percentage: ${discount.value}%',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey,
-                          ),
+                      ? Builder(
+                          builder: (context) {
+                            final localizations = AppLocalizations.of(context);
+                            return Text(
+                              '${localizations.percentage}: ${discount.value}%',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
+                              ),
+                            );
+                          },
                         )
                       : _buildBookDiscountPrice(discount),
                 ],
@@ -521,7 +597,12 @@ class _DiscountsListScreenState extends State<DiscountsListScreen> {
               child: ElevatedButton.icon(
                 onPressed: () => _navigateToDiscountDetails(discount),
                 icon: const Icon(Icons.visibility, size: 18),
-                label: const Text('Show details'),
+                label: Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return Text(localizations.showDetails);
+                  },
+                ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blue,
                   foregroundColor: Colors.white,
@@ -542,32 +623,34 @@ class _DiscountsListScreenState extends State<DiscountsListScreen> {
                 break;
             }
           },
-          itemBuilder: (context) => [
-            const PopupMenuItem(value: 'edit', child: Text('Edit')),
-            const PopupMenuItem(value: 'delete', child: Text('Delete')),
-          ],
+          itemBuilder: (context) {
+            final localizations = AppLocalizations.of(context);
+            return [
+              PopupMenuItem(value: 'edit', child: Text(localizations.edit)),
+              PopupMenuItem(value: 'delete', child: Text(localizations.delete)),
+            ];
+          },
         ),
       ),
     );
   }
 
   Future<void> _deleteDiscount(dynamic discount) async {
+    final localizations = AppLocalizations.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Discount'),
-        content: Text(
-          'Are you sure you want to delete "${discount.code}"? This action cannot be undone.',
-        ),
+        title: Text(localizations.deleteDiscount),
+        content: Text(localizations.deleteDiscountConfirmation(discount.code)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text(localizations.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
+            child: Text(localizations.delete),
           ),
         ],
       ),
@@ -585,8 +668,9 @@ class _DiscountsListScreenState extends State<DiscountsListScreen> {
         }
 
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Discount deleted successfully')),
+            SnackBar(content: Text(localizations.discountDeletedSuccessfully)),
           );
         }
       } catch (e) {
@@ -613,37 +697,33 @@ class _DiscountsListScreenState extends State<DiscountsListScreen> {
     return null;
   }
 
-  String _getDisplayValue(dynamic discount) {
-    if (discount is Discount) {
-      return '${discount.value}% OFF';
-    } else if (discount is BookDiscount) {
-      return '\$${discount.discountedPrice}';
-    }
-    return 'N/A';
-  }
-
   Widget _buildBookDiscountPrice(dynamic discount) {
     if (discount is BookDiscount && discount.bookPrice != null) {
-      return Row(
-        children: [
-          Text(
-            'Original: \$${discount.bookPrice!.toStringAsFixed(2)}',
-            style: const TextStyle(
-              fontSize: 12,
-              color: Colors.grey,
-              decoration: TextDecoration.lineThrough,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            'Now: \$${discount.discountedPrice.toStringAsFixed(2)}',
-            style: const TextStyle(
-              fontSize: 12,
-              color: Colors.green,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
+      return Builder(
+        builder: (context) {
+          final localizations = AppLocalizations.of(context);
+          return Row(
+            children: [
+              Text(
+                '${localizations.original}: \$${discount.bookPrice!.toStringAsFixed(2)}',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey,
+                  decoration: TextDecoration.lineThrough,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '${localizations.now}: \$${discount.discountedPrice.toStringAsFixed(2)}',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Colors.green,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          );
+        },
       );
     } else if (discount is BookDiscount) {
       return Text(

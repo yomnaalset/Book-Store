@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../orders/models/order.dart';
+import '../../../../core/localization/app_localizations.dart';
 
 class CleanOrderItemCard extends StatelessWidget {
   final OrderItem item;
@@ -8,6 +9,7 @@ class CleanOrderItemCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     // Get book image URL from either book object or snapshot
     final String? imageUrl = item.book.primaryImageUrl ?? item.bookImage;
     final String bookTitle = item.book.title;
@@ -73,7 +75,7 @@ class CleanOrderItemCard extends StatelessWidget {
                   const SizedBox(height: 4),
                   if (authorName != null && authorName.isNotEmpty) ...[
                     Text(
-                      'by $authorName',
+                      '${localizations.by} $authorName',
                       style: const TextStyle(fontSize: 14, color: Colors.grey),
                     ),
                     const SizedBox(height: 4),
@@ -84,12 +86,12 @@ class CleanOrderItemCard extends StatelessWidget {
                     mainAxisSize: MainAxisSize.max,
                     children: [
                       Text(
-                        'Qty: ${item.quantity}',
+                        '${localizations.qty}: ${item.quantity}',
                         style: const TextStyle(fontSize: 12),
                       ),
                       const SizedBox(width: 14),
                       Text(
-                        'Price: \$${item.price.toStringAsFixed(2)}',
+                        '${localizations.price}: \$${item.price.toStringAsFixed(2)}',
                         style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
@@ -97,7 +99,7 @@ class CleanOrderItemCard extends StatelessWidget {
                       ),
                       const Spacer(),
                       Text(
-                        'Total: \$${item.totalPrice.toStringAsFixed(2)}',
+                        '${localizations.total}: \$${item.totalPrice.toStringAsFixed(2)}',
                         style: const TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
@@ -121,7 +123,7 @@ class CleanOrderItemCard extends StatelessWidget {
                         border: Border.all(color: Colors.orange[100]!),
                       ),
                       child: Text(
-                        'Borrowed',
+                        localizations.borrowed,
                         style: TextStyle(
                           fontSize: 10,
                           color: Colors.orange[700],

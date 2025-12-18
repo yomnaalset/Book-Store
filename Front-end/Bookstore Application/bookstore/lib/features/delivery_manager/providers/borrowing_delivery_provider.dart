@@ -32,12 +32,45 @@ class BorrowingDeliveryProvider extends ChangeNotifier {
   }
 
   // Get available filter options for statuses
+  // These map to BorrowRequest status values on the backend
   List<String> get statusFilterOptions => [
     'pending',
     'confirmed',
     'in_delivery',
     'delivered',
+    'active',
+    'returned',
   ];
+
+  // Get display labels for filter options - DEPRECATED: Use AppLocalizations.getBorrowStatusLabel instead
+  // This method is kept for backward compatibility but should not be used in UI
+  @Deprecated('Use AppLocalizations.getBorrowStatusLabel instead')
+  String getStatusFilterLabel(String status) {
+    switch (status.toLowerCase()) {
+      case 'pending':
+        return 'Pending';
+      case 'confirmed':
+        return 'Confirmed';
+      case 'in_delivery':
+        return 'In Delivery';
+      case 'delivered':
+        return 'Delivered';
+      case 'active':
+        return 'Active';
+      case 'returned':
+        return 'Returned';
+      default:
+        return status
+            .replaceAll('_', ' ')
+            .split(' ')
+            .map((word) {
+              return word.isEmpty
+                  ? ''
+                  : word[0].toUpperCase() + word.substring(1).toLowerCase();
+            })
+            .join(' ');
+    }
+  }
 
   /// Set authentication token for both services
   void setToken(String? token) {
@@ -239,13 +272,27 @@ class BorrowingDeliveryProvider extends ChangeNotifier {
         // Sync delivery status from server (Django has already changed it to busy)
         await _syncDeliveryStatus();
 
-        debugPrint('BorrowingDeliveryProvider: Delivery started, status synced from server');
+        debugPrint(
+          'BorrowingDeliveryProvider: Delivery started, status synced from server',
+        );
 
         _setLoading(false);
         notifyListeners();
         return true;
       } else {
-        _setError(result['message'] ?? 'Failed to start delivery');
+        // Handle 403 Forbidden - don't retry
+        if (result['error_code'] == 'FORBIDDEN' ||
+            result['status_code'] == 403) {
+          _setError(
+            result['message'] ??
+                'You do not have permission to perform this action. Only delivery managers can start deliveries.',
+          );
+          debugPrint(
+            'BorrowingDeliveryProvider: 403 Forbidden - User does not have permission',
+          );
+        } else {
+          _setError(result['message'] ?? 'Failed to start delivery');
+        }
         _setLoading(false);
         return false;
       }
@@ -279,8 +326,8 @@ class BorrowingDeliveryProvider extends ChangeNotifier {
         _inProgressRequests.removeWhere((o) => o.id == orderId);
         _completedRequests.insert(0, completedOrder); // Add to beginning
 
-        // Update delivery status to online
-        _currentDeliveryStatus = 'online';
+        // Sync delivery status from server (backend determines if status should be online or busy)
+        await _syncDeliveryStatus();
 
         debugPrint(
           'BorrowingDeliveryProvider: Delivery completed, status now online',
@@ -290,12 +337,32 @@ class BorrowingDeliveryProvider extends ChangeNotifier {
         notifyListeners();
         return true;
       } else {
-        _setError(result['message'] ?? 'Failed to complete delivery');
+        // Handle 403 Forbidden - don't retry
+        if (result['error_code'] == 'FORBIDDEN' ||
+            result['status_code'] == 403) {
+          _setError(
+            result['message'] ??
+                'You do not have permission to perform this action. Only delivery managers can complete deliveries.',
+          );
+          debugPrint(
+            'BorrowingDeliveryProvider: 403 Forbidden - User does not have permission',
+          );
+        } else {
+          _setError(result['message'] ?? 'Failed to complete delivery');
+        }
         _setLoading(false);
         return false;
       }
     } catch (e) {
-      _setError('Error completing delivery: ${e.toString()}');
+      // Check if error contains 403
+      final errorString = e.toString().toLowerCase();
+      if (errorString.contains('403') || errorString.contains('forbidden')) {
+        _setError(
+          'You do not have permission to perform this action. Only delivery managers can complete deliveries.',
+        );
+      } else {
+        _setError('Error completing delivery: ${e.toString()}');
+      }
       _setLoading(false);
       return false;
     }

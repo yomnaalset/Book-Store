@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../../core/constants/app_colors.dart';
+import '../../../../../core/localization/app_localizations.dart';
 import '../../../../cart/providers/cart_provider.dart';
 import '../../../providers/books_provider.dart';
 import '../../../models/book.dart';
@@ -83,25 +84,34 @@ class _PurchasingBooksSectionState extends State<PurchasingBooksSection> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    Text(
-                      'Purchasing Books',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                    Builder(
+                      builder: (context) {
+                        final localizations = AppLocalizations.of(context);
+                        return Text(
+                          localizations.purchasingBooks,
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        );
+                      },
                     ),
                   ],
                 ),
-                TextButton(
+                Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return TextButton(
                   onPressed: () {
                     Navigator.pushNamed(context, '/categories');
                   },
-                  child: const Text(
-                    'View All',
-                    style: TextStyle(
+                      child: Text(
+                        localizations.viewAll,
+                        style: const TextStyle(
                       color: AppColors.success,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -116,18 +126,43 @@ class _PurchasingBooksSectionState extends State<PurchasingBooksSection> {
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                   const SizedBox(height: 16),
-                  Text(
-                    'No books available for purchase',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Text(
+                        localizations.noBooksAvailableForPurchase,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
+                            ),
+                      );
+                    },
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    'Check back later for new books to buy',
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Text(
+                        localizations.checkBackLaterForNewBooksToBuy,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Text(
+                        localizations.checkBackLaterForNewBooksToBuy,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -161,25 +196,35 @@ class _PurchasingBooksSectionState extends State<PurchasingBooksSection> {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  Text(
-                    'Purchasing Books',
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Text(
+                        localizations.purchasingBooks,
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
+                      );
+                    },
                   ),
                 ],
               ),
-              TextButton(
+              Builder(
+                builder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return TextButton(
                 onPressed: () {
                   Navigator.pushNamed(context, '/categories');
                 },
-                child: const Text(
-                  'View All',
-                  style: TextStyle(
+                    child: Text(
+                      localizations.viewAll,
+                      style: const TextStyle(
                     color: AppColors.success,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
+                  );
+                },
               ),
             ],
           ),
@@ -282,13 +327,18 @@ class _PurchasingBooksSectionState extends State<PurchasingBooksSection> {
                           color: AppColors.error,
                           borderRadius: BorderRadius.circular(6),
                         ),
-                        child: Text(
-                          '${book.savingsPercentage.toInt()}% OFF',
+                        child: Builder(
+                          builder: (context) {
+                            final localizations = AppLocalizations.of(context);
+                            return Text(
+                              localizations.discountOff(book.savingsPercentage.toInt()),
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 8,
                             fontWeight: FontWeight.bold,
                           ),
+                            );
+                          },
                         ),
                       ),
                     ),

@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.utils import timezone
 from decimal import Decimal
-from ..models import DiscountCode, DiscountUsage, User, BookDiscount, BookDiscountUsage, Book
+from ..models import DiscountCode, DiscountUsage, User, BookDiscount, Book
 
 
 class DiscountCodeSerializer(serializers.ModelSerializer):
@@ -253,64 +253,106 @@ class DiscountApplicationSerializer(serializers.Serializer):
 class DiscountUsageSerializer(serializers.ModelSerializer):
     """
     Serializer for DiscountUsage model - tracks when customers use discount codes.
+    Supports both general and book-specific discounts.
     """
-    discount_code_text = serializers.CharField(
-        source='discount_code.code',
-        read_only=True,
+    discount_code_text = serializers.SerializerMethodField(
         help_text="The discount code that was used"
     )
-    user_email = serializers.CharField(
-        source='user.email',
+    customer_email = serializers.CharField(
+        source='customer.email',
         read_only=True,
-        help_text="Email of the user who used the code"
+        help_text="Email of the customer who used the code"
     )
-    discount_percentage = serializers.DecimalField(
-        source='discount_code.discount_percentage',
-        max_digits=5,
-        decimal_places=2,
-        read_only=True,
-        help_text="Percentage discount applied"
+    discount_percentage = serializers.SerializerMethodField(
+        help_text="Percentage discount applied (for general discounts)"
+    )
+    book_name = serializers.SerializerMethodField(
+        help_text="Name of the book (for book discounts)"
+    )
+    discount_type = serializers.SerializerMethodField(
+        help_text="Type of discount"
     )
     
     class Meta:
         model = DiscountUsage
         fields = [
-            'id', 'discount_code', 'discount_code_text', 'user', 'user_email',
-            'order_amount', 'discount_amount', 'final_amount', 'used_at',
-            'payment_reference', 'discount_percentage'
+            'id', 'discount_code', 'book_discount', 'book', 'discount_code_text',
+            'book_name', 'customer', 'customer_email', 'order',
+            'original_price', 'discount_amount', 'final_price', 'used_at',
+            'discount_percentage', 'discount_type'
         ]
         read_only_fields = ['id', 'used_at']
+    
+    def get_discount_code_text(self, obj):
+        """Get discount code text from either discount_code or book_discount."""
+        if obj.discount_code:
+            return obj.discount_code.code
+        elif obj.book_discount:
+            return obj.book_discount.code
+        return None
+    
+    def get_discount_percentage(self, obj):
+        """Get discount percentage for general discounts."""
+        if obj.discount_code:
+            return obj.discount_code.discount_percentage
+        return None
+    
+    def get_book_name(self, obj):
+        """Get book name for book discounts."""
+        if obj.book:
+            return obj.book.name
+        elif obj.book_discount:
+            return obj.book_discount.book.name
+        return None
+    
+    def get_discount_type(self, obj):
+        """Get discount type."""
+        if obj.discount_code:
+            return 'general'
+        elif obj.book_discount:
+            return obj.book_discount.discount_type
+        return None
 
 
 class DiscountUsageCreateSerializer(serializers.ModelSerializer):
     """
     Serializer for creating discount usage records.
+    Supports both general and book-specific discounts.
     """
     
     class Meta:
         model = DiscountUsage
         fields = [
-            'discount_code', 'customer', 'order', 'discount_amount'
+            'discount_code', 'book_discount', 'book', 'customer', 'order',
+            'original_price', 'discount_amount', 'final_price'
         ]
     
-    # Removed validation since it's already done in the service layer
-    # and causes issues when passing IDs instead of instances
+    def validate(self, data):
+        """Validate that either discount_code or book_discount is provided."""
+        discount_code = data.get('discount_code')
+        book_discount = data.get('book_discount')
+        
+        if not discount_code and not book_discount:
+            raise serializers.ValidationError(
+                "Either discount_code or book_discount must be provided."
+            )
+        if discount_code and book_discount:
+            raise serializers.ValidationError(
+                "Cannot specify both discount_code and book_discount."
+            )
+        
+        return data
 
 
 class CustomerDiscountUsageSerializer(serializers.ModelSerializer):
     """
     Serializer for customer view of their discount usage history.
+    Supports both general and book-specific discounts.
     """
-    discount_code_text = serializers.CharField(
-        source='discount_code.code',
-        read_only=True
-    )
-    discount_percentage = serializers.DecimalField(
-        source='discount_code.discount_percentage',
-        max_digits=5,
-        decimal_places=2,
-        read_only=True
-    )
+    discount_code_text = serializers.SerializerMethodField()
+    discount_percentage = serializers.SerializerMethodField()
+    book_name = serializers.SerializerMethodField()
+    discount_type = serializers.SerializerMethodField()
     savings = serializers.DecimalField(
         source='discount_amount',
         max_digits=10,
@@ -321,9 +363,39 @@ class CustomerDiscountUsageSerializer(serializers.ModelSerializer):
     class Meta:
         model = DiscountUsage
         fields = [
-            'discount_code_text', 'discount_percentage', 'order_amount',
-            'savings', 'final_amount', 'used_at'
+            'discount_code_text', 'discount_percentage', 'book_name',
+            'discount_type', 'original_price', 'savings', 'final_price', 'used_at'
         ]
+    
+    def get_discount_code_text(self, obj):
+        """Get discount code text."""
+        if obj.discount_code:
+            return obj.discount_code.code
+        elif obj.book_discount:
+            return obj.book_discount.code
+        return None
+    
+    def get_discount_percentage(self, obj):
+        """Get discount percentage for general discounts."""
+        if obj.discount_code:
+            return obj.discount_code.discount_percentage
+        return None
+    
+    def get_book_name(self, obj):
+        """Get book name for book discounts."""
+        if obj.book:
+            return obj.book.name
+        elif obj.book_discount:
+            return obj.book_discount.book.name
+        return None
+    
+    def get_discount_type(self, obj):
+        """Get discount type."""
+        if obj.discount_code:
+            return 'general'
+        elif obj.book_discount:
+            return obj.book_discount.discount_type
+        return None
 
 
 # Book Discount Serializers
@@ -675,82 +747,11 @@ class BookDiscountApplicationSerializer(serializers.Serializer):
     )
 
 
-class BookDiscountUsageSerializer(serializers.ModelSerializer):
-    """
-    Serializer for BookDiscountUsage model - tracks when customers use book discounts.
-    """
-    discount_code_text = serializers.CharField(
-        source='book_discount.code',
-        read_only=True,
-        help_text="The discount code that was used"
-    )
-    book_name = serializers.CharField(
-        source='book_discount.book.name',
-        read_only=True,
-        help_text="Name of the book"
-    )
-    user_email = serializers.CharField(
-        source='customer.email',
-        read_only=True,
-        help_text="Email of the user who used the code"
-    )
-    discount_type = serializers.CharField(
-        source='book_discount.discount_type',
-        read_only=True,
-        help_text="Type of discount applied"
-    )
-    
-    class Meta:
-        model = BookDiscountUsage
-        fields = [
-            'id', 'book_discount', 'discount_code_text', 'book_name', 'customer', 'user_email',
-            'original_price', 'discount_amount', 'final_price', 'used_at', 'discount_type'
-        ]
-        read_only_fields = ['id', 'used_at']
-
-
-class BookDiscountUsageCreateSerializer(serializers.ModelSerializer):
-    """
-    Serializer for creating book discount usage records.
-    """
-    
-    class Meta:
-        model = BookDiscountUsage
-        fields = [
-            'book_discount', 'customer', 'order', 'original_price',
-            'discount_amount', 'final_price'
-        ]
-
-
-class CustomerBookDiscountUsageSerializer(serializers.ModelSerializer):
-    """
-    Serializer for customer view of their book discount usage history.
-    """
-    discount_code_text = serializers.CharField(
-        source='book_discount.code',
-        read_only=True
-    )
-    book_name = serializers.CharField(
-        source='book_discount.book.name',
-        read_only=True
-    )
-    discount_type = serializers.CharField(
-        source='book_discount.discount_type',
-        read_only=True
-    )
-    savings = serializers.DecimalField(
-        source='discount_amount',
-        max_digits=10,
-        decimal_places=2,
-        read_only=True
-    )
-    
-    class Meta:
-        model = BookDiscountUsage
-        fields = [
-            'discount_code_text', 'book_name', 'discount_type', 'original_price',
-            'savings', 'final_price', 'used_at'
-        ]
+# BookDiscountUsage serializers are now merged into DiscountUsage serializers above
+# Keeping these as aliases for backward compatibility during transition
+BookDiscountUsageSerializer = DiscountUsageSerializer
+BookDiscountUsageCreateSerializer = DiscountUsageCreateSerializer
+CustomerBookDiscountUsageSerializer = CustomerDiscountUsageSerializer
 
 
 class AvailableBooksSerializer(serializers.ModelSerializer):

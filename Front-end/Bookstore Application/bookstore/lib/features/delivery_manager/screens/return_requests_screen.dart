@@ -4,6 +4,7 @@ import '../../../core/localization/app_localizations.dart';
 import '../../../core/widgets/common/loading_indicator.dart';
 import '../../../core/widgets/common/error_message.dart';
 import '../../borrow/providers/return_request_provider.dart';
+import '../../borrow/models/return_request.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../widgets/search_filter_bar.dart';
 import 'return_request_detail_screen.dart';
@@ -133,12 +134,19 @@ class _ReturnRequestsScreenState extends State<ReturnRequestsScreen> {
           return Column(
             children: [
               // Search and Filter Bar
-              SearchFilterBar(
-                searchHint: 'Search return requests...',
-                filterLabel: 'Status',
-                filterOptions: statusFilterOptions,
-                onSearchChanged: _onSearchChanged,
-                onFilterChanged: _onFilterChanged,
+              Builder(
+                builder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return SearchFilterBar(
+                    initialSearchQuery: _searchQuery,
+                    initialFilterValue: _selectedStatus,
+                    searchHint: localizations.searchReturnRequests,
+                    filterLabel: localizations.status,
+                    filterOptions: statusFilterOptions,
+                    onSearchChanged: _onSearchChanged,
+                    onFilterChanged: _onFilterChanged,
+                  );
+                },
               ),
 
               // Return Requests List
@@ -158,29 +166,45 @@ class _ReturnRequestsScreenState extends State<ReturnRequestsScreen> {
                                 color: theme.colorScheme.outline,
                               ),
                               const SizedBox(height: 16),
-                              Text(
-                                _searchQuery.isNotEmpty ||
-                                        _selectedStatus != null
-                                    ? 'No matching return requests found'
-                                    : AppLocalizations.of(
-                                        context,
-                                      ).noReturnRequests,
-                                style: theme.textTheme.headlineSmall?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                _searchQuery.isNotEmpty ||
-                                        _selectedStatus != null
-                                    ? 'Try adjusting your search or filter criteria'
-                                    : AppLocalizations.of(
-                                        context,
-                                      ).noReturnRequestsDescription,
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                                textAlign: TextAlign.center,
+                              Builder(
+                                builder: (context) {
+                                  final localizations = AppLocalizations.of(
+                                    context,
+                                  );
+                                  return Column(
+                                    children: [
+                                      Text(
+                                        _searchQuery.isNotEmpty ||
+                                                _selectedStatus != null
+                                            ? localizations
+                                                  .noMatchingReturnRequests
+                                            : localizations.noReturnRequests,
+                                        style: theme.textTheme.headlineSmall
+                                            ?.copyWith(
+                                              color: theme
+                                                  .colorScheme
+                                                  .onSurfaceVariant,
+                                            ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        _searchQuery.isNotEmpty ||
+                                                _selectedStatus != null
+                                            ? localizations
+                                                  .tryAdjustingSearchOrFilterReturn
+                                            : localizations
+                                                  .noReturnRequestsDescription,
+                                        style: theme.textTheme.bodyMedium
+                                            ?.copyWith(
+                                              color: theme
+                                                  .colorScheme
+                                                  .onSurfaceVariant,
+                                            ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ],
+                                  );
+                                },
                               ),
                             ],
                           ),
@@ -191,43 +215,10 @@ class _ReturnRequestsScreenState extends State<ReturnRequestsScreen> {
                           itemBuilder: (context, index) {
                             final returnRequest =
                                 returnProvider.returnRequests[index];
-                            return Card(
-                              margin: const EdgeInsets.only(bottom: 12),
-                              child: ListTile(
-                                title: Text(
-                                  'Return Request #${returnRequest.id}',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                subtitle: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Book: ${returnRequest.borrowRequest.bookTitle ?? 'N/A'}',
-                                    ),
-                                    Text(
-                                      'Customer: ${returnRequest.borrowRequest.customerName ?? 'N/A'}',
-                                    ),
-                                    Text(
-                                      'Status: ${returnRequest.statusDisplay}',
-                                    ),
-                                  ],
-                                ),
-                                trailing: const Icon(Icons.arrow_forward_ios),
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) =>
-                                          ReturnRequestDetailScreen(
-                                            returnRequest: returnRequest,
-                                          ),
-                                    ),
-                                  );
-                                },
-                              ),
+                            return _buildReturnRequestCard(
+                              context,
+                              returnRequest,
+                              theme,
                             );
                           },
                         ),
@@ -236,6 +227,171 @@ class _ReturnRequestsScreenState extends State<ReturnRequestsScreen> {
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildReturnRequestCard(
+    BuildContext context,
+    ReturnRequest returnRequest,
+    ThemeData theme,
+  ) {
+    // Get status color
+    Color statusColor;
+    switch (returnRequest.status) {
+      case 'IN_PROGRESS':
+        statusColor = Colors.blue;
+        break;
+      case 'COMPLETED':
+        statusColor = Colors.green;
+        break;
+      case 'PENDING':
+        statusColor = Colors.orange;
+        break;
+      case 'APPROVED':
+        statusColor = Colors.teal;
+        break;
+      case 'ASSIGNED':
+        statusColor = Colors.purple;
+        break;
+      default:
+        statusColor = Colors.grey;
+    }
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) =>
+                  ReturnRequestDetailScreen(returnRequest: returnRequest),
+            ),
+          );
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Row(
+            children: [
+              // Content Section
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Book Name
+                    Builder(
+                      builder: (context) {
+                        final localizations = AppLocalizations.of(context);
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              returnRequest.borrowRequest.bookTitle ??
+                                  localizations.unknownBook,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF1A1A1A),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 8),
+                            // Customer Name
+                            Text(
+                              '${localizations.customer}: ${returnRequest.borrowRequest.customerName ?? localizations.unknown}',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w400,
+                                color: Colors.grey[700],
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            // Fine Information (if fine exists)
+                            if (returnRequest.fineAmount > 0) ...[
+                              const SizedBox(height: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: Colors.orange.withValues(alpha: 0.3),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.warning_amber_rounded,
+                                      size: 14,
+                                      color: Colors.orange,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Fine: \$${returnRequest.fineAmount.toStringAsFixed(2)}',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.orange,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ],
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    // Status Badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: statusColor.withValues(alpha: 0.3),
+                          width: 1,
+                        ),
+                      ),
+                      child: Text(
+                        '${AppLocalizations.of(context).status}: ${AppLocalizations.of(context).getReturnRequestStatusLabel(returnRequest.status)}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: statusColor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Arrow Icon
+              Padding(
+                padding: const EdgeInsets.only(left: 8.0),
+                child: Icon(
+                  Icons.arrow_forward_ios,
+                  size: 16,
+                  color: Colors.grey[400],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'dart:io';
 import '../../../admin/models/book.dart';
 import '../../services/manager_api_service.dart';
 
@@ -97,14 +98,24 @@ class BooksProvider extends ChangeNotifier {
     }
   }
 
-  Future<Book?> createBook(Book book) async {
+  Future<Book?> createBook(
+    Book book, {
+    File? imageFile,
+    Uint8List? imageBytes,
+    String? imageFileName,
+  }) async {
     _setLoading(true);
     _error = null;
     notifyListeners();
 
     try {
       debugPrint('DEBUG: BooksProvider - Creating book: ${book.toJson()}');
-      final newBook = await _apiService.createBook(book);
+      final newBook = await _apiService.createBook(
+        book,
+        imageFile: imageFile,
+        imageBytes: imageBytes,
+        imageFileName: imageFileName,
+      );
       debugPrint(
         'DEBUG: BooksProvider - Book created successfully: ${newBook.toJson()}',
       );
@@ -123,14 +134,24 @@ class BooksProvider extends ChangeNotifier {
     }
   }
 
-  Future<Book?> updateBook(Book book) async {
+  Future<Book?> updateBook(
+    Book book, {
+    File? imageFile,
+    Uint8List? imageBytes,
+    String? imageFileName,
+  }) async {
     _setLoading(true);
     _error = null;
     notifyListeners();
 
     try {
       debugPrint('DEBUG: BooksProvider - Updating book: ${book.toJson()}');
-      final updatedBook = await _apiService.updateBook(book);
+      final updatedBook = await _apiService.updateBook(
+        book,
+        imageFile: imageFile,
+        imageBytes: imageBytes,
+        imageFileName: imageFileName,
+      );
       debugPrint(
         'DEBUG: BooksProvider - Book updated successfully: ${updatedBook.toJson()}',
       );

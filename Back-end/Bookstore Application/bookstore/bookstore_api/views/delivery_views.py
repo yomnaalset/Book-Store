@@ -8,11 +8,12 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import Q
+from django.db import transaction
 from django.core.paginator import Paginator
 import logging
 from datetime import datetime
 
-from ..models import User, DeliveryRequest, Order, DeliveryAssignment, DeliveryStatusHistory, OrderItem, CartItem
+from ..models import User, DeliveryRequest, Order, DeliveryActivity, OrderItem, CartItem
 from ..models.library_model import Book
 from ..services import NotificationService
 from ..serializers.delivery_serializers import (
@@ -116,8 +117,7 @@ class DeliveryRequestAssignView(APIView):
             
             # Update request
             delivery_request.delivery_manager = delivery_manager
-            delivery_request.status = 'in_operation'
-            delivery_request.assigned_at = timezone.now()
+            delivery_request.status = 'assigned'
             delivery_request.save()
             
             # Create notification for delivery manager
@@ -125,12 +125,15 @@ class DeliveryRequestAssignView(APIView):
                 from ..services.notification_services import NotificationService
                 request_type = delivery_request.request_type.title()
                 order_info = ""
+                delivery_address = ""
                 if delivery_request.order:
                     order_info = f" for order #{delivery_request.order.order_number}"
+                    if hasattr(delivery_request.order, 'delivery_address'):
+                        delivery_address = delivery_request.order.delivery_address
                 NotificationService.create_notification(
                     user_id=delivery_manager.id,
                     title=f"New {request_type} Request Assigned",
-                    message=f"You have been assigned a {delivery_request.request_type} request{order_info}. Delivery address: {delivery_request.delivery_address}.",
+                    message=f"You have been assigned a {delivery_request.request_type} request{order_info}." + (f" Delivery address: {delivery_address}." if delivery_address else ""),
                     notification_type="delivery_request_assigned",
                     related_order_id=delivery_request.order.id if delivery_request.order else None
                 )
@@ -189,9 +192,8 @@ class DeliveryRequestStatusUpdateView(APIView):
             # Update request status
             delivery_request.status = new_status
             
-            # Set delivered_at timestamp if delivered
+            # Set status to delivered/completed
             if new_status == 'delivered':
-                delivery_request.delivered_at = timezone.now()
                 # Set delivery manager status back to Online when delivery is completed
                 if delivery_request.delivery_manager:
                     try:
@@ -231,7 +233,7 @@ class DeliveryManagerAssignedRequestsView(generics.ListAPIView):
         if status_filter:
             queryset = queryset.filter(status=status_filter)
         
-        return queryset.order_by('-assigned_at')
+        return queryset.order_by('-created_at')
 
 
 class LibraryAdminRequestListView(generics.ListAPIView):
@@ -326,13 +328,7 @@ class LibraryAdminAssignManagerView(APIView):
             
             # Update request
             delivery_request.delivery_manager = delivery_manager
-            delivery_request.status = 'in_operation'
-            delivery_request.assigned_at = timezone.now()
-            delivery_request.assigned_by = request.user  # Record who assigned the manager
-            if notes:
-                delivery_request.delivery_notes = notes
-                
-            # Save the delivery request
+            delivery_request.status = 'assigned'
             delivery_request.save()
             
             # Do not change delivery_manager.delivery_status here
@@ -343,12 +339,20 @@ class LibraryAdminAssignManagerView(APIView):
                 from ..services.notification_services import NotificationService
                 request_type = delivery_request.request_type.title()
                 order_info = ""
+                delivery_address = ""
                 if delivery_request.order:
                     order_info = f" for order #{delivery_request.order.order_number}"
+                    if hasattr(delivery_request.order, 'delivery_address'):
+                        delivery_address = delivery_request.order.delivery_address
+                message = f"You have been assigned a {delivery_request.request_type} request{order_info}."
+                if delivery_address:
+                    message += f" Delivery address: {delivery_address}."
+                if notes:
+                    message += f" Notes: {notes}."
                 NotificationService.create_notification(
                     user_id=delivery_manager.id,
                     title=f"New {request_type} Request Assigned",
-                    message=f"You have been assigned a {delivery_request.request_type} request{order_info}. Delivery address: {delivery_request.delivery_address}. Notes: {delivery_request.notes or 'None'}",
+                    message=message,
                     notification_type="delivery_request_assigned",
                     related_order_id=delivery_request.order.id if delivery_request.order else None
                 )
@@ -376,15 +380,22 @@ class OrderListView(generics.ListAPIView):
     
     def get_queryset(self):
         queryset = Order.objects.select_related('customer', 'payment').prefetch_related('items__book')
+        user = self.request.user
         
         # Filter by order type (purchase, borrowing, return_collection)
         # Default to 'purchase' for admin views to avoid mixing purchase and borrowing orders
         order_type = self.request.query_params.get('order_type')
         if order_type:
             queryset = queryset.filter(order_type=order_type)
+            
+            # For delivery managers viewing return_collection orders
+            # Show all return_collection orders (no assignment filtering)
+            if order_type == 'return_collection' and user.is_delivery_admin():
+                # Log for debugging
+                logger.info(f"OrderListView: Delivery manager {user.id} requesting return_collection orders")
+                logger.info(f"OrderListView: Before status filter, queryset count: {queryset.count()}")
         else:
             # Default to purchase orders for admin/delivery manager views
-            user = self.request.user
             if user.is_library_admin() or user.is_staff or user.is_delivery_admin():
                 queryset = queryset.filter(order_type='purchase')
         
@@ -504,13 +515,13 @@ class OrderViewSet(viewsets.ModelViewSet):
             # Delivery managers can see orders assigned to them
             # Include 'waiting_for_delivery_manager' status so they can see new orders waiting for their confirmation
             queryset = queryset.filter(
-                Q(delivery_assignment__delivery_manager=user, status='waiting_for_delivery_manager') |
-                Q(delivery_assignment__delivery_manager=user, status='assigned_to_delivery') |
-                Q(delivery_assignment__delivery_manager=user, status='in_delivery') |
-                Q(delivery_assignment__delivery_manager=user, status='delivery_in_progress') |
-                Q(delivery_assignment__delivery_manager=user, status='in_progress') |
-                Q(delivery_assignment__delivery_manager=user, status='delivered') |
-                Q(delivery_assignment__delivery_manager=user, status='completed')
+                Q(delivery_request__delivery_manager=user, status='waiting_for_delivery_manager') |
+                Q(delivery_request__delivery_manager=user, status='assigned_to_delivery') |
+                Q(delivery_request__delivery_manager=user, status='in_delivery') |
+                Q(delivery_request__delivery_manager=user, status='delivery_in_progress') |
+                Q(delivery_request__delivery_manager=user, status='in_progress') |
+                Q(delivery_request__delivery_manager=user, status='delivered') |
+                Q(delivery_request__delivery_manager=user, status='completed')
             ).distinct()
         elif user.is_library_admin() or user.is_staff:
             # Library admins and staff can see all orders
@@ -860,25 +871,32 @@ class OrderViewSet(viewsets.ModelViewSet):
             from datetime import timedelta
             estimated_delivery_time = timezone.now() + timedelta(hours=24)
             
-            # Check if delivery assignment already exists for this order
-            # Since DeliveryAssignment has OneToOneField with Order, we need to handle existing assignments
+            # Check if delivery request already exists for this order
+            # Since DeliveryRequest has OneToOneField with Order, we need to handle existing requests
             delivery_assignment = None
             try:
-                delivery_assignment = DeliveryAssignment.objects.get(order=order)
-                # Update existing assignment
+                delivery_assignment = DeliveryRequest.objects.get(order=order)
+                # Update existing request
                 delivery_assignment.delivery_manager = delivery_manager
                 delivery_assignment.status = 'assigned'
                 delivery_assignment.assigned_by = user
                 delivery_assignment.assigned_at = timezone.now()
                 delivery_assignment.estimated_delivery_time = estimated_delivery_time
                 delivery_assignment.save()
-            except DeliveryAssignment.DoesNotExist:
-                # Create new delivery assignment
-                delivery_assignment = DeliveryAssignment.objects.create(
+            except DeliveryRequest.DoesNotExist:
+                # Create new delivery request
+                delivery_assignment = DeliveryRequest.objects.create(
+                    customer=order.customer,
                     order=order,
+                    request_type='delivery',
+                    delivery_address=order.delivery_address if hasattr(order, 'delivery_address') else '',
+                    delivery_city=order.delivery_city if hasattr(order, 'delivery_city') else '',
+                    preferred_pickup_time=timezone.now(),
+                    preferred_delivery_time=estimated_delivery_time,
                     delivery_manager=delivery_manager,
                     status='assigned',
                     assigned_by=user,
+                    assigned_at=timezone.now(),
                     estimated_delivery_time=estimated_delivery_time
                 )
             
@@ -998,7 +1016,7 @@ class OrderViewSet(viewsets.ModelViewSet):
                 }, status=status.HTTP_403_FORBIDDEN)
             
             # Check if order is assigned to this delivery manager
-            delivery_assignment = DeliveryAssignment.objects.filter(
+            delivery_assignment = DeliveryRequest.objects.filter(
                 order=order,
                 delivery_manager=user,
             ).first()
@@ -1083,7 +1101,7 @@ class OrderViewSet(viewsets.ModelViewSet):
             
             # Check if order is assigned to this delivery manager
             # Accept multiple statuses since assignment can be in different states
-            delivery_assignment = DeliveryAssignment.objects.filter(
+            delivery_assignment = DeliveryRequest.objects.filter(
                 order=order,
                 delivery_manager=user,
                 status__in=['assigned', 'accepted', 'in_progress', 'in_transit']
@@ -1246,12 +1264,19 @@ class OrderViewSet(viewsets.ModelViewSet):
             from datetime import timedelta
             estimated_delivery_time = timezone.now() + timedelta(hours=24)
             
-            # Create delivery assignment
-            delivery_assignment = DeliveryAssignment.objects.create(
+            # Create delivery request
+            delivery_assignment = DeliveryRequest.objects.create(
+                customer=order.customer,
                 order=order,
+                request_type='delivery',
+                delivery_address=order.delivery_address if hasattr(order, 'delivery_address') else '',
+                delivery_city=order.delivery_city if hasattr(order, 'delivery_city') else '',
+                preferred_pickup_time=timezone.now(),
+                preferred_delivery_time=estimated_delivery_time,
                 delivery_manager=delivery_manager,
                 status='assigned',
                 assigned_by=user,
+                assigned_at=timezone.now(),
                 estimated_delivery_time=estimated_delivery_time
             )
             
@@ -1726,7 +1751,21 @@ class ETAActivityView(APIView):
             return Response({'error': 'Invalid datetime format, please use ISO format'}, status=status.HTTP_400_BAD_REQUEST)
 
         order = get_object_or_404(Order, id=order_id)
-        delivery_assignment, _ = DeliveryAssignment.objects.get_or_create(order=order, defaults={'delivery_manager': user})
+        delivery_assignment, _ = DeliveryRequest.objects.get_or_create(
+            order=order,
+            defaults={
+                'customer': order.customer,
+                'request_type': 'delivery',
+                'delivery_address': order.delivery_address if hasattr(order, 'delivery_address') else '',
+                'delivery_city': order.delivery_city if hasattr(order, 'delivery_city') else '',
+                'preferred_pickup_time': timezone.now(),
+                'preferred_delivery_time': eta,
+                'delivery_manager': user,
+                'status': 'assigned',
+                'assigned_at': timezone.now(),
+                'estimated_delivery_time': eta
+            }
+        )
         delivery_assignment.estimated_delivery_time = eta
         delivery_assignment.save()
 
@@ -1755,7 +1794,7 @@ class DeliveryActivityView(APIView):
             return Response({'error': 'order_id is required and status must be "start_delivery" or "complete_delivery"'}, status=status.HTTP_400_BAD_REQUEST)
 
         order = get_object_or_404(Order, id=order_id)
-        delivery_assignment = DeliveryAssignment.objects.filter(order=order).first()
+        delivery_assignment = DeliveryRequest.objects.filter(order=order).first()
 
         if not delivery_assignment:
             return Response({'error': 'No delivery assignment found for this order'}, status=status.HTTP_404_NOT_FOUND)
@@ -1801,50 +1840,66 @@ class DeliveryActivityView(APIView):
         return Response({'success': True, 'message': message}, status=status.HTTP_201_CREATED)
 
 # ------------------------------------------------------------
-# 🚀 Start Delivery Endpoint (Automatic Status Update)
+# 🚀 Unified Start Delivery Endpoint (Backend-Driven)
 # ------------------------------------------------------------
 class StartDeliveryView(APIView):
     """
-    POST /api/delivery/start_delivery/
+    POST /api/delivery/start-delivery/
     
-    When the delivery manager starts delivering an order:
-    - Automatically changes delivery manager status to "busy"
-    - Updates order status to "in_delivery"
+    Unified endpoint for starting delivery across all types:
+    - Purchase Orders
+    - Borrow Requests
+    - Return Requests (with or without fine)
+    
+    When delivery manager starts delivery:
+    1. Updates delivery object status first (mandatory)
+    2. Saves timestamps (pickedUpAt/startedAt)
+    3. Calls DeliveryProfileService.start_delivery_task() to set status to BUSY
     
     Request body:
     {
-        "delivery_manager_id": <int>,
-        "order_id": <int>
+        "delivery_type": "order" | "borrow" | "return",
+        "delivery_id": <int>,  # order_id, borrow_request_id, or return_request_id
+        "delivery_manager_id": <int>  # optional, defaults to request.user
     }
     """
     permission_classes = [permissions.IsAuthenticated]
     
     def post(self, request):
         try:
+            delivery_type = request.data.get('delivery_type')
+            delivery_id = request.data.get('delivery_id')
             delivery_manager_id = request.data.get('delivery_manager_id')
-            order_id = request.data.get('order_id')
             
             # Validate required fields
-            if not delivery_manager_id:
+            if not delivery_type:
                 return Response({
-                    'error': 'delivery_manager_id is required'
+                    'error': 'delivery_type is required. Must be "order", "borrow", or "return"'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            if not order_id:
+            if delivery_type not in ['order', 'borrow', 'return']:
                 return Response({
-                    'error': 'order_id is required'
+                    'error': f'Invalid delivery_type. Must be "order", "borrow", or "return". Got: {delivery_type}'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # Fetch the delivery manager
-            try:
-                delivery_manager = User.objects.get(
-                    id=delivery_manager_id,
-                    user_type='delivery_admin'
-                )
-            except User.DoesNotExist:
+            if not delivery_id:
                 return Response({
-                    'error': 'Delivery manager not found or invalid'
-                }, status=status.HTTP_404_NOT_FOUND)
+                    'error': 'delivery_id is required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Get delivery manager (use authenticated user if not provided)
+            if delivery_manager_id:
+                try:
+                    delivery_manager = User.objects.get(
+                        id=delivery_manager_id,
+                        user_type='delivery_admin'
+                    )
+                except User.DoesNotExist:
+                    return Response({
+                        'error': 'Delivery manager not found or invalid'
+                    }, status=status.HTTP_404_NOT_FOUND)
+            else:
+                delivery_manager = request.user
             
             # Verify user is a delivery admin
             if not delivery_manager.is_delivery_admin():
@@ -1854,89 +1909,614 @@ class StartDeliveryView(APIView):
             
             # Security check: Ensure authenticated user matches delivery_manager_id (unless admin)
             authenticated_user = request.user
-            if (authenticated_user.id != delivery_manager_id and 
+            if (delivery_manager_id and 
+                authenticated_user.id != delivery_manager_id and 
                 not authenticated_user.is_library_admin()):
                 return Response({
                     'error': 'You can only start delivery for your own account'
                 }, status=status.HTTP_403_FORBIDDEN)
             
-            # Fetch the order
-            try:
-                order = Order.objects.get(id=order_id)
-            except Order.DoesNotExist:
-                return Response({
-                    'error': 'Order not found'
-                }, status=status.HTTP_404_NOT_FOUND)
-            
-            # Check if order is assigned to this delivery manager
-            delivery_assignment = DeliveryAssignment.objects.filter(
-                order=order,
-                delivery_manager=delivery_manager
-            ).first()
-            
-            if not delivery_assignment:
-                return Response({
-                    'error': 'Order is not assigned to this delivery manager'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            # Update delivery manager status to "busy" (automatic)
-            try:
-                from ..services.delivery_profile_services import DeliveryProfileService
-                DeliveryProfileService.start_delivery_task(delivery_manager)
-                logger.info(f"Automatically changed delivery manager {delivery_manager.id} status to busy when starting delivery")
-            except Exception as e:
-                logger.error(f"Failed to update delivery manager status to busy: {str(e)}")
-                return Response({
-                    'error': f'Failed to update delivery manager status: {str(e)}'
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-            
-            # Update order status to "in_delivery"
-            order.status = 'in_delivery'
-            order.save()
-            
-            # Update delivery assignment status if it exists
-            if delivery_assignment:
-                delivery_assignment.status = 'in_transit'
-                delivery_assignment.started_at = timezone.now()
-                delivery_assignment.save()
-            
-            # If this is a borrowing order, also update the borrow request status
-            if order.order_type == 'borrowing' and order.borrow_request:
-                from ..models.borrowing_model import BorrowRequest, BorrowStatusChoices
-                borrow_request = order.borrow_request
-                borrow_request.status = BorrowStatusChoices.OUT_FOR_DELIVERY
-                borrow_request.delivery_person = delivery_manager
-                if not borrow_request.pickup_date:
-                    borrow_request.pickup_date = timezone.now()
-                borrow_request.save()
-                logger.info(f"Updated borrow request {borrow_request.id} status to OUT_FOR_DELIVERY")
-            
-            # Create delivery activity log
-            try:
-                from ..models.delivery_model import DeliveryActivity
-                DeliveryActivity.objects.create(
-                    delivery_manager=delivery_manager,
-                    order=order,
-                    activity_type='start_delivery',
-                    activity_data={'order_number': order.order_number},
-                )
-            except Exception as e:
-                logger.warning(f"Failed to create delivery activity log: {str(e)}")
-            
-            return Response({
-                'success': True,
-                'message': 'Delivery started successfully. Delivery manager status automatically changed to busy.',
-                'order_id': order.id,
-                'order_status': order.status,
-                'delivery_manager_id': delivery_manager.id,
-                'delivery_manager_status': 'busy'
-            }, status=status.HTTP_200_OK)
+            # Handle different delivery types
+            if delivery_type == 'order':
+                return self._start_order_delivery(delivery_manager, delivery_id)
+            elif delivery_type == 'borrow':
+                return self._start_borrow_delivery(delivery_manager, delivery_id)
+            elif delivery_type == 'return':
+                return self._start_return_delivery(delivery_manager, delivery_id)
             
         except Exception as e:
-            logger.error(f"Error starting delivery: {str(e)}")
+            logger.error(f"Error starting delivery: {str(e)}", exc_info=True)
             return Response({
                 'error': f'Failed to start delivery: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def _start_order_delivery(self, delivery_manager, order_id):
+        """Start delivery for a purchase order"""
+        try:
+            order = Order.objects.get(id=order_id)
+        except Order.DoesNotExist:
+            return Response({
+                'error': 'Order not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Check if order is assigned to this delivery manager
+        delivery_assignment = DeliveryRequest.objects.filter(
+            order=order,
+            delivery_manager=delivery_manager
+        ).first()
+        
+        if not delivery_assignment:
+            return Response({
+                'error': 'Order is not assigned to this delivery manager'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if assignment is accepted (can only start delivery after acceptance)
+        if delivery_assignment.status not in ['accepted', 'assigned']:
+            return Response({
+                'error': f'Assignment must be accepted before starting delivery. Current assignment status: {delivery_assignment.status}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if order is in a valid state to start delivery
+        # Prevent starting delivery that is already completed or in progress
+        ACTIVE_STATUSES = ['in_delivery', 'in_progress', 'delivery_in_progress', 'completed', 'delivered']
+        if order.status in ACTIVE_STATUSES:
+            return Response({
+                'error': f'Cannot start delivery. Order is already in progress or completed. Current status: {order.status}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if order.status not in ['accepted', 'assigned', 'assigned_to_delivery', 'waiting_for_delivery_manager']:
+            return Response({
+                'error': f'Order must be in a valid state to start delivery. Current status: {order.status}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # STEP 1: Update order status first (mandatory) - MUST complete before updating DeliveryProfile
+        # This ensures transaction safety: order is in delivery state before manager becomes busy
+        order.status = 'in_delivery'
+        order.save()
+        
+        # Update delivery assignment status
+        if delivery_assignment:
+            delivery_assignment.status = 'in_progress'
+            delivery_assignment.started_at = timezone.now()
+            delivery_assignment.save()
+        
+        # STEP 2: Update delivery manager status to BUSY (ONLY after order status successfully saved)
+        # Transaction safety: If this fails, the transaction will rollback order status too
+        try:
+            from ..services.delivery_profile_services import DeliveryProfileService
+            DeliveryProfileService.start_delivery_task(delivery_manager)
+            logger.info(f"Automatically changed delivery manager {delivery_manager.id} status to busy when starting order delivery")
+        except Exception as e:
+            logger.error(f"Failed to update delivery manager status to busy: {str(e)}")
+            # Transaction will automatically rollback due to @transaction.atomic
+            return Response({
+                'error': f'Failed to update delivery manager status: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        # Create delivery activity log
+        try:
+            from ..models.delivery_model import DeliveryActivity
+            DeliveryActivity.objects.create(
+                delivery_manager=delivery_manager,
+                order=order,
+                activity_type='start_delivery',
+                activity_data={'order_number': order.order_number},
+            )
+        except Exception as e:
+            logger.warning(f"Failed to create delivery activity log: {str(e)}")
+        
+        return Response({
+            'success': True,
+            'message': 'Delivery started successfully. Delivery manager status automatically changed to busy.',
+            'delivery_type': 'order',
+            'delivery_id': order.id,
+            'order_status': order.status,
+            'delivery_manager_id': delivery_manager.id,
+            'delivery_manager_status': 'busy',
+            'started_at': delivery_assignment.started_at.isoformat() if delivery_assignment and delivery_assignment.started_at else None
+        }, status=status.HTTP_200_OK)
+    
+    def _start_borrow_delivery(self, delivery_manager, borrow_id):
+        """Start delivery for a borrow request"""
+        try:
+            from ..models.borrowing_model import BorrowRequest, BorrowStatusChoices
+            borrow_request = BorrowRequest.objects.get(id=borrow_id)
+        except BorrowRequest.DoesNotExist:
+            return Response({
+                'error': 'Borrow request not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Check if borrow request is assigned to this delivery manager
+        if borrow_request.delivery_person and borrow_request.delivery_person.id != delivery_manager.id:
+            return Response({
+                'error': 'Borrow request is not assigned to this delivery manager'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if borrow request is in a valid state to start delivery
+        # Prevent starting delivery that is already completed or in progress
+        ACTIVE_STATUSES = [
+            BorrowStatusChoices.OUT_FOR_DELIVERY,
+            BorrowStatusChoices.ACTIVE,
+            BorrowStatusChoices.DELIVERED,
+            'out_for_delivery',
+            'active',
+            'delivered'
+        ]
+        if borrow_request.status in ACTIVE_STATUSES:
+            return Response({
+                'error': f'Cannot start delivery. Borrow request is already in progress or completed. Current status: {borrow_request.status}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        valid_statuses = [
+            BorrowStatusChoices.ASSIGNED_TO_DELIVERY,
+            BorrowStatusChoices.PENDING_DELIVERY,
+            BorrowStatusChoices.PREPARING,
+            'assigned_to_delivery',
+            'pending_delivery',
+            'preparing',
+            'assigned',
+            'pending',
+            'confirmed'
+        ]
+        
+        if borrow_request.status not in valid_statuses:
+            return Response({
+                'error': f'Borrow request must be in a valid state to start delivery. Current status: {borrow_request.status}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # STEP 1: Update borrow request status first (mandatory) - MUST complete before updating DeliveryProfile
+        borrow_request.status = BorrowStatusChoices.OUT_FOR_DELIVERY
+        borrow_request.delivery_person = delivery_manager
+        if not borrow_request.pickup_date:
+            borrow_request.pickup_date = timezone.now()
+        borrow_request.save()
+        
+        # Update associated order if exists
+        order = None
+        if hasattr(borrow_request, 'order') and borrow_request.order:
+            order = borrow_request.order
+            order.status = 'in_delivery'
+            order.save()
+        
+        # STEP 2: Update delivery manager status to BUSY (ONLY after borrow status successfully saved)
+        # This ensures transaction safety: borrow is OUT_FOR_DELIVERY before manager becomes busy
+        try:
+            from ..services.delivery_profile_services import DeliveryProfileService
+            DeliveryProfileService.start_delivery_task(delivery_manager)
+            logger.info(f"Automatically changed delivery manager {delivery_manager.id} status to busy when starting borrow delivery")
+        except Exception as e:
+            logger.error(f"Failed to update delivery manager status to busy: {str(e)}")
+            # Rollback borrow status if delivery profile update fails
+            borrow_request.status = BorrowStatusChoices.ASSIGNED_TO_DELIVERY
+            borrow_request.save()
+            return Response({
+                'error': f'Failed to update delivery manager status: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        return Response({
+            'success': True,
+            'message': 'Delivery started successfully. Delivery manager status automatically changed to busy.',
+            'delivery_type': 'borrow',
+            'delivery_id': borrow_request.id,
+            'borrow_status': borrow_request.status,
+            'delivery_manager_id': delivery_manager.id,
+            'delivery_manager_status': 'busy',
+            'picked_up_at': borrow_request.pickup_date.isoformat() if borrow_request.pickup_date else None
+        }, status=status.HTTP_200_OK)
+    
+    def _start_return_delivery(self, delivery_manager, return_id):
+        """Start delivery for a return request"""
+        try:
+            from ..models.return_model import ReturnRequest, ReturnStatus
+            return_request = ReturnRequest.objects.get(id=return_id)
+        except ReturnRequest.DoesNotExist:
+            return Response({
+                'error': 'Return request not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Check if return request is assigned to this delivery manager
+        if return_request.delivery_manager and return_request.delivery_manager.id != delivery_manager.id:
+            return Response({
+                'error': 'Return request is not assigned to this delivery manager'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if return request is in a valid state to start delivery
+        # Prevent starting delivery that is already completed or in progress
+        ACTIVE_STATUSES = [ReturnStatus.IN_PROGRESS, ReturnStatus.COMPLETED]
+        if return_request.status in ACTIVE_STATUSES:
+            return Response({
+                'error': f'Cannot start delivery. Return request is already in progress or completed. Current status: {return_request.get_status_display()}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        valid_statuses = [
+            ReturnStatus.APPROVED,
+            ReturnStatus.ASSIGNED,
+            ReturnStatus.ACCEPTED
+        ]
+        
+        if return_request.status not in valid_statuses:
+            return Response({
+                'error': f'Return request must be APPROVED, ASSIGNED, or ACCEPTED to start delivery. Current status: {return_request.get_status_display()}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # STEP 1: Update return request status first (mandatory)
+        return_request.status = ReturnStatus.IN_PROGRESS
+        return_request.picked_up_at = timezone.now()
+        return_request.save()
+        
+        # Update borrowing status
+        borrowing = return_request.borrowing
+        from ..models.borrowing_model import BorrowStatusChoices
+        borrowing.status = BorrowStatusChoices.OUT_FOR_RETURN_PICKUP
+        borrowing.save()
+        
+        # STEP 2: Update delivery manager status to BUSY (ONLY after return status successfully saved)
+        # Transaction safety: If this fails, the transaction will rollback return status too
+        try:
+            from ..services.delivery_profile_services import DeliveryProfileService
+            DeliveryProfileService.start_delivery_task(delivery_manager)
+            logger.info(f"Automatically changed delivery manager {delivery_manager.id} status to busy when starting return delivery")
+        except Exception as e:
+            logger.error(f"Failed to update delivery manager status to busy: {str(e)}")
+            # Transaction will automatically rollback due to @transaction.atomic
+            return Response({
+                'error': f'Failed to update delivery manager status: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        return Response({
+            'success': True,
+            'message': 'Delivery started successfully. Delivery manager status automatically changed to busy.',
+            'delivery_type': 'return',
+            'delivery_id': return_request.id,
+            'return_status': return_request.status,
+            'delivery_manager_id': delivery_manager.id,
+            'delivery_manager_status': 'busy',
+            'picked_up_at': return_request.picked_up_at.isoformat() if return_request.picked_up_at else None
+        }, status=status.HTTP_200_OK)
+
+# ------------------------------------------------------------
+# ✅ Unified Complete Delivery Endpoint (Backend-Driven)
+# ------------------------------------------------------------
+class CompleteDeliveryView(APIView):
+    """
+    POST /api/delivery/complete-delivery/
+    
+    Unified endpoint for completing delivery across all types:
+    - Purchase Orders → COMPLETED
+    - Borrow Requests → ACTIVE
+    - Return Requests → COMPLETED
+    
+    When delivery manager completes delivery:
+    1. Updates delivery object final status first (mandatory)
+    2. Saves timestamps (completedAt/deliveryDate)
+    3. Calls DeliveryProfileService.complete_delivery_task()
+    4. Backend checks for other active deliveries and sets status accordingly
+    
+    Request body:
+    {
+        "delivery_type": "order" | "borrow" | "return",
+        "delivery_id": <int>,  # order_id, borrow_request_id, or return_request_id
+        "delivery_manager_id": <int>  # optional, defaults to request.user
+    }
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    @transaction.atomic
+    def post(self, request):
+        try:
+            delivery_type = request.data.get('delivery_type')
+            delivery_id = request.data.get('delivery_id')
+            delivery_manager_id = request.data.get('delivery_manager_id')
+            
+            # Validate required fields
+            if not delivery_type:
+                return Response({
+                    'error': 'delivery_type is required. Must be "order", "borrow", or "return"'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            if delivery_type not in ['order', 'borrow', 'return']:
+                return Response({
+                    'error': f'Invalid delivery_type. Must be "order", "borrow", or "return". Got: {delivery_type}'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            if not delivery_id:
+                return Response({
+                    'error': 'delivery_id is required'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Get delivery manager (use authenticated user if not provided)
+            if delivery_manager_id:
+                try:
+                    delivery_manager = User.objects.get(
+                        id=delivery_manager_id,
+                        user_type='delivery_admin'
+                    )
+                except User.DoesNotExist:
+                    return Response({
+                        'error': 'Delivery manager not found or invalid'
+                    }, status=status.HTTP_404_NOT_FOUND)
+            else:
+                delivery_manager = request.user
+            
+            # Verify user is a delivery admin
+            if not delivery_manager.is_delivery_admin():
+                return Response({
+                    'error': 'User is not a delivery manager'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Security check: Ensure authenticated user matches delivery_manager_id (unless admin)
+            authenticated_user = request.user
+            if (delivery_manager_id and 
+                authenticated_user.id != delivery_manager_id and 
+                not authenticated_user.is_library_admin()):
+                return Response({
+                    'error': 'You can only complete delivery for your own account'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Handle different delivery types
+            if delivery_type == 'order':
+                return self._complete_order_delivery(delivery_manager, delivery_id)
+            elif delivery_type == 'borrow':
+                return self._complete_borrow_delivery(delivery_manager, delivery_id)
+            elif delivery_type == 'return':
+                return self._complete_return_delivery(delivery_manager, delivery_id)
+            
+        except Exception as e:
+            logger.error(f"Error completing delivery: {str(e)}", exc_info=True)
+            return Response({
+                'error': f'Failed to complete delivery: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    def _complete_order_delivery(self, delivery_manager, order_id):
+        """Complete delivery for a purchase order"""
+        try:
+            order = Order.objects.get(id=order_id)
+        except Order.DoesNotExist:
+            return Response({
+                'error': 'Order not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Check if order is assigned to this delivery manager
+        delivery_assignment = DeliveryRequest.objects.filter(
+            order=order,
+            delivery_manager=delivery_manager
+        ).first()
+        
+        if not delivery_assignment:
+            return Response({
+                'error': 'Order is not assigned to this delivery manager'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if order is in delivery status
+        if order.status != 'in_delivery':
+            return Response({
+                'error': f'Order must be in "in_delivery" status to complete. Current status: {order.status}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # STEP 1: Update order status first (mandatory) - MUST complete before updating DeliveryProfile
+        # Transaction safety: Order status is updated first, then DeliveryProfile status
+        order.status = 'completed'
+        order.save()
+        
+        # Update delivery assignment
+        delivery_assignment.status = 'completed'
+        delivery_assignment.completed_at = timezone.now()
+        delivery_assignment.save()
+        
+        # STEP 2: Update delivery manager status (ONLY after order status successfully saved)
+        # Transaction safety: If this fails, transaction will rollback order status too
+        try:
+            from ..services.delivery_profile_services import DeliveryProfileService
+            DeliveryProfileService.complete_delivery_task(delivery_manager, completed_order_id=order.id)
+            logger.info(f"Updated delivery manager {delivery_manager.id} status after completing order delivery")
+        except Exception as e:
+            logger.error(f"Failed to update delivery manager status: {str(e)}")
+            # Transaction will automatically rollback due to @transaction.atomic
+            # Don't fail the request, just log the error (status update is important but shouldn't block completion)
+        
+        # Create delivery activity log
+        try:
+            from ..models.delivery_model import DeliveryActivity
+            DeliveryActivity.objects.create(
+                delivery_manager=delivery_manager,
+                order=order,
+                activity_type='complete_delivery',
+                activity_data={'order_number': order.order_number},
+            )
+        except Exception as e:
+            logger.warning(f"Failed to create delivery activity log: {str(e)}")
+        
+        # Get final delivery manager status
+        from ..models.delivery_profile_model import DeliveryProfile
+        try:
+            delivery_profile = DeliveryProfile.objects.get(user=delivery_manager)
+            final_status = delivery_profile.delivery_status
+        except DeliveryProfile.DoesNotExist:
+            final_status = 'online'
+        
+        # Send notification
+        try:
+            NotificationService.create_notification(
+                user_id=order.customer.id,
+                title="Order Delivered",
+                message=f"Your order #{order.order_number} has been successfully delivered!",
+                notification_type="order_delivered"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to send notification: {str(e)}")
+        
+        return Response({
+            'success': True,
+            'message': 'Delivery completed successfully.',
+            'delivery_type': 'order',
+            'delivery_id': order.id,
+            'order_status': order.status,
+            'delivery_manager_id': delivery_manager.id,
+            'delivery_manager_status': final_status,
+            'completed_at': delivery_assignment.completed_at.isoformat() if delivery_assignment.completed_at else None
+        }, status=status.HTTP_200_OK)
+    
+    def _complete_borrow_delivery(self, delivery_manager, borrow_id):
+        """Complete delivery for a borrow request"""
+        try:
+            from ..models.borrowing_model import BorrowRequest, BorrowStatusChoices
+            borrow_request = BorrowRequest.objects.get(id=borrow_id)
+        except BorrowRequest.DoesNotExist:
+            return Response({
+                'error': 'Borrow request not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Check if borrow request is assigned to this delivery manager
+        if borrow_request.delivery_person and borrow_request.delivery_person.id != delivery_manager.id:
+            return Response({
+                'error': 'Borrow request is not assigned to this delivery manager'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if borrow request is in delivery status
+        if borrow_request.status != BorrowStatusChoices.OUT_FOR_DELIVERY and borrow_request.status != 'out_for_delivery':
+            return Response({
+                'error': f'Borrow request must be OUT_FOR_DELIVERY to complete. Current status: {borrow_request.status}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # STEP 1: Update borrow request status first (mandatory) - MUST complete before updating DeliveryProfile
+        # Transaction safety: Borrow status is updated first, then DeliveryProfile status
+        borrow_request.status = BorrowStatusChoices.ACTIVE
+        borrow_request.delivery_date = timezone.now()
+        borrow_request.final_return_date = borrow_request.expected_return_date
+        borrow_request.save()
+        
+        # Update associated order if exists
+        order = None
+        if hasattr(borrow_request, 'order') and borrow_request.order:
+            order = borrow_request.order
+            order.status = 'delivered'
+            order.save()
+        
+        # STEP 2: Update delivery manager status (ONLY after borrow status successfully saved)
+        # Transaction safety: If this fails, transaction will rollback borrow status too
+        try:
+            from ..services.delivery_profile_services import DeliveryProfileService
+            completed_order_id = order.id if order else None
+            DeliveryProfileService.complete_delivery_task(delivery_manager, completed_order_id=completed_order_id)
+            logger.info(f"Updated delivery manager {delivery_manager.id} status after completing borrow delivery")
+        except Exception as e:
+            logger.error(f"Failed to update delivery manager status: {str(e)}")
+            # Transaction will automatically rollback due to @transaction.atomic
+            # Don't fail the request, just log the error (status update is important but shouldn't block completion)
+        
+        # Get final delivery manager status
+        from ..models.delivery_profile_model import DeliveryProfile
+        try:
+            delivery_profile = DeliveryProfile.objects.get(user=delivery_manager)
+            final_status = delivery_profile.delivery_status
+        except DeliveryProfile.DoesNotExist:
+            final_status = 'online'
+        
+        # Send notification
+        try:
+            NotificationService.create_notification(
+                user_id=borrow_request.customer.id,
+                title="Book Delivered Successfully",
+                message=f"Your book '{borrow_request.book.name}' has been delivered. Loan period starts today. Return date: {borrow_request.final_return_date.strftime('%Y-%m-%d')}",
+                notification_type="delivery_completed"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to send notification: {str(e)}")
+        
+        return Response({
+            'success': True,
+            'message': 'Delivery completed successfully.',
+            'delivery_type': 'borrow',
+            'delivery_id': borrow_request.id,
+            'borrow_status': borrow_request.status,
+            'delivery_manager_id': delivery_manager.id,
+            'delivery_manager_status': final_status,
+            'delivery_date': borrow_request.delivery_date.isoformat() if borrow_request.delivery_date else None
+        }, status=status.HTTP_200_OK)
+    
+    def _complete_return_delivery(self, delivery_manager, return_id):
+        """Complete delivery for a return request"""
+        try:
+            from ..models.return_model import ReturnRequest, ReturnStatus
+            return_request = ReturnRequest.objects.get(id=return_id)
+        except ReturnRequest.DoesNotExist:
+            return Response({
+                'error': 'Return request not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Check if return request is assigned to this delivery manager
+        if return_request.delivery_manager and return_request.delivery_manager.id != delivery_manager.id:
+            return Response({
+                'error': 'Return request is not assigned to this delivery manager'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if return request is in progress
+        if return_request.status != ReturnStatus.IN_PROGRESS:
+            return Response({
+                'error': f'Return request must be IN_PROGRESS to complete. Current status: {return_request.get_status_display()}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # STEP 1: Update return request status first (mandatory) - MUST complete before updating DeliveryProfile
+        # Transaction safety: Return status is updated first, then DeliveryProfile status
+        return_request.status = ReturnStatus.COMPLETED
+        return_request.completed_at = timezone.now()
+        return_request.save()
+        
+        # Update borrowing status
+        borrowing = return_request.borrowing
+        from ..models.borrowing_model import BorrowStatusChoices
+        borrowing.status = BorrowStatusChoices.RETURNED
+        borrowing.actual_return_date = timezone.now()
+        borrowing.save()
+        
+        # Increment book available copies
+        book = borrowing.book
+        if book.available_copies is not None:
+            book.available_copies += 1
+        else:
+            book.available_copies = 1
+        book.save(update_fields=['available_copies'])
+        
+        # STEP 2: Update delivery manager status (ONLY after return status successfully saved)
+        # Transaction safety: If this fails, transaction will rollback return status too
+        try:
+            from ..services.delivery_profile_services import DeliveryProfileService
+            DeliveryProfileService.complete_delivery_task(delivery_manager, completed_return_id=return_request.id)
+            logger.info(f"Updated delivery manager {delivery_manager.id} status after completing return delivery")
+        except Exception as e:
+            logger.error(f"Failed to update delivery manager status: {str(e)}")
+            # Transaction will automatically rollback due to @transaction.atomic
+            # Don't fail the request, just log the error (status update is important but shouldn't block completion)
+        
+        # Get final delivery manager status
+        from ..models.delivery_profile_model import DeliveryProfile
+        try:
+            delivery_profile = DeliveryProfile.objects.get(user=delivery_manager)
+            final_status = delivery_profile.delivery_status
+        except DeliveryProfile.DoesNotExist:
+            final_status = 'online'
+        
+        # Send notification
+        try:
+            NotificationService.create_notification(
+                user_id=borrowing.customer.id,
+                title="Book Return Completed",
+                message=f"Your book '{borrowing.book.name}' has been successfully returned to the library.",
+                notification_type="return_completed"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to send notification: {str(e)}")
+        
+        return Response({
+            'success': True,
+            'message': 'Delivery completed successfully.',
+            'delivery_type': 'return',
+            'delivery_id': return_request.id,
+            'return_status': return_request.status,
+            'delivery_manager_id': delivery_manager.id,
+            'delivery_manager_status': final_status,
+            'completed_at': return_request.completed_at.isoformat() if return_request.completed_at else None
+        }, status=status.HTTP_200_OK)
 
 # ------------------------------------------------------------
 # 📋 7. Get Order Activities (for Admin View)
@@ -2015,9 +2595,9 @@ class OrdersReadyForDeliveryView(generics.ListAPIView):
             order_type='purchase'  # Only show purchase orders, borrowing orders have separate endpoint
         ).select_related('customer', 'payment').prefetch_related('items__book')
         
-        # Exclude orders that already have delivery assignments
+        # Exclude orders that already have delivery requests
         queryset = queryset.exclude(
-            id__in=DeliveryAssignment.objects.values_list('order_id', flat=True)
+            id__in=DeliveryRequest.objects.filter(order__isnull=False).values_list('order_id', flat=True)
         )
         
         # Filter by date range
@@ -2040,7 +2620,7 @@ class DeliveryAssignmentListView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated, IsDeliveryAdminOrLibraryAdmin]
     
     def get_queryset(self):
-        queryset = DeliveryAssignment.objects.select_related('order', 'delivery_manager')
+        queryset = DeliveryRequest.objects.filter(order__isnull=False, delivery_manager__isnull=False).select_related('order', 'delivery_manager')
         
         # Filter by status
         status_filter = self.request.query_params.get('status')
@@ -2056,11 +2636,11 @@ class DeliveryAssignmentListView(generics.ListAPIView):
         start_date = self.request.query_params.get('start_date')
         end_date = self.request.query_params.get('end_date')
         if start_date:
-            queryset = queryset.filter(assigned_at__date__gte=start_date)
+            queryset = queryset.filter(created_at__date__gte=start_date)
         if end_date:
-            queryset = queryset.filter(assigned_at__date__lte=end_date)
+            queryset = queryset.filter(created_at__date__lte=end_date)
         
-        return queryset.order_by('-assigned_at')
+        return queryset.order_by('-created_at')
 
 
 class DeliveryAssignmentDetailView(generics.RetrieveAPIView):
@@ -2072,7 +2652,7 @@ class DeliveryAssignmentDetailView(generics.RetrieveAPIView):
     permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
-        return DeliveryAssignment.objects.select_related('order', 'delivery_manager')
+        return DeliveryRequest.objects.filter(order__isnull=False, delivery_manager__isnull=False).select_related('order', 'delivery_manager')
     
     def get_object(self):
         assignment = super().get_object()
@@ -2116,6 +2696,87 @@ class DeliveryAssignmentCreateView(generics.CreateAPIView):
         return assignment
 
 
+class AcceptDeliveryAssignmentView(APIView):
+    """
+    POST /api/delivery/assignments/{id}/accept
+    
+    Accept a delivery assignment.
+    This only accepts the assignment - does NOT start delivery or change manager status to BUSY.
+    Manager status remains ONLINE/OFFLINE until "Start Delivery" is clicked.
+    
+    Accessible by the assigned delivery manager only.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    
+    @transaction.atomic
+    def post(self, request, pk):
+        try:
+            assignment = get_object_or_404(DeliveryRequest, pk=pk, order__isnull=False)
+            user = request.user
+            
+            # Check permissions - only assigned delivery manager can accept
+            if assignment.delivery_manager != user:
+                return Response({
+                    'error': 'Only the assigned delivery manager can accept this assignment'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Check if assignment is already accepted
+            if assignment.status == 'accepted':
+                return Response({
+                    'success': True,
+                    'message': 'Assignment already accepted',
+                    'assignment_id': assignment.id,
+                    'status': assignment.status,
+                    'accepted_at': assignment.accepted_at.isoformat() if assignment.accepted_at else None
+                }, status=status.HTTP_200_OK)
+            
+            # Check if assignment is in a valid state to accept
+            if assignment.status not in ['assigned', 'pending']:
+                return Response({
+                    'error': f'Assignment must be in "assigned" or "pending" status to accept. Current status: {assignment.status}'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Accept the assignment
+            old_status = assignment.status
+            assignment.status = 'accepted'
+            assignment.accepted_at = timezone.now()
+            assignment.save()
+            
+            # Send notification to customer
+            try:
+                NotificationService.create_notification(
+                    user_id=assignment.order.customer.id,
+                    title="Delivery Assignment Accepted",
+                    message=f"Delivery manager has accepted your order #{assignment.order.order_number}. They will start delivery soon.",
+                    notification_type="delivery_assignment_accepted",
+                    related_order_id=assignment.order.id
+                )
+            except Exception as e:
+                logger.warning(f"Failed to send notification: {str(e)}")
+            
+            logger.info(f"Delivery assignment {assignment.id} accepted by manager {user.id}")
+            
+            return Response({
+                'success': True,
+                'message': 'Assignment accepted successfully. You can now start delivery when ready.',
+                'assignment_id': assignment.id,
+                'status': assignment.status,
+                'accepted_at': assignment.accepted_at.isoformat(),
+                'order_id': assignment.order.id,
+                'order_number': assignment.order.order_number
+            }, status=status.HTTP_200_OK)
+            
+        except DeliveryRequest.DoesNotExist:
+            return Response({
+                'error': 'Assignment not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error accepting assignment: {str(e)}", exc_info=True)
+            return Response({
+                'error': f'Failed to accept assignment: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 class DeliveryAssignmentStatusUpdateView(APIView):
     """
     Update delivery assignment status.
@@ -2124,7 +2785,7 @@ class DeliveryAssignmentStatusUpdateView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsDeliveryAdminOrLibraryAdmin]
     
     def patch(self, request, pk):
-        assignment = get_object_or_404(DeliveryAssignment, pk=pk)
+        assignment = get_object_or_404(DeliveryRequest, pk=pk, order__isnull=False)
         user = request.user
         
         # Check permissions
@@ -2156,48 +2817,17 @@ class DeliveryAssignmentStatusUpdateView(APIView):
             # Set timestamps based on status
             if new_status == 'accepted' and not assignment.accepted_at:
                 assignment.accepted_at = timezone.now()
-                # Update order status to 'in_delivery' when delivery manager accepts (as per scenario)
+                # NOTE: Do NOT change order status to 'in_delivery' here - that happens when Start Delivery is clicked
+                # NOTE: Do NOT change manager status to BUSY here - that happens when Start Delivery is clicked
+                # NOTE: Do NOT enable GPS tracking here - that happens when Start Delivery is clicked
+                
+                # Send notification to customer
                 order = assignment.order
-                order.status = 'in_delivery'
-                order.save()
-                
-                # Enable GPS tracking for the delivery manager (as per scenario requirement)
-                try:
-                    from ..models.delivery_model import RealTimeTracking
-                    from ..models.delivery_profile_model import DeliveryProfile
-                    
-                    # Get or create real-time tracking
-                    real_time_tracking, created = RealTimeTracking.objects.get_or_create(
-                        delivery_manager=assignment.delivery_manager,
-                        defaults={
-                            'is_tracking_enabled': True,
-                            'is_delivering': True,
-                            'current_delivery_assignment': assignment,
-                        }
-                    )
-                    if not created:
-                        real_time_tracking.is_tracking_enabled = True
-                        real_time_tracking.is_delivering = True
-                        real_time_tracking.current_delivery_assignment = assignment
-                        real_time_tracking.save()
-                    
-                    # Update delivery profile
-                    from ..services.delivery_profile_services import DeliveryProfileService
-                    delivery_profile = DeliveryProfile.objects.get(user=assignment.delivery_manager)
-                    DeliveryProfileService.start_delivery_task(assignment.delivery_manager)
-                    delivery_profile.is_tracking_active = True
-                    delivery_profile.save()
-                    
-                    logger.info(f"GPS tracking enabled for delivery manager {assignment.delivery_manager.email} for order {order.order_number}")
-                except Exception as e:
-                    logger.error(f"Failed to enable GPS tracking: {str(e)}")
-                
-                # Send notification to customer and admin
                 NotificationService.create_notification(
                     user_id=order.customer.id,
-                    title="Delivery Confirmed",
-                    message=f"Your order #{order.order_number} has been confirmed by delivery manager. Delivery is in progress!",
-                    notification_type="delivery_confirmed",
+                    title="Delivery Assignment Accepted",
+                    message=f"Delivery manager has accepted your order #{order.order_number}. They will start delivery soon.",
+                    notification_type="delivery_assignment_accepted",
                     related_order_id=order.id
                 )
                 
@@ -2209,9 +2839,9 @@ class DeliveryAssignmentStatusUpdateView(APIView):
                 for admin in admin_users:
                     NotificationService.create_notification(
                         user_id=admin.id,
-                        title="Delivery Confirmed",
-                        message=f"Order #{order.order_number} has been confirmed by delivery manager {assignment.delivery_manager.get_full_name()}.",
-                        notification_type="delivery_confirmed_admin",
+                        title="Delivery Assignment Accepted",
+                        message=f"Order #{order.order_number} has been accepted by delivery manager {assignment.delivery_manager.get_full_name()}.",
+                        notification_type="delivery_assignment_accepted_admin",
                         related_order_id=order.id
                     )
             elif new_status == 'picked_up' and not assignment.picked_up_at:
@@ -2268,10 +2898,16 @@ class DeliveryAssignmentStatusUpdateView(APIView):
             
             assignment.save()
             
-            # Create status history entry
-            DeliveryStatusHistory.objects.create(
+            # Create status history entry (now part of DeliveryActivity)
+            previous_status = assignment.status
+            DeliveryActivity.objects.create(
                 delivery_assignment=assignment,
-                status=new_status,
+                delivery_manager=assignment.delivery_manager,
+                order=assignment.order,
+                activity_type='status_change',
+                previous_status=previous_status,
+                new_status=new_status,
+                actor_type='delivery_manager',
                 notes=notes
             )
             
@@ -2373,10 +3009,11 @@ class MyDeliveryAssignmentsView(generics.ListAPIView):
         user = self.request.user
         
         if not user.is_delivery_admin():
-            return DeliveryAssignment.objects.none()
+            return DeliveryRequest.objects.none()
         
-        queryset = DeliveryAssignment.objects.filter(
-            delivery_manager=user
+        queryset = DeliveryRequest.objects.filter(
+            delivery_manager=user,
+            order__isnull=False
         ).select_related('order__customer')
         
         # Filter by status
@@ -2384,7 +3021,7 @@ class MyDeliveryAssignmentsView(generics.ListAPIView):
         if status_filter:
             queryset = queryset.filter(status=status_filter)
         
-        return queryset.order_by('-assigned_at')
+        return queryset.order_by('-created_at')
 
 
 @api_view(['GET'])
@@ -2535,12 +3172,19 @@ def bulk_assign_orders_view(request):
             except Exception as e:
                 logger.error(f"Failed to get delivery manager's phone number: {str(e)}")
                 
-            assignment = DeliveryAssignment.objects.create(
+            assignment = DeliveryRequest.objects.create(
+                customer=order.customer,
                 order=order,
+                request_type='delivery',
+                delivery_address=order.delivery_address if hasattr(order, 'delivery_address') else '',
+                delivery_city=order.delivery_city if hasattr(order, 'delivery_city') else '',
+                preferred_pickup_time=timezone.now(),
+                preferred_delivery_time=estimated_delivery_time,
                 delivery_manager=delivery_manager,
                 delivery_notes=delivery_notes,
                 estimated_delivery_time=estimated_delivery_time,
-                contact_phone=contact_phone
+                status='assigned',
+                assigned_at=timezone.now()
             )
             created_assignments.append(assignment)
             
@@ -2738,8 +3382,7 @@ class DeliveryManagerLocationView(APIView):
             return False
         
         # Check if user has any orders assigned to this delivery manager
-        from ..models import DeliveryAssignment
-        return DeliveryAssignment.objects.filter(
+        return DeliveryRequest.objects.filter(
             order__customer=user,
             delivery_manager=delivery_manager
         ).exists()
@@ -2950,16 +3593,24 @@ class DeliveryManagerStatusUpdateView(APIView):
             try:
                 delivery_profile = DeliveryProfile.objects.get(user=user)
                 if delivery_profile.delivery_status == 'busy' and new_status == 'offline':
-                    # Check if they have any active deliveries
-                    active_requests = DeliveryRequest.objects.filter(
-                        delivery_manager=user, 
-                        status='in_operation'
-                    ).exists()
+                    # Use unified function to check for active deliveries
+                    from ..services.delivery_profile_services import DeliveryProfileService
+                    has_active = DeliveryProfileService.has_active_deliveries(user)
                     
-                    if active_requests:
+                    if has_active:
                         return Response({
                             'error': 'Cannot go offline while you have active deliveries'
                         }, status=status.HTTP_400_BAD_REQUEST)
+                
+                # Record status history before updating
+                old_status = delivery_profile.delivery_status
+                from ..services.delivery_profile_services import DeliveryProfileService
+                DeliveryProfileService.record_status_history(
+                    delivery_profile,
+                    old_status,
+                    new_status,
+                    reason='Manual status update'
+                )
                 
                 # Update the status
                 delivery_profile.delivery_status = new_status
@@ -3646,13 +4297,12 @@ class TaskETAUpdateView(APIView):
         Update the estimated delivery time for a specific delivery task/assignment
         """
         try:
-            from ..models.delivery_model import DeliveryAssignment
             from ..services.notification_services import NotificationService
             
-            # Get the delivery assignment (task)
+            # Get the delivery request (task)
             try:
-                assignment = DeliveryAssignment.objects.get(id=task_id)
-            except DeliveryAssignment.DoesNotExist:
+                assignment = DeliveryRequest.objects.get(id=task_id, order__isnull=False)
+            except DeliveryRequest.DoesNotExist:
                 return Response({
                     'error': 'Delivery task not found'
                 }, status=status.HTTP_404_NOT_FOUND)
@@ -3756,12 +4406,10 @@ class TaskETAUpdateView(APIView):
         Get current ETA information for a specific delivery task/assignment
         """
         try:
-            from ..models.delivery_model import DeliveryAssignment
-            
-            # Get the delivery assignment (task)
+            # Get the delivery request (task)
             try:
-                assignment = DeliveryAssignment.objects.get(id=task_id)
-            except DeliveryAssignment.DoesNotExist:
+                assignment = DeliveryRequest.objects.get(id=task_id, order__isnull=False)
+            except DeliveryRequest.DoesNotExist:
                 return Response({
                     'error': 'Delivery task not found'
                 }, status=status.HTTP_404_NOT_FOUND)

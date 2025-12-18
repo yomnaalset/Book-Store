@@ -160,12 +160,22 @@ class DiscountCode(models.Model):
         if not can_use:
             raise ValidationError(message)
         
-        usage = DiscountUsage.objects.create(
+        # Check for existing usage to prevent duplicates (MySQL doesn't support conditional unique constraints)
+        existing = DiscountUsage.objects.filter(
+            discount_code=self,
+            order=order
+        ).exists()
+        if existing:
+            raise ValidationError("This discount code has already been used for this order.")
+        
+        usage = DiscountUsage(
             discount_code=self,
             customer=customer,
             order=order,
             discount_amount=self.get_discount_amount(order.total_amount)
         )
+        usage.full_clean()  # Validate before saving
+        usage.save()
         
         return usage
     
@@ -191,12 +201,36 @@ class DiscountCode(models.Model):
 class DiscountUsage(models.Model):
     """
     Model to track usage of discount codes by customers.
+    Supports both general discount codes and book-specific discounts.
     """
+    # General discount code (nullable for book discounts)
     discount_code = models.ForeignKey(
         DiscountCode,
         on_delete=models.CASCADE,
         related_name='usages',
-        help_text="Discount code that was used"
+        null=True,
+        blank=True,
+        help_text="Discount code that was used (for general discounts)"
+    )
+    
+    # Book discount (nullable for general discounts)
+    book_discount = models.ForeignKey(
+        'BookDiscount',
+        on_delete=models.CASCADE,
+        related_name='usages',
+        null=True,
+        blank=True,
+        help_text="Book discount that was used (for book-specific discounts)"
+    )
+    
+    # Book reference (optional, for book-specific discounts)
+    book = models.ForeignKey(
+        'Book',
+        on_delete=models.CASCADE,
+        related_name='discount_usages',
+        null=True,
+        blank=True,
+        help_text="Book this discount applies to (for book-specific discounts)"
     )
     
     customer = models.ForeignKey(
@@ -214,10 +248,28 @@ class DiscountUsage(models.Model):
         help_text="Order where the discount code was applied"
     )
     
+    # Price fields (optional, mainly for book discounts)
+    original_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Original price (mainly for book discounts)"
+    )
+    
     discount_amount = models.DecimalField(
         max_digits=10,
         decimal_places=2,
         help_text="Amount of discount applied"
+    )
+    
+    # Final price (optional, mainly for book discounts)
+    final_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Final price after discount (mainly for book discounts)"
     )
     
     used_at = models.DateTimeField(
@@ -232,14 +284,52 @@ class DiscountUsage(models.Model):
         ordering = ['-used_at']
         indexes = [
             models.Index(fields=['discount_code']),
+            models.Index(fields=['book_discount']),
+            models.Index(fields=['book']),
             models.Index(fields=['customer']),
             models.Index(fields=['order']),
             models.Index(fields=['used_at']),
         ]
-        unique_together = ['discount_code', 'order']  # One usage per order
+        # Note: MySQL doesn't support conditional unique constraints
+        # Uniqueness is enforced at the application level in clean() method
+    
+    def clean(self):
+        """
+        Validate that either discount_code or book_discount is provided, but not both.
+        Also enforce uniqueness at application level (MySQL doesn't support conditional unique constraints).
+        """
+        if not self.discount_code and not self.book_discount:
+            raise ValidationError("Either discount_code or book_discount must be provided.")
+        if self.discount_code and self.book_discount:
+            raise ValidationError("Cannot specify both discount_code and book_discount.")
+        
+        # Enforce uniqueness at application level
+        if self.discount_code and self.order:
+            existing = DiscountUsage.objects.filter(
+                discount_code=self.discount_code,
+                order=self.order
+            ).exclude(pk=self.pk if self.pk else None)
+            if existing.exists():
+                raise ValidationError(
+                    f"This discount code has already been used for order {self.order}."
+                )
+        
+        if self.book_discount and self.order:
+            existing = DiscountUsage.objects.filter(
+                book_discount=self.book_discount,
+                order=self.order
+            ).exclude(pk=self.pk if self.pk else None)
+            if existing.exists():
+                raise ValidationError(
+                    f"This book discount has already been used for order {self.order}."
+                )
     
     def __str__(self):
-        return f"{self.customer.get_full_name()} used {self.discount_code.code} on {self.order}"
+        if self.discount_code:
+            return f"{self.customer.get_full_name()} used {self.discount_code.code} on {self.order}"
+        elif self.book_discount:
+            return f"{self.customer.get_full_name()} used {self.book_discount.code} on {self.order}"
+        return f"{self.customer.get_full_name()} used discount on {self.order}"
     
     @classmethod
     def get_customer_usage_stats(cls, customer):
@@ -267,7 +357,12 @@ class DiscountUsage(models.Model):
         )['total'] or 0
         
         # Get most popular discount codes
-        popular_codes = cls.objects.values('discount_code__code').annotate(
+        popular_codes = cls.objects.filter(discount_code__isnull=False).values('discount_code__code').annotate(
+            usage_count=models.Count('id')
+        ).order_by('-usage_count')[:5]
+        
+        # Get most popular book discounts
+        popular_book_discounts = cls.objects.filter(book_discount__isnull=False).values('book_discount__code').annotate(
             usage_count=models.Count('id')
         ).order_by('-usage_count')[:5]
         
@@ -275,6 +370,7 @@ class DiscountUsage(models.Model):
             'total_usage': total_usage,
             'total_savings': total_savings,
             'popular_codes': popular_codes,
+            'popular_book_discounts': popular_book_discounts,
         }
 
 
@@ -461,7 +557,7 @@ class BookDiscount(models.Model):
             return False, "Discount is not currently active or has expired."
         
         # Check usage limit
-        usage_count = BookDiscountUsage.objects.filter(
+        usage_count = DiscountUsage.objects.filter(
             book_discount=self,
             customer=customer
         ).count()
@@ -485,30 +581,45 @@ class BookDiscount(models.Model):
         if not can_use:
             raise ValidationError(message)
         
+        # Check for existing usage to prevent duplicates
+        existing = DiscountUsage.objects.filter(
+            book_discount=self,
+            order=order
+        ).exists()
+        if existing:
+            raise ValidationError("This book discount has already been used for this order.")
+        
         original_price = self.book.price or 0
         discount_amount = self.get_discount_amount(original_price)
         final_price = self.get_final_price(original_price)
         
-        usage = BookDiscountUsage.objects.create(
+        usage = DiscountUsage(
             book_discount=self,
+            book=self.book,
             customer=customer,
             order=order,
             original_price=original_price,
             discount_amount=discount_amount,
             final_price=final_price
         )
+        usage.full_clean()  # Validate before saving
+        usage.save()
         
         return usage
 
 
+# NOTE: This model will be removed after migration 0011_merge_discount_usage_tables runs.
+# All book discount usage is now tracked in the merged DiscountUsage model.
 class BookDiscountUsage(models.Model):
     """
     Model to track usage of book discounts by customers.
+    DEPRECATED: This model is being merged into DiscountUsage.
+    Will be removed after migration 0011_merge_discount_usage_tables.
     """
     book_discount = models.ForeignKey(
         BookDiscount,
         on_delete=models.CASCADE,
-        related_name='usages',
+        related_name='legacy_usages',  # Changed to avoid conflict with DiscountUsage.usages
         help_text="Book discount that was used"
     )
     

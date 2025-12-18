@@ -67,9 +67,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
         setState(() {
           _isLoadingUserTypes = false;
           // Fallback to default options (never include library_admin in fallback)
+          // Labels will be localized in the dropdown widget
           _userTypeOptions = [
-            {'value': 'customer', 'label': 'Customer'},
-            {'value': 'delivery_admin', 'label': 'Delivery Administrator'},
+            {'value': 'customer', 'label': 'customer'},
+            {'value': 'delivery_admin', 'label': 'delivery_admin'},
           ];
         });
       }
@@ -85,12 +86,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text('Register'),
+        title: Text(l10n.registerTitle),
         backgroundColor: theme.colorScheme.primary,
         foregroundColor: theme.colorScheme.onPrimary,
       ),
       body: SafeArea(
         child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(AppDimensions.paddingL),
           child: Form(
             key: _formKey,
@@ -130,13 +132,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'User Type',
-          style: TextStyle(
-            fontSize: AppDimensions.fontSizeM,
-            fontWeight: FontWeight.w500,
-            color: theme.colorScheme.onSurface,
-          ),
+        Builder(
+          builder: (context) {
+            final localizations = AppLocalizations.of(context);
+            return Text(
+              localizations.userType,
+              style: TextStyle(
+                fontSize: AppDimensions.fontSizeM,
+                fontWeight: FontWeight.w500,
+                color: theme.colorScheme.onSurface,
+              ),
+            );
+          },
         ),
         const SizedBox(height: AppDimensions.spacingS),
         _isLoadingUserTypes
@@ -151,9 +158,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                 ),
                 items: _userTypeOptions.map((userType) {
+                  final localizations = AppLocalizations.of(context);
+                  final value = userType['value'] ?? '';
+                  String label;
+                  switch (value) {
+                    case 'customer':
+                      label = localizations.customer;
+                      break;
+                    case 'delivery_admin':
+                      label = localizations.deliveryManager;
+                      break;
+                    default:
+                      label = userType['label'] ?? value;
+                  }
                   return DropdownMenuItem<String>(
-                    value: userType['value'],
-                    child: Text(userType['label'] ?? userType['value'] ?? ''),
+                    value: value,
+                    child: Text(label),
                   );
                 }).toList(),
                 onChanged: (value) {
@@ -171,8 +191,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
       children: [
         // First Name Field
         CustomTextField(
-          label: 'First Name',
-          hint: 'Enter your first name',
+          label: l10n.firstNameLabel,
+          hint: l10n.enterFirstName,
           controller: _firstNameController,
           validator: Validators.name,
           textInputAction: TextInputAction.next,
@@ -182,8 +202,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
         // Last Name Field
         CustomTextField(
-          label: 'Last Name',
-          hint: 'Enter your last name',
+          label: l10n.lastNameLabel,
+          hint: l10n.enterLastName,
           controller: _lastNameController,
           validator: Validators.name,
           textInputAction: TextInputAction.next,
@@ -193,7 +213,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
         // Email Field
         CustomTextField(
-          label: 'Email',
+          label: l10n.emailLabelLogin,
           hint: l10n.emailHint,
           controller: _emailController,
           type: TextFieldType.email,
@@ -207,7 +227,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
         // Phone Field
         CustomTextField(
-          label: 'Phone (Optional)',
+          label: l10n.phoneOptional,
           hint: l10n.phoneHint,
           controller: _phoneController,
           type: TextFieldType.phone,
@@ -221,7 +241,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
         // Password Field
         CustomTextField(
-          label: 'Password',
+          label: l10n.passwordLabelLogin,
           hint: l10n.passwordHint,
           controller: _passwordController,
           type: TextFieldType.password,
@@ -234,8 +254,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
         // Confirm Password Field
         CustomTextField(
-          label: 'Confirm Password',
-          hint: 'Confirm your password',
+          label: l10n.confirmPasswordLabel,
+          hint: l10n.confirmPasswordHint,
           controller: _confirmPasswordController,
           type: TextFieldType.password,
           validator: (value) =>
@@ -251,7 +271,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return Consumer<AuthProvider>(
       builder: (context, authProvider, child) {
         return CustomButton(
-          text: 'Register',
+          text: l10n.registerButton,
           onPressed: authProvider.isLoading ? null : _handleRegister,
           type: ButtonType.primary,
           size: ButtonSize.large,
@@ -269,7 +289,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Text(
-          'Already have an account? ',
+          l10n.alreadyHaveAccount,
           style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
         ),
         TextButton(
@@ -277,7 +297,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             Navigator.pop(context);
           },
           child: Text(
-            'Login',
+            l10n.loginLink,
             style: TextStyle(
               color: theme.colorScheme.primary,
               fontWeight: FontWeight.w600,
@@ -304,13 +324,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
 
     if (mounted) {
+      final localizations = AppLocalizations.of(context);
       if (success) {
-        _showSuccessSnackBar(
-          'Registration successful! Please check your email for verification.',
-        );
+        _showSuccessSnackBar(localizations.registrationSuccessful);
         Navigator.pop(context);
       } else {
-        _showErrorSnackBar(authProvider.errorMessage ?? 'Registration failed');
+        _showErrorSnackBar(
+          authProvider.errorMessage ?? localizations.registrationFailed,
+        );
       }
     }
   }

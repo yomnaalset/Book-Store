@@ -1,5 +1,6 @@
 import 'author.dart';
 import 'category.dart' as book_category;
+import '../../../core/services/api_config.dart';
 
 class Book {
   final String id;
@@ -106,15 +107,21 @@ class Book {
               name: json['category_name'] ?? '',
             )
           : null,
-      primaryImageUrl:
+      primaryImageUrl: ApiConfig.buildImageUrl(
           json['primaryImageUrl'] ??
           json['primary_image_url'] ??
           json['coverUrl'] ??
-          json['cover_url'],
+          json['cover_url']),
       additionalImages: json['additionalImages'] != null
-          ? List<String>.from(json['additionalImages'])
+          ? (List<String>.from(json['additionalImages']))
+              .map((url) => ApiConfig.buildImageUrl(url) ?? url)
+              .whereType<String>()
+              .toList()
           : json['additional_images'] != null
-          ? List<String>.from(json['additional_images'])
+          ? (List<String>.from(json['additional_images']))
+              .map((url) => ApiConfig.buildImageUrl(url) ?? url)
+              .whereType<String>()
+              .toList()
           : null,
       price: json['price']?.toString(),
       borrowPrice:
@@ -144,11 +151,20 @@ class Book {
       quantity: json['quantity'],
       borrowCount: json['borrowCount'] ?? json['borrow_count'],
       images: json['images'] != null
-          ? List<String>.from(json['images'])
+          ? (List<String>.from(json['images']))
+              .map((url) => ApiConfig.buildImageUrl(url) ?? url)
+              .whereType<String>()
+              .toList()
           : json['additionalImages'] != null
-          ? List<String>.from(json['additionalImages'])
+          ? (List<String>.from(json['additionalImages']))
+              .map((url) => ApiConfig.buildImageUrl(url) ?? url)
+              .whereType<String>()
+              .toList()
           : json['additional_images'] != null
-          ? List<String>.from(json['additional_images'])
+          ? (List<String>.from(json['additional_images']))
+              .map((url) => ApiConfig.buildImageUrl(url) ?? url)
+              .whereType<String>()
+              .toList()
           : null,
       name: json['name'] ?? json['title'],
       availabilityStatus: json['availability_status'],

@@ -309,6 +309,58 @@ class _BorrowingFinesScreenState extends State<BorrowingFinesScreen> {
 
             const SizedBox(height: 8),
 
+            // Payment Method
+            if (fine.paymentMethod != null && fine.paymentMethod!.isNotEmpty) ...[
+              Row(
+                children: [
+                  const Icon(Icons.payment, size: 20, color: Colors.grey),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Payment Method: ${_getPaymentMethodDisplay(fine.paymentMethod!)}',
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+            ],
+
+            // Payment Status
+            Row(
+              children: [
+                const Icon(Icons.info_outline, size: 20, color: Colors.grey),
+                const SizedBox(width: 8),
+                Text(
+                  'Payment Status: ${_getPaymentStatusDisplay(fine.status)}',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w500,
+                    color: _getPaymentStatusColor(fine.status),
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 8),
+
+            // Transaction ID (if available)
+            if (fine.transactionId != null && fine.transactionId!.isNotEmpty) ...[
+              Row(
+                children: [
+                  const Icon(Icons.receipt, size: 20, color: Colors.grey),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Transaction ID: ${fine.transactionId!}',
+                      style: const TextStyle(
+                        color: Colors.grey,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+            ],
+
             // Reason
             if (fine.reason != null && fine.reason!.isNotEmpty) ...[
               Row(
@@ -411,5 +463,46 @@ class _BorrowingFinesScreenState extends State<BorrowingFinesScreen> {
 
   String _formatDate(DateTime date) {
     return '${date.day}/${date.month}/${date.year}';
+  }
+
+  String _getPaymentMethodDisplay(String method) {
+    switch (method.toLowerCase()) {
+      case 'cash':
+        return 'Cash';
+      case 'mastercard':
+        return 'MasterCard';
+      default:
+        return method;
+    }
+  }
+
+  String _getPaymentStatusDisplay(String status) {
+    switch (status.toLowerCase()) {
+      case 'paid':
+        return 'Paid';
+      case 'unpaid':
+        return 'Unpaid';
+      case 'pending_cash_payment':
+        return 'Pending Cash Payment';
+      case 'failed':
+        return 'Failed';
+      default:
+        return status;
+    }
+  }
+
+  Color _getPaymentStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'paid':
+        return Colors.green;
+      case 'unpaid':
+        return Colors.red;
+      case 'pending_cash_payment':
+        return Colors.orange;
+      case 'failed':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
   }
 }

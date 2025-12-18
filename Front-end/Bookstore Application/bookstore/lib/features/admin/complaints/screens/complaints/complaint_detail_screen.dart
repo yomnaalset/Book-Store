@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../providers/complaints_provider.dart';
 import '../../../models/complaint.dart';
 import '../../../widgets/library_manager/status_chip.dart';
-import '../../../../auth/providers/auth_provider.dart';
+import '../../../../../core/localization/app_localizations.dart';
 
 class ComplaintDetailScreen extends StatefulWidget {
   final Complaint complaint;
@@ -17,6 +17,14 @@ class ComplaintDetailScreen extends StatefulWidget {
 class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
   final _responseController = TextEditingController();
   bool _isLoading = false;
+  Complaint? _currentComplaint;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentComplaint = widget.complaint;
+    _loadComplaintDetails();
+  }
 
   @override
   void dispose() {
@@ -24,26 +32,77 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
     super.dispose();
   }
 
+  Future<void> _loadComplaintDetails() async {
+    if (!mounted) return;
+
+    try {
+      final provider = context.read<ComplaintsProvider>();
+      final updatedComplaint = await provider.getComplaintById(
+        widget.complaint.id,
+      );
+      if (updatedComplaint != null && mounted) {
+        setState(() {
+          _currentComplaint = updatedComplaint;
+        });
+      }
+    } catch (e) {
+      // Silently fail - use original complaint data
+    }
+  }
+
   Future<void> _updateStatus(String newStatus) async {
+    if (!mounted) return;
+
     setState(() {
       _isLoading = true;
     });
 
     try {
       final provider = context.read<ComplaintsProvider>();
-      await provider.updateComplaintStatus(widget.complaint.id, newStatus);
+      await provider.updateComplaintStatusViaPost(
+        widget.complaint.id,
+        newStatus,
+      );
+
+      // Refresh complaint details
+      await _loadComplaintDetails();
 
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Status updated to $newStatus')));
-        Navigator.pop(context);
+        final localizations = AppLocalizations.of(context);
+        final statusLabel = newStatus == 'in_progress'
+            ? localizations.replied
+            : newStatus == 'open'
+            ? localizations.open
+            : newStatus == 'resolved'
+            ? localizations.resolved
+            : newStatus == 'closed'
+            ? localizations.closed
+            : newStatus
+                  .replaceAll('_', ' ')
+                  .split(' ')
+                  .map(
+                    (word) => word.isEmpty
+                        ? ''
+                        : word[0].toUpperCase() + word.substring(1),
+                  )
+                  .join(' ');
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(localizations.statusUpdatedTo(statusLabel)),
+            backgroundColor: Colors.green,
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+        final localizations = AppLocalizations.of(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${localizations.error}: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     } finally {
       if (mounted) {
@@ -54,76 +113,19 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
     }
   }
 
-  Future<void> _assignComplaint() async {
-    // For now, we'll use a simple dialog to assign to a manager
-    // In a real app, you'd have a list of available managers
-    final assignedTo = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Assign Complaint'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Select a manager to assign this complaint to:'),
-            const SizedBox(height: 16),
-            ListTile(
-              title: const Text('John Manager'),
-              onTap: () => Navigator.pop(context, 'John Manager'),
-            ),
-            ListTile(
-              title: const Text('Jane Supervisor'),
-              onTap: () => Navigator.pop(context, 'Jane Supervisor'),
-            ),
-            ListTile(
-              title: const Text('Mike Admin'),
-              onTap: () => Navigator.pop(context, 'Mike Admin'),
-            ),
-          ],
+  Future<void> _sendReply() async {
+    final localizations = AppLocalizations.of(context);
+    if (_responseController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(localizations.pleaseEnterResponse),
+          backgroundColor: Colors.orange,
         ),
-      ),
-    );
-
-    if (assignedTo != null) {
-      setState(() {
-        _isLoading = true;
-      });
-
-      try {
-        if (!mounted) return;
-        final provider = context.read<ComplaintsProvider>();
-        // Use the current user's ID as the assigned staff
-        final authProvider = context.read<AuthProvider>();
-        final currentUserId = authProvider.user?.id;
-        if (currentUserId != null) {
-          await provider.assignComplaint(widget.complaint.id, currentUserId);
-        } else {
-          throw Exception('User not authenticated');
-        }
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Complaint assigned to $assignedTo')),
-          );
-          Navigator.pop(context);
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
-        }
-      } finally {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
-        }
-      }
+      );
+      return;
     }
-  }
 
-  Future<void> _addResponse() async {
-    if (_responseController.text.trim().isEmpty) return;
+    if (!mounted) return;
 
     setState(() {
       _isLoading = true;
@@ -131,7 +133,9 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
 
     try {
       final provider = context.read<ComplaintsProvider>();
-      await provider.addComplaintResponse(
+
+      // Use the new reply endpoint which handles both response and status update
+      await provider.sendComplaintReply(
         widget.complaint.id,
         _responseController.text.trim(),
       );
@@ -139,22 +143,26 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
       _responseController.clear();
 
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Response added successfully')),
+          SnackBar(
+            content: Text(localizations.replySentSuccessfully),
+            backgroundColor: Colors.green,
+          ),
         );
+
         // Refresh the complaint data
-        final updatedComplaint = await provider.getComplaintById(
-          widget.complaint.id,
-        );
-        if (updatedComplaint != null) {
-          setState(() {});
-        }
+        await _loadComplaintDetails();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+        final localizations = AppLocalizations.of(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(localizations.errorSendingReply(e.toString())),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     } finally {
       if (mounted) {
@@ -165,105 +173,43 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
     }
   }
 
-  Future<void> _resolveComplaint() async {
-    final resolution = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Resolve Complaint'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Please provide a resolution summary:'),
-            const SizedBox(height: 16),
-            TextField(
-              decoration: const InputDecoration(
-                labelText: 'Resolution',
-                border: OutlineInputBorder(),
-                hintText: 'Describe how the complaint was resolved...',
-              ),
-              maxLines: 3,
-              onSubmitted: (value) => Navigator.pop(context, value),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, _responseController.text),
-            child: const Text('Resolve'),
-          ),
-        ],
-      ),
-    );
-
-    if (resolution != null && resolution.trim().isNotEmpty) {
-      setState(() {
-        _isLoading = true;
-      });
-
-      try {
-        if (!mounted) return;
-        final provider = context.read<ComplaintsProvider>();
-        await provider.resolveComplaint(widget.complaint.id, resolution.trim());
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Complaint resolved successfully')),
-          );
-          Navigator.pop(context);
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
-        }
-      } finally {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
-        }
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
+    final complaint = _currentComplaint ?? widget.complaint;
+    final localizations = AppLocalizations.of(context);
+
     return Scaffold(
       appBar: AppBar(
-        title: Text('Complaint #${widget.complaint.id}'),
+        title: Text(localizations.complaintNumber(complaint.id)),
         actions: [
-          if (widget.complaint.status != Complaint.statusResolved)
-            PopupMenuButton<String>(
-              onSelected: _updateStatus,
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: Complaint.statusPending,
-                  child: Text('Mark Under Review'),
-                ),
-                const PopupMenuItem(
-                  value: Complaint.statusInProgress,
-                  child: Text('Mark In Progress'),
-                ),
-                const PopupMenuItem(
-                  value: Complaint.statusResolved,
-                  child: Text('Mark Resolved'),
-                ),
-                const PopupMenuItem(
-                  value: Complaint.statusClosed,
-                  child: Text('Mark Closed'),
-                ),
-              ],
-            ),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadComplaintDetails,
+            tooltip: localizations.refreshComplaintDetails,
+          ),
+          PopupMenuButton<String>(
+            onSelected: _updateStatus,
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'open',
+                child: Text(localizations.markAsOpen),
+              ),
+              PopupMenuItem(
+                value: 'in_progress',
+                child: Text(localizations.markAsReplied),
+              ),
+              PopupMenuItem(
+                value: 'resolved',
+                child: Text(localizations.markResolved),
+              ),
+            ],
+          ),
         ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -278,20 +224,40 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                           Row(
                             children: [
                               Expanded(
-                                child: Text(
-                                  widget.complaint.title,
-                                  style: const TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                                child: Builder(
+                                  builder: (context) {
+                                    final localizations = AppLocalizations.of(
+                                      context,
+                                    );
+                                    String displayTitle = complaint.title;
+                                    // Translate common complaint titles
+                                    final titleLower = complaint.title
+                                        .toLowerCase();
+                                    if (titleLower.contains(
+                                          'complaint about the app',
+                                        ) ||
+                                        titleLower.contains(
+                                          'complaint about app',
+                                        )) {
+                                      displayTitle =
+                                          localizations.complaintAboutTheApp;
+                                    }
+                                    return Text(
+                                      displayTitle,
+                                      style: const TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    );
+                                  },
                                 ),
                               ),
-                              StatusChip(status: widget.complaint.status),
+                              StatusChip(status: complaint.status),
                             ],
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            widget.complaint.description,
+                            complaint.description,
                             style: const TextStyle(fontSize: 16),
                           ),
                         ],
@@ -307,29 +273,29 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Complaint Details',
-                            style: TextStyle(
+                          Text(
+                            localizations.complaintDetailsLabel,
+                            style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
                           const SizedBox(height: 16),
-                          _buildDetailRow('Type', widget.complaint.type),
                           _buildDetailRow(
-                            'Priority',
-                            widget.complaint.priority,
+                            localizations.status,
+                            _getLocalizedStatus(
+                              complaint.status,
+                              localizations,
+                            ),
                           ),
-                          _buildDetailRow('Status', widget.complaint.status),
                           _buildDetailRow(
-                            'Created',
-                            _formatDate(widget.complaint.createdAt),
+                            localizations.created,
+                            _formatDate(complaint.createdAt),
                           ),
-                          if (widget.complaint.updatedAt !=
-                              widget.complaint.createdAt)
+                          if (complaint.updatedAt != complaint.createdAt)
                             _buildDetailRow(
-                              'Updated',
-                              _formatDate(widget.complaint.updatedAt),
+                              localizations.updated,
+                              _formatDate(complaint.updatedAt),
                             ),
                         ],
                       ),
@@ -344,66 +310,27 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Customer Information',
-                            style: TextStyle(
+                          Text(
+                            localizations.customerInformation,
+                            style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
                           const SizedBox(height: 16),
                           _buildDetailRow(
-                            'Name',
-                            widget.complaint.customerName ?? 'Unknown',
+                            localizations.nameLabel,
+                            complaint.customerName ?? localizations.unknown,
                           ),
                           _buildDetailRow(
-                            'Email',
-                            widget.complaint.customerEmail ?? 'Unknown',
+                            localizations.emailLabel,
+                            complaint.customerEmail ?? localizations.unknown,
                           ),
-                          if (widget.complaint.assignedToName != null)
-                            _buildDetailRow(
-                              'Assigned To',
-                              widget.complaint.assignedToName!,
-                            ),
                         ],
                       ),
                     ),
                   ),
                   const SizedBox(height: 16),
-
-                  // Resolution Card (if resolved)
-                  if (widget.complaint.resolution != null) ...[
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Resolution',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            Text(widget.complaint.resolution!),
-                            if (widget.complaint.resolvedAt != null) ...[
-                              const SizedBox(height: 8),
-                              Text(
-                                'Resolved on: ${_formatDate(widget.complaint.resolvedAt!)}',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
 
                   // Responses Card - Not implemented in current model
                   // Card(
@@ -428,68 +355,86 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                   // const SizedBox(height: 16),
 
                   // Add Response Section
-                  if (widget.complaint.status != Complaint.statusResolved) ...[
+                  if (widget.complaint.status != Complaint.statusResolved &&
+                      widget.complaint.status != 'resolved') ...[
                     Card(
                       child: Padding(
                         padding: const EdgeInsets.all(16.0),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              'Add Response',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.reply,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  localizations.replyToComplaint,
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
                             ),
                             const SizedBox(height: 16),
                             TextField(
                               controller: _responseController,
-                              decoration: const InputDecoration(
-                                labelText: 'Your Response',
-                                border: OutlineInputBorder(),
-                                hintText: 'Type your response here...',
+                              decoration: InputDecoration(
+                                labelText: localizations.yourResponse,
+                                hintText: localizations.typeYourReply,
+                                border: const OutlineInputBorder(),
+                                filled: true,
+                                fillColor: Theme.of(
+                                  context,
+                                ).colorScheme.surface.withValues(alpha: 0.3),
                               ),
-                              maxLines: 3,
+                              maxLines: 5,
+                              enabled: !_isLoading,
                             ),
                             const SizedBox(height: 16),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: ElevatedButton(
-                                    onPressed: _addResponse,
-                                    child: const Text('Add Response'),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: _isLoading ? null : _sendReply,
+                                icon: _isLoading
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(
+                                                Colors.white,
+                                              ),
+                                        ),
+                                      )
+                                    : const Icon(Icons.send),
+                                label: Text(
+                                  _isLoading
+                                      ? localizations.sending
+                                      : localizations.sendReply,
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Theme.of(
+                                    context,
+                                  ).colorScheme.primary,
+                                  foregroundColor: Theme.of(
+                                    context,
+                                  ).colorScheme.onPrimary,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 16,
                                   ),
                                 ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: OutlinedButton(
-                                    onPressed: _assignComplaint,
-                                    child: const Text('Assign'),
-                                  ),
-                                ),
-                              ],
+                              ),
                             ),
                           ],
                         ),
                       ),
                     ),
                     const SizedBox(height: 16),
-                  ],
-
-                  // Action Buttons
-                  if (widget.complaint.status != Complaint.statusResolved) ...[
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: _resolveComplaint,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          foregroundColor: Colors.white,
-                        ),
-                        child: const Text('Resolve Complaint'),
-                      ),
-                    ),
                   ],
                 ],
               ),
@@ -521,5 +466,20 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
 
   String _formatDate(DateTime date) {
     return '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+  }
+
+  String _getLocalizedStatus(String status, AppLocalizations localizations) {
+    switch (status) {
+      case 'open':
+        return localizations.open;
+      case 'in_progress':
+        return localizations.inProgress;
+      case 'resolved':
+        return localizations.resolved;
+      case 'closed':
+        return localizations.closed;
+      default:
+        return status;
+    }
   }
 }

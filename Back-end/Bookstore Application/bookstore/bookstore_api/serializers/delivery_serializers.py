@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.utils import timezone
 from django.db import transaction
-from ..models import Order, OrderItem, DeliveryAssignment, DeliveryStatusHistory, User, Payment, Book
+from ..models import Order, OrderItem, DeliveryRequest, DeliveryActivity, User, Payment, Book
 from ..models.delivery_model import DeliveryRequest, LocationHistory, RealTimeTracking, DeliveryActivity, OrderNote
 from .user_serializers import UserBasicInfoSerializer, UserDetailSerializer 
 from .payment_serializers import PaymentBasicSerializer
@@ -70,24 +70,51 @@ class OrderForDeliverySerializer(serializers.ModelSerializer):
 
 class DeliveryAssignmentBasicSerializer(serializers.ModelSerializer):
     """
-    Basic serializer for delivery assignments with order details for delivery managers.
+    Basic serializer for delivery assignments (now part of DeliveryRequest).
+    Backward compatibility serializer.
     """
-    delivery_manager_name = serializers.CharField(source='delivery_manager.get_full_name', read_only=True)
-    delivery_manager_email = serializers.EmailField(source='delivery_manager.email', read_only=True, allow_null=True)
+    delivery_manager_name = serializers.SerializerMethodField()
+    delivery_manager_email = serializers.SerializerMethodField()
     delivery_manager_phone = serializers.SerializerMethodField()
-    order_number = serializers.CharField(source='order.order_number', read_only=True)
-    assigned_by_name = serializers.CharField(source='assigned_by.get_full_name', read_only=True)
+    order_number = serializers.SerializerMethodField()
+    assigned_by_name = serializers.SerializerMethodField()
     order = serializers.SerializerMethodField()
 
     class Meta:
-        model = DeliveryAssignment
+        model = DeliveryRequest
         fields = [
             'id', 'order', 'order_number', 'delivery_manager', 'delivery_manager_name',
             'delivery_manager_email', 'delivery_manager_phone',
             'status', 'assigned_at', 'assigned_by', 'assigned_by_name',
-            'estimated_delivery_time', 'started_at', 'completed_at'
+            'estimated_delivery_time', 'started_at', 'completed_at',
+            'accepted_at', 'picked_up_at', 'actual_delivery_time', 'delivered_at',
+            'delivery_notes', 'failure_reason', 'retry_count'
         ]
         read_only_fields = ['id', 'assigned_at', 'assigned_by']
+    
+    def get_delivery_manager_name(self, obj):
+        """Get delivery manager name if available."""
+        if obj.delivery_manager:
+            return obj.delivery_manager.get_full_name()
+        return None
+    
+    def get_delivery_manager_email(self, obj):
+        """Get delivery manager email if available."""
+        if obj.delivery_manager:
+            return obj.delivery_manager.email
+        return None
+    
+    def get_order_number(self, obj):
+        """Get order number from order."""
+        if obj.order:
+            return obj.order.order_number
+        return None
+    
+    def get_assigned_by_name(self, obj):
+        """Get assigned by name if available."""
+        if obj.assigned_by:
+            return obj.assigned_by.get_full_name()
+        return None
     
     def get_delivery_manager_phone(self, obj):
         """Get phone number from delivery manager's profile if available"""
@@ -182,17 +209,19 @@ class OrderListSerializer(serializers.ModelSerializer):
             return 0
     
     def get_has_delivery_assignment(self, obj):
-        """Check if order has a delivery assignment."""
+        """Check if order has a delivery assignment (now from DeliveryRequest)."""
         try:
-            return hasattr(obj, 'delivery_assignment') and obj.delivery_assignment is not None
+            # Check for delivery request with order and delivery_manager
+            return hasattr(obj, 'delivery_request') and obj.delivery_request is not None and obj.delivery_request.delivery_manager is not None
         except Exception:
             return False
             
     def get_delivery_assignment(self, obj):
-        """Return delivery assignment details if exist"""
+        """Return delivery assignment details if exist (now from DeliveryRequest)."""
         try:
-            if hasattr(obj, 'delivery_assignment') and obj.delivery_assignment is not None:
-                return DeliveryAssignmentBasicSerializer(obj.delivery_assignment).data
+            # Get the delivery request for this order (if it exists)
+            if hasattr(obj, 'delivery_request') and obj.delivery_request is not None:
+                return DeliveryAssignmentBasicSerializer(obj.delivery_request).data
         except Exception:
             pass
         return None
@@ -247,10 +276,10 @@ class OrderDetailSerializer(serializers.ModelSerializer):
             return 0
     
     def get_delivery_assignment(self, obj):
-        """Return delivery assignment details if exist"""
+        """Return delivery assignment details if exist (now from DeliveryRequest)."""
         try:
-            if hasattr(obj, 'delivery_assignment') and obj.delivery_assignment is not None:
-                return DeliveryAssignmentBasicSerializer(obj.delivery_assignment).data
+            if hasattr(obj, 'delivery_request') and obj.delivery_request is not None:
+                return DeliveryAssignmentBasicSerializer(obj.delivery_request).data
         except Exception:
             pass
         return None
@@ -317,11 +346,11 @@ class OrderNoteSerializer(serializers.ModelSerializer):
         # This handles notes created before author tracking was implemented
         try:
             order = obj.order
-            # Check if there's a delivery assignment (likely delivery manager wrote it)
-            # DeliveryAssignment has OneToOneField with related_name='delivery_assignment'
-            assignment = getattr(order, 'delivery_assignment', None)
-            if assignment and hasattr(assignment, 'delivery_manager') and assignment.delivery_manager:
-                manager = assignment.delivery_manager
+            # Check if there's a delivery request (likely delivery manager wrote it)
+            # DeliveryRequest has OneToOneField with related_name='delivery_request'
+            delivery_request = getattr(order, 'delivery_request', None)
+            if delivery_request and hasattr(delivery_request, 'delivery_manager') and delivery_request.delivery_manager:
+                manager = delivery_request.delivery_manager
                 full_name = manager.get_full_name()
                 if full_name and full_name.strip():
                     return full_name
@@ -346,9 +375,9 @@ class OrderNoteSerializer(serializers.ModelSerializer):
         # Try to infer from order context
         try:
             order = obj.order
-            assignment = getattr(order, 'delivery_assignment', None)
-            if assignment and hasattr(assignment, 'delivery_manager') and assignment.delivery_manager:
-                return assignment.delivery_manager.email
+            delivery_request = getattr(order, 'delivery_request', None)
+            if delivery_request and hasattr(delivery_request, 'delivery_manager') and delivery_request.delivery_manager:
+                return delivery_request.delivery_manager.email
             if order.customer:
                 return order.customer.email
         except Exception:
@@ -364,9 +393,9 @@ class OrderNoteSerializer(serializers.ModelSerializer):
         # Try to infer from order context
         try:
             order = obj.order
-            assignment = getattr(order, 'delivery_assignment', None)
-            if assignment and hasattr(assignment, 'delivery_manager') and assignment.delivery_manager:
-                return assignment.delivery_manager.user_type
+            delivery_request = getattr(order, 'delivery_request', None)
+            if delivery_request and hasattr(delivery_request, 'delivery_manager') and delivery_request.delivery_manager:
+                return delivery_request.delivery_manager.user_type
             if order.customer:
                 return order.customer.user_type
         except Exception:
@@ -443,7 +472,8 @@ class OrderStatusUpdateSerializer(serializers.Serializer):
 
 class DeliveryAssignmentDetailSerializer(serializers.ModelSerializer):
     """
-    Detailed serializer for delivery assignments.
+    Detailed serializer for delivery assignments (now part of DeliveryRequest).
+    Backward compatibility serializer.
     """
     order = OrderDetailSerializer(read_only=True)
     delivery_manager = UserBasicInfoSerializer(read_only=True)
@@ -451,12 +481,12 @@ class DeliveryAssignmentDetailSerializer(serializers.ModelSerializer):
     delivery_duration = serializers.SerializerMethodField()
 
     class Meta:
-        model = DeliveryAssignment
+        model = DeliveryRequest
         fields = [
             'id', 'order', 'delivery_manager', 'status',
             'assigned_at', 'delivery_notes', 'estimated_delivery_time', 'actual_delivery_time',
             'accepted_at', 'picked_up_at', 'delivered_at', 'started_at', 'completed_at',
-            'status_history', 'delivery_duration'
+            'status_history', 'delivery_duration', 'failure_reason', 'retry_count'
         ]
         read_only_fields = [
             'id', 'order', 'delivery_manager', 'assigned_at',
@@ -465,9 +495,16 @@ class DeliveryAssignmentDetailSerializer(serializers.ModelSerializer):
         ]
     
     def get_status_history(self, obj):
-        """Get status change history."""
-        history = obj.status_history.all()[:5]  # Last 5 status changes
-        return DeliveryStatusHistorySerializer(history, many=True).data
+        """Get status change history (now from DeliveryActivity)."""
+        # Get activities for the order if available
+        if obj.order:
+            from ..models import DeliveryActivity
+            history = DeliveryActivity.objects.filter(
+                order=obj.order,
+                activity_type='status_change'
+            ).order_by('-timestamp')[:5]
+            return DeliveryStatusHistorySerializer(history, many=True).data
+        return []
     
     def get_delivery_duration(self, obj):
         """Get delivery duration in minutes."""
@@ -479,14 +516,15 @@ class DeliveryAssignmentDetailSerializer(serializers.ModelSerializer):
 
 class DeliveryAssignmentCreateSerializer(serializers.ModelSerializer):
     """
-    Serializer for creating delivery assignments.
+    Serializer for creating delivery assignments (now creates DeliveryRequest).
+    Backward compatibility serializer.
     """
     order_id = serializers.IntegerField()
     delivery_manager_id = serializers.IntegerField()
     estimated_delivery_time = serializers.DateTimeField(required=False)
     
     class Meta:
-        model = DeliveryAssignment
+        model = DeliveryRequest
         fields = [
             'order_id', 'delivery_manager_id', 'delivery_notes',
             'estimated_delivery_time'
@@ -499,13 +537,8 @@ class DeliveryAssignmentCreateSerializer(serializers.ModelSerializer):
         except Order.DoesNotExist:
             raise serializers.ValidationError("Order not found.")
         
-        # Temporarily disable status check to allow assignment of confirmed orders
-        # if order.status != 'ready_for_delivery':
-        #     raise serializers.ValidationError(
-        #         "Order must be in 'ready_for_delivery' status to assign for delivery."
-        #     )
-        
-        if hasattr(order, 'delivery_assignment'):
+        # Check if order already has a delivery request with assignment
+        if order.delivery_requests.filter(delivery_manager__isnull=False).exists():
             raise serializers.ValidationError("Order already has a delivery assignment.")
         
         return value
@@ -552,7 +585,7 @@ class DeliveryAssignmentStatusUpdateSerializer(serializers.Serializer):
     """
     Serializer for updating delivery assignment status.
     """
-    STATUS_CHOICES = DeliveryStatusHistory.STATUS_CHOICES
+    STATUS_CHOICES = DeliveryActivity.STATUS_CHOICES
     
     status = serializers.ChoiceField(choices=STATUS_CHOICES)
     notes = serializers.CharField(max_length=1000, required=False, allow_blank=True)
@@ -575,21 +608,26 @@ class DeliveryAssignmentStatusUpdateSerializer(serializers.Serializer):
 
 class DeliveryStatusHistorySerializer(serializers.ModelSerializer):
     """
-    Serializer for delivery status history.
+    Serializer for delivery status history (now part of DeliveryActivity).
+    Backward compatibility serializer that works with merged model.
     """
+    status = serializers.CharField(source='new_status', read_only=True)
     status_display = serializers.SerializerMethodField()
     
     class Meta:
-        model = DeliveryStatusHistory
+        model = DeliveryActivity
         fields = [
             'id', 'status', 'status_display',
-            'notes', 'timestamp'
+            'notes', 'timestamp', 'previous_status', 'new_status', 'actor_type'
         ]
         read_only_fields = ['id', 'timestamp']
     
     def get_status_display(self, obj):
         """Get display name for status."""
-        return dict(DeliveryStatusHistory.STATUS_CHOICES).get(obj.status, obj.status)
+        status = obj.new_status or obj.previous_status
+        if status:
+            return dict(DeliveryActivity.STATUS_CHOICES).get(status, status)
+        return None
 
 
 class OrderApprovalSerializer(serializers.Serializer):
@@ -778,8 +816,7 @@ class DeliveryRequestCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = DeliveryRequest
         fields = [
-            'delivery_address', 'delivery_notes', 
-            'preferred_delivery_date'
+            'request_type'
         ]
     
     def create(self, validated_data):
@@ -810,8 +847,8 @@ class DeliveryRequestListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'request_type', 'request_type_display', 'customer', 'customer_id',
             'customer_name', 'customer_phone', 'customer_email', 'order_id', 'order_number',
-            'delivery_address', 'delivery_city', 'shipping_address', 'status', 'status_display', 
-            'delivery_manager_id', 'delivery_manager_name', 'preferred_delivery_time', 'created_at', 'notes',
+            'shipping_address', 'status', 'status_display', 
+            'delivery_manager_id', 'delivery_manager_name', 'created_at',
             'order'
         ]
         read_only_fields = ['id', 'created_at']
@@ -840,12 +877,11 @@ class DeliveryRequestListSerializer(serializers.ModelSerializer):
         return None
     
     def get_shipping_address(self, obj):
-        """Get shipping address from order or delivery request."""
-        # Try to get address from related order first
-        if hasattr(obj, 'order') and obj.order and hasattr(obj.order, 'shipping_address'):
-            return obj.order.shipping_address
-        # Fall back to delivery address
-        return obj.delivery_address
+        """Get shipping address from order."""
+        # Get address from related order
+        if hasattr(obj, 'order') and obj.order and hasattr(obj.order, 'delivery_address'):
+            return obj.order.delivery_address
+        return None
     
     def get_delivery_manager_id(self, obj):
         """Get delivery manager ID if assigned."""
@@ -865,22 +901,18 @@ class DeliveryRequestDetailSerializer(serializers.ModelSerializer):
     customer = UserDetailSerializer(read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     request_type_display = serializers.CharField(source='get_request_type_display', read_only=True)
-    delivery_manager_name = serializers.CharField(source='delivery_manager.get_full_name', read_only=True)
-    assigned_by_name = serializers.CharField(source='assigned_by.get_full_name', read_only=True, allow_null=True)
+    delivery_manager_name = serializers.CharField(source='delivery_manager.get_full_name', read_only=True, allow_null=True)
     
     class Meta:
         model = DeliveryRequest
         fields = [
             'id', 'request_type', 'request_type_display', 'customer', 
-            'delivery_address', 'delivery_city',
-            'preferred_pickup_time', 'preferred_delivery_time', 'notes',
             'status', 'status_display', 'delivery_manager', 'delivery_manager_name',
-            'assigned_by', 'assigned_by_name', 'created_at', 'updated_at', 
-            'assigned_at', 'delivered_at'
+            'order', 'created_at', 'updated_at'
         ]
         read_only_fields = [
-            'id', 'customer', 'delivery_manager', 'assigned_by',
-            'created_at', 'updated_at', 'assigned_at', 'delivered_at'
+            'id', 'customer', 'delivery_manager',
+            'created_at', 'updated_at'
         ]
 
 
@@ -889,7 +921,6 @@ class DeliveryRequestAssignSerializer(serializers.Serializer):
     Serializer for assigning delivery requests to managers.
     """
     delivery_manager_id = serializers.IntegerField()
-    notes = serializers.CharField(required=False, allow_blank=True)
     
     def validate_delivery_manager_id(self, value):
         try:
@@ -912,8 +943,7 @@ class DeliveryRequestStatusUpdateSerializer(serializers.Serializer):
     """
     STATUS_CHOICES = DeliveryRequest.STATUS_CHOICES
     
-    status = serializers.ChoiceField(choices=STATUS_CHOICES)
-    notes = serializers.CharField(required=False, allow_blank=True) 
+    status = serializers.ChoiceField(choices=STATUS_CHOICES) 
 
 
 class DeliveryManagerForRequestSerializer(serializers.ModelSerializer):
@@ -1292,20 +1322,51 @@ class DeliveryManagerLocationWithHistorySerializer(serializers.ModelSerializer):
 
 class DeliveryActivitySerializer(serializers.ModelSerializer):
     """
-    Serializer for delivery activity tracking.
+    Serializer for delivery activity tracking (merged with status history).
     """
-    delivery_manager_name = serializers.CharField(source='delivery_manager.get_full_name', read_only=True)
-    order_number = serializers.CharField(source='order.order_number', read_only=True)
+    delivery_manager_name = serializers.SerializerMethodField()
+    order_number = serializers.SerializerMethodField()
     activity_type_display = serializers.CharField(source='get_activity_type_display', read_only=True)
+    previous_status_display = serializers.SerializerMethodField()
+    new_status_display = serializers.SerializerMethodField()
+    actor_type_display = serializers.CharField(source='get_actor_type_display', read_only=True)
     
     class Meta:
         model = DeliveryActivity
         fields = [
-            'id', 'delivery_manager', 'delivery_manager_name', 'order', 'order_number',
-            'activity_type', 'activity_type_display', 'activity_data', 'timestamp',
+            'id', 'delivery_assignment', 'delivery_manager', 'delivery_manager_name',
+            'order', 'order_number', 'activity_type', 'activity_type_display',
+            'previous_status', 'previous_status_display', 'new_status', 'new_status_display',
+            'actor_type', 'actor_type_display', 'notes', 'activity_data', 'timestamp',
             'ip_address', 'user_agent'
         ]
         read_only_fields = ['id', 'timestamp']
+    
+    def get_delivery_manager_name(self, obj):
+        """Get delivery manager name if available."""
+        if obj.delivery_manager:
+            return obj.delivery_manager.get_full_name()
+        return None
+    
+    def get_order_number(self, obj):
+        """Get order number from order or delivery_assignment."""
+        if obj.order:
+            return obj.order.order_number
+        elif obj.delivery_assignment:
+            return obj.delivery_assignment.order.order_number
+        return None
+    
+    def get_previous_status_display(self, obj):
+        """Get display name for previous status."""
+        if obj.previous_status:
+            return dict(DeliveryActivity.STATUS_CHOICES).get(obj.previous_status, obj.previous_status)
+        return None
+    
+    def get_new_status_display(self, obj):
+        """Get display name for new status."""
+        if obj.new_status:
+            return dict(DeliveryActivity.STATUS_CHOICES).get(obj.new_status, obj.new_status)
+        return None
 
 
 class DeliveryActivityCreateSerializer(serializers.ModelSerializer):

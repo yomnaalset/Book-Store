@@ -4,6 +4,7 @@ import '../../../core/constants/app_dimensions.dart';
 import '../../../core/widgets/common/custom_button.dart';
 import '../../../core/widgets/common/custom_text_field.dart';
 import '../../../core/widgets/common/loading_indicator.dart';
+import '../../../core/localization/app_localizations.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/profile_provider.dart';
 
@@ -40,9 +41,10 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     if (authProvider.token == null) {
       // Handle case where user is not authenticated
+      final localizations = AppLocalizations.of(context);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Please log in to change your password'),
+          content: Text(localizations.pleaseLogInToChangePassword),
           backgroundColor: theme.colorScheme.error,
         ),
       );
@@ -91,7 +93,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text('Change Password'),
+        title: Text(AppLocalizations.of(context).changePasswordTitle),
         backgroundColor: theme.colorScheme.primary,
         foregroundColor: theme.colorScheme.onPrimary,
         elevation: 0,
@@ -103,6 +105,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
           }
 
           return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(AppDimensions.paddingL),
             child: Form(
               key: _formKey,
@@ -125,7 +128,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                         ),
                         const SizedBox(height: AppDimensions.spacingM),
                         Text(
-                          'Change Your Password',
+                          AppLocalizations.of(context).changeYourPassword,
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
@@ -134,7 +137,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                         ),
                         const SizedBox(height: AppDimensions.spacingS),
                         Text(
-                          'Enter your current password and choose a new secure password',
+                          AppLocalizations.of(context).enterCurrentAndNewPassword,
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 14,
@@ -148,10 +151,13 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                   const SizedBox(height: AppDimensions.spacingXL),
 
                   // Current Password Field
-                  CustomTextField(
-                    controller: _currentPasswordController,
-                    label: 'Current Password',
-                    hint: 'Enter your current password',
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return CustomTextField(
+                        controller: _currentPasswordController,
+                        label: localizations.currentPasswordLabel,
+                        hint: localizations.currentPasswordHint,
                     obscureText: _obscureCurrentPassword,
                     prefixIcon: const Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
@@ -166,21 +172,26 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                         });
                       },
                     ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter your current password';
-                      }
-                      return null;
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return localizations.pleaseEnterCurrentPassword;
+                          }
+                          return null;
+                        },
+                      );
                     },
                   ),
 
                   const SizedBox(height: AppDimensions.spacingL),
 
                   // New Password Field
-                  CustomTextField(
-                    controller: _newPasswordController,
-                    label: 'New Password',
-                    hint: 'Enter your new password',
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return CustomTextField(
+                        controller: _newPasswordController,
+                        label: localizations.newPasswordLabel,
+                        hint: localizations.newPasswordHint,
                     obscureText: _obscureNewPassword,
                     prefixIcon: const Icon(Icons.lock),
                     suffixIcon: IconButton(
@@ -199,27 +210,32 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                       // Trigger rebuild to update password requirements
                       setState(() {});
                     },
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter a new password';
-                      }
-                      if (value.length < 8) {
-                        return 'Password must be at least 8 characters long';
-                      }
-                      if (!_isPasswordStrong(value)) {
-                        return 'Password must contain uppercase, lowercase, number, and special character';
-                      }
-                      return null;
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return localizations.pleaseEnterNewPassword;
+                          }
+                          if (value.length < 8) {
+                            return localizations.passwordTooShort;
+                          }
+                          if (!_isPasswordStrong(value)) {
+                            return localizations.passwordTooWeak;
+                          }
+                          return null;
+                        },
+                      );
                     },
                   ),
 
                   const SizedBox(height: AppDimensions.spacingL),
 
                   // Confirm Password Field
-                  CustomTextField(
-                    controller: _confirmPasswordController,
-                    label: 'Confirm New Password',
-                    hint: 'Confirm your new password',
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return CustomTextField(
+                        controller: _confirmPasswordController,
+                        label: localizations.confirmNewPasswordLabel,
+                        hint: localizations.confirmNewPasswordHint,
                     obscureText: _obscureConfirmPassword,
                     prefixIcon: const Icon(Icons.lock),
                     suffixIcon: IconButton(
@@ -238,14 +254,17 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                       // Trigger rebuild to update validation
                       setState(() {});
                     },
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please confirm your new password';
-                      }
-                      if (value != _newPasswordController.text) {
-                        return 'Passwords do not match';
-                      }
-                      return null;
+                        validator: (value) {
+                          final localizations = AppLocalizations.of(context);
+                          if (value == null || value.isEmpty) {
+                            return localizations.pleaseConfirmNewPassword;
+                          }
+                          if (value != _newPasswordController.text) {
+                            return localizations.passwordsDoNotMatch;
+                          }
+                          return null;
+                        },
+                      );
                     },
                   ),
 
@@ -262,46 +281,56 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Password Requirements:',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: theme.colorScheme.onSurface,
-                          ),
-                        ),
-                        const SizedBox(height: AppDimensions.spacingS),
-                        _buildRequirementItem(
-                          'At least 8 characters long',
-                          _newPasswordController.text.length >= 8,
-                        ),
-                        _buildRequirementItem(
-                          'Contains uppercase letter',
-                          _newPasswordController.text.contains(
-                            RegExp(r'[A-Z]'), // ignore: deprecated_member_use
-                          ),
-                        ),
-                        _buildRequirementItem(
-                          'Contains lowercase letter',
-                          _newPasswordController.text.contains(
-                            RegExp(r'[a-z]'), // ignore: deprecated_member_use
-                          ),
-                        ),
-                        _buildRequirementItem(
-                          'Contains number',
-                          _newPasswordController.text.contains(
-                            RegExp(r'[0-9]'), // ignore: deprecated_member_use
-                          ),
-                        ),
-                        _buildRequirementItem(
-                          'Contains special character',
-                          _newPasswordController.text.contains(
-                            // ignore: deprecated_member_use
-                            RegExp(
-                              // ignore: deprecated_member_use
-                              r'[!@#$%^&*(),.?":{}|<>]',
-                            ),
-                          ),
+                        Builder(
+                          builder: (context) {
+                            final localizations = AppLocalizations.of(context);
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  localizations.passwordRequirements,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: theme.colorScheme.onSurface,
+                                  ),
+                                ),
+                                const SizedBox(height: AppDimensions.spacingS),
+                                _buildRequirementItem(
+                                  localizations.atLeast8Characters,
+                                  _newPasswordController.text.length >= 8,
+                                ),
+                                _buildRequirementItem(
+                                  localizations.containsUppercase,
+                                  _newPasswordController.text.contains(
+                                    RegExp(r'[A-Z]'), // ignore: deprecated_member_use
+                                  ),
+                                ),
+                                _buildRequirementItem(
+                                  localizations.containsLowercase,
+                                  _newPasswordController.text.contains(
+                                    RegExp(r'[a-z]'), // ignore: deprecated_member_use
+                                  ),
+                                ),
+                                _buildRequirementItem(
+                                  localizations.containsNumber,
+                                  _newPasswordController.text.contains(
+                                    RegExp(r'[0-9]'), // ignore: deprecated_member_use
+                                  ),
+                                ),
+                                _buildRequirementItem(
+                                  localizations.containsSpecial,
+                                  _newPasswordController.text.contains(
+                                    // ignore: deprecated_member_use
+                                    RegExp(
+                                      // ignore: deprecated_member_use
+                                      r'[!@#$%^&*(),.?":{}|<>]',
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
                         ),
                       ],
                     ),
@@ -313,21 +342,31 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                   Row(
                     children: [
                       Expanded(
-                        child: CustomButton(
-                          text: 'Cancel',
-                          onPressed: () => Navigator.pop(context),
-                          backgroundColor: theme.colorScheme.surface,
-                          textColor: theme.colorScheme.onSurfaceVariant,
+                        child: Builder(
+                          builder: (context) {
+                            final localizations = AppLocalizations.of(context);
+                            return CustomButton(
+                              text: localizations.cancel,
+                              onPressed: () => Navigator.pop(context),
+                              backgroundColor: theme.colorScheme.surface,
+                              textColor: theme.colorScheme.onSurfaceVariant,
+                            );
+                          },
                         ),
                       ),
                       const SizedBox(width: AppDimensions.spacingM),
                       Expanded(
-                        child: CustomButton(
-                          text: _isLoading
-                              ? 'Changing Password...'
-                              : 'Change Password',
-                          onPressed: _isLoading ? null : _handleChangePassword,
-                          isLoading: _isLoading,
+                        child: Builder(
+                          builder: (context) {
+                            final localizations = AppLocalizations.of(context);
+                            return CustomButton(
+                              text: _isLoading
+                                  ? localizations.loading
+                                  : localizations.changePasswordTitle,
+                              onPressed: _isLoading ? null : _handleChangePassword,
+                              isLoading: _isLoading,
+                            );
+                          },
                         ),
                       ),
                     ],
@@ -398,7 +437,8 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       );
 
       if (authProvider.token == null) {
-        throw Exception('No authentication token found. Please log in again.');
+        final localizations = AppLocalizations.of(context);
+        throw Exception(localizations.noAuthenticationToken);
       }
 
       // Test connectivity first
@@ -430,9 +470,10 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
           _newPasswordController.clear();
           _confirmPasswordController.clear();
 
+          final localizations = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: const Text('Password changed successfully!'),
+              content: Text(localizations.passwordChangedSuccessfully),
               backgroundColor: theme.colorScheme.primary,
               duration: const Duration(seconds: 3),
             ),
@@ -444,11 +485,12 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
             Navigator.pop(context);
           }
         } else {
+          final localizations = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
                 profileProvider.errorMessage ??
-                    'Failed to change password. Please try again.',
+                    localizations.failedToChangePassword,
               ),
               backgroundColor: theme.colorScheme.error,
               duration: const Duration(seconds: 4),
@@ -458,9 +500,10 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       }
     } catch (e) {
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: ${e.toString()}'),
+            content: Text('${localizations.errorOccurred}: ${e.toString()}'),
             backgroundColor: theme.colorScheme.error,
             duration: const Duration(seconds: 4),
           ),

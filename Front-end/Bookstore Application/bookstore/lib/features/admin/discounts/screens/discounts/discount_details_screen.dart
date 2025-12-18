@@ -5,6 +5,7 @@ import '../../../models/book_discount.dart';
 import '../../../../../routes/app_routes.dart';
 import '../../providers/discounts_provider.dart';
 import '../../../../auth/providers/auth_provider.dart';
+import '../../../../../core/localization/app_localizations.dart';
 
 class DiscountDetailsScreen extends StatefulWidget {
   final dynamic discount; // Can be Discount or BookDiscount
@@ -92,9 +93,10 @@ class _DiscountDetailsScreenState extends State<DiscountDetailsScreen> {
   Widget build(BuildContext context) {
     // Show loading indicator while fetching data
     if (_isLoading) {
+      final localizations = AppLocalizations.of(context);
       return Scaffold(
         appBar: AppBar(
-          title: const Text('Discount Details'),
+          title: Text(localizations.discountDetails),
           backgroundColor: Colors.blue,
           foregroundColor: Colors.white,
         ),
@@ -104,9 +106,10 @@ class _DiscountDetailsScreenState extends State<DiscountDetailsScreen> {
 
     // Show error state if there was an error
     if (_error != null) {
+      final localizations = AppLocalizations.of(context);
       return Scaffold(
         appBar: AppBar(
-          title: const Text('Discount Details'),
+          title: Text(localizations.discountDetails),
           backgroundColor: Colors.blue,
           foregroundColor: Colors.white,
         ),
@@ -117,7 +120,7 @@ class _DiscountDetailsScreenState extends State<DiscountDetailsScreen> {
               const Icon(Icons.error_outline, size: 64, color: Colors.red),
               const SizedBox(height: 16),
               Text(
-                'Error loading discount details',
+                localizations.errorLoadingDiscountDetails,
                 style: TextStyle(fontSize: 18, color: Colors.grey[600]),
               ),
               const SizedBox(height: 8),
@@ -129,7 +132,7 @@ class _DiscountDetailsScreenState extends State<DiscountDetailsScreen> {
               const SizedBox(height: 16),
               ElevatedButton(
                 onPressed: _loadDiscountDetails,
-                child: const Text('Retry'),
+                child: Text(localizations.retry),
               ),
             ],
           ),
@@ -182,21 +185,22 @@ class _DiscountDetailsScreenState extends State<DiscountDetailsScreen> {
       );
     }
 
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Discount Details'),
+        title: Text(localizations.discountDetails),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
         actions: [
           IconButton(
             onPressed: _loadDiscountDetails,
             icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh Data',
+            tooltip: localizations.refreshData,
           ),
           IconButton(
             onPressed: () => _navigateToEdit(context),
             icon: const Icon(Icons.edit),
-            tooltip: 'Edit Discount',
+            tooltip: localizations.editDiscount,
           ),
         ],
       ),
@@ -237,7 +241,7 @@ class _DiscountDetailsScreenState extends State<DiscountDetailsScreen> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                'Discount Code',
+                                localizations.discountCode,
                                 style: TextStyle(
                                   fontSize: 14,
                                   color: Colors.grey[600],
@@ -246,23 +250,38 @@ class _DiscountDetailsScreenState extends State<DiscountDetailsScreen> {
                             ],
                           ),
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: Text(
-                            _getDiscountValue(discount),
-                            style: const TextStyle(
-                              fontSize: 16,
-                              color: Colors.blue,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                        Builder(
+                          builder: (context) {
+                            final localizations = AppLocalizations.of(context);
+                            String displayValue;
+                            if (discount is Discount) {
+                              displayValue = localizations.discountOff(
+                                discount.value.toInt(),
+                              );
+                            } else if (discount is BookDiscount) {
+                              displayValue = '\$${discount.discountedPrice}';
+                            } else {
+                              displayValue = 'N/A';
+                            }
+                            return Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Text(
+                                displayValue,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.blue,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            );
+                          },
                         ),
                       ],
                     ),
@@ -302,13 +321,13 @@ class _DiscountDetailsScreenState extends State<DiscountDetailsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Row(
+                    Row(
                       children: [
-                        Icon(Icons.info_outline, color: Colors.blue),
-                        SizedBox(width: 8),
+                        const Icon(Icons.info_outline, color: Colors.blue),
+                        const SizedBox(width: 8),
                         Text(
-                          'Discount Information',
-                          style: TextStyle(
+                          localizations.discountInformation,
+                          style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                           ),
@@ -316,26 +335,30 @@ class _DiscountDetailsScreenState extends State<DiscountDetailsScreen> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    _buildInfoRow('Discount Code', discount.code, Icons.tag),
                     _buildInfoRow(
-                      'Discount Type',
-                      _getDiscountType(discount),
+                      localizations.discountCode,
+                      discount.code,
+                      Icons.tag,
+                    ),
+                    _buildInfoRow(
+                      localizations.discountType,
+                      _getLocalizedDiscountType(discount, localizations),
                       Icons.local_offer,
                     ),
                     _buildInfoRow(
-                      'Discount Value',
-                      _getDiscountValue(discount),
+                      localizations.discountValue,
+                      _getLocalizedDiscountValue(discount, localizations),
                       Icons.attach_money,
                     ),
                     if (_getUsageLimit(discount) != null)
                       _buildInfoRow(
-                        'Max Uses Per Customer',
+                        localizations.maxUsesPerCustomer,
                         '${_getUsageLimit(discount)}',
                         Icons.person,
                       ),
                     _buildInfoRow(
-                      'Status',
-                      isActive ? 'Active' : 'Inactive',
+                      localizations.status,
+                      isActive ? localizations.active : localizations.inactive,
                       Icons.toggle_on,
                     ),
                   ],
@@ -352,13 +375,13 @@ class _DiscountDetailsScreenState extends State<DiscountDetailsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Row(
+                    Row(
                       children: [
-                        Icon(Icons.schedule, color: Colors.blue),
-                        SizedBox(width: 8),
+                        const Icon(Icons.schedule, color: Colors.blue),
+                        const SizedBox(width: 8),
                         Text(
-                          'Validity & Status',
-                          style: TextStyle(
+                          localizations.validityAndStatus,
+                          style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                           ),
@@ -367,20 +390,23 @@ class _DiscountDetailsScreenState extends State<DiscountDetailsScreen> {
                     ),
                     const SizedBox(height: 16),
                     _buildInfoRow(
-                      'Created Date',
+                      localizations.createdDate,
                       _formatDate(discount.createdAt),
                       Icons.calendar_today,
                     ),
                     if (discount.endDate != null)
                       _buildInfoRow(
-                        'Expiration Date',
+                        localizations.expirationDate,
                         _formatDate(discount.endDate!),
                         Icons.event,
                       ),
                     if (discount.endDate != null)
                       _buildInfoRow(
-                        'Days Until Expiry',
-                        _getDaysUntilExpiry(discount.endDate!),
+                        localizations.daysUntilExpiry,
+                        _getLocalizedDaysUntilExpiry(
+                          discount.endDate!,
+                          localizations,
+                        ),
                         Icons.timer,
                       ),
                   ],
@@ -397,7 +423,7 @@ class _DiscountDetailsScreenState extends State<DiscountDetailsScreen> {
                   child: ElevatedButton.icon(
                     onPressed: () => _navigateToEdit(context),
                     icon: const Icon(Icons.edit),
-                    label: const Text('Edit Discount'),
+                    label: Text(localizations.editDiscount),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.blue,
                       foregroundColor: Colors.white,
@@ -410,7 +436,7 @@ class _DiscountDetailsScreenState extends State<DiscountDetailsScreen> {
                   child: OutlinedButton.icon(
                     onPressed: () => Navigator.pop(context),
                     icon: const Icon(Icons.arrow_back),
-                    label: const Text('Back to List'),
+                    label: Text(localizations.backToList),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
@@ -467,7 +493,10 @@ class _DiscountDetailsScreenState extends State<DiscountDetailsScreen> {
     return '$day/$month/$year';
   }
 
-  String _getDiscountValue(dynamic discount) {
+  String _getLocalizedDiscountValue(
+    dynamic discount,
+    AppLocalizations localizations,
+  ) {
     if (discount is Discount) {
       return '${discount.value}%';
     } else if (discount is BookDiscount) {
@@ -485,32 +514,34 @@ class _DiscountDetailsScreenState extends State<DiscountDetailsScreen> {
     return null;
   }
 
-  String _getDiscountType(dynamic discount) {
+  String _getLocalizedDiscountType(
+    dynamic discount,
+    AppLocalizations localizations,
+  ) {
     if (discount is Discount) {
-      return 'Percentage';
+      return localizations.percentage;
     } else if (discount is BookDiscount) {
-      return 'Fixed Price';
+      return localizations.fixedPrice;
     }
-    return 'Unknown';
+    return localizations.unknown;
   }
 
-  String _getDaysUntilExpiry(DateTime expiryDate) {
+  String _getLocalizedDaysUntilExpiry(
+    DateTime expiryDate,
+    AppLocalizations localizations,
+  ) {
     final now = DateTime.now();
     // Normalize dates to compare only date parts (ignore time)
     final today = DateTime(now.year, now.month, now.day);
     final expiry = DateTime(expiryDate.year, expiryDate.month, expiryDate.day);
     final difference = expiry.difference(today).inDays;
 
-    debugPrint('DEBUG: Period calculation - Today: $today');
-    debugPrint('DEBUG: Period calculation - Expiry: $expiry');
-    debugPrint('DEBUG: Period calculation - Difference: $difference days');
-
     if (difference < 0) {
-      return 'Expired ${(-difference)} days ago';
+      return localizations.expiredDaysAgo(-difference);
     } else if (difference == 0) {
-      return 'Expires today';
+      return localizations.expiresToday;
     } else {
-      return '$difference days remaining';
+      return '$difference ${localizations.daysRemaining}';
     }
   }
 
@@ -518,6 +549,7 @@ class _DiscountDetailsScreenState extends State<DiscountDetailsScreen> {
     final discount = _currentDiscount ?? widget.discount;
     final navigator = Navigator.of(context);
     final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final localizations = AppLocalizations.of(context);
 
     try {
       final provider = context.read<DiscountsProvider>();
@@ -609,7 +641,7 @@ class _DiscountDetailsScreenState extends State<DiscountDetailsScreen> {
       if (mounted) {
         scaffoldMessenger.showSnackBar(
           SnackBar(
-            content: Text('Failed to load fresh data: $e'),
+            content: Text('${localizations.failedToLoadFreshData}: $e'),
             backgroundColor: Colors.orange,
           ),
         );
@@ -642,6 +674,7 @@ class StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     Color backgroundColor;
     Color textColor;
     String displayText;
@@ -650,12 +683,12 @@ class StatusChip extends StatelessWidget {
       case 'active':
         backgroundColor = Colors.green.withValues(alpha: 0.1);
         textColor = Colors.green;
-        displayText = 'Active';
+        displayText = localizations.active;
         break;
       case 'inactive':
         backgroundColor = Colors.grey.withValues(alpha: 0.1);
         textColor = Colors.grey;
-        displayText = 'Inactive';
+        displayText = localizations.inactive;
         break;
       default:
         backgroundColor = Colors.grey.withValues(alpha: 0.1);

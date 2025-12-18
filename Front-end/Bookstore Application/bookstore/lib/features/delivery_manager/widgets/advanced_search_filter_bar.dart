@@ -46,6 +46,26 @@ class _AdvancedSearchFilterBarState extends State<AdvancedSearchFilterBar> {
   }
 
   @override
+  void didUpdateWidget(AdvancedSearchFilterBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Sync filter values when parent updates them
+    if (widget.initialStatusFilter != oldWidget.initialStatusFilter) {
+      _selectedStatusFilter = widget.initialStatusFilter;
+    }
+    if (widget.initialOrderTypeFilter != oldWidget.initialOrderTypeFilter) {
+      _selectedOrderTypeFilter = widget.initialOrderTypeFilter;
+    }
+    // Sync search query if changed externally
+    if (widget.initialSearchQuery != oldWidget.initialSearchQuery) {
+      final currentText = _searchController.text;
+      final oldInitialText = oldWidget.initialSearchQuery ?? '';
+      if (currentText == oldInitialText) {
+        _searchController.text = widget.initialSearchQuery ?? '';
+      }
+    }
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
@@ -112,9 +132,10 @@ class _AdvancedSearchFilterBarState extends State<AdvancedSearchFilterBar> {
               // Status Filter
               Expanded(
                 child: DropdownButtonFormField<String>(
+                  key: ValueKey('status_$_selectedStatusFilter'),
                   initialValue: _selectedStatusFilter,
                   decoration: InputDecoration(
-                    labelText: 'Status',
+                    labelText: AppLocalizations.of(context).status,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide(color: theme.colorScheme.outline),
@@ -143,7 +164,14 @@ class _AdvancedSearchFilterBarState extends State<AdvancedSearchFilterBar> {
                     ...widget.statusFilterOptions.map((option) {
                       return DropdownMenuItem<String>(
                         value: option,
-                        child: Text(_formatStatusText(option)),
+                        child: Builder(
+                          builder: (context) {
+                            final localizations = AppLocalizations.of(context);
+                            return Text(
+                              _formatStatusText(option, localizations),
+                            );
+                          },
+                        ),
                       );
                     }),
                   ],
@@ -161,9 +189,10 @@ class _AdvancedSearchFilterBarState extends State<AdvancedSearchFilterBar> {
               // Order Type Filter
               Expanded(
                 child: DropdownButtonFormField<String>(
+                  key: ValueKey('type_$_selectedOrderTypeFilter'),
                   initialValue: _selectedOrderTypeFilter,
                   decoration: InputDecoration(
-                    labelText: 'Type',
+                    labelText: AppLocalizations.of(context).type,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide(color: theme.colorScheme.outline),
@@ -192,7 +221,14 @@ class _AdvancedSearchFilterBarState extends State<AdvancedSearchFilterBar> {
                     ...widget.orderTypeFilterOptions.map((option) {
                       return DropdownMenuItem<String>(
                         value: option,
-                        child: Text(_formatOrderTypeText(option)),
+                        child: Builder(
+                          builder: (context) {
+                            final localizations = AppLocalizations.of(context);
+                            return Text(
+                              _formatOrderTypeText(option, localizations),
+                            );
+                          },
+                        ),
                       );
                     }),
                   ],
@@ -232,53 +268,35 @@ class _AdvancedSearchFilterBarState extends State<AdvancedSearchFilterBar> {
     );
   }
 
-  String _formatStatusText(String status) {
-    switch (status.toLowerCase()) {
-      case 'pending':
-        return 'Pending';
-      case 'confirmed':
-        return 'Confirmed';
-      case 'in_delivery':
-        return 'In Delivery';
-      case 'delivered':
-        return 'Delivered';
-      case 'returned':
-        return 'Returned';
-      case 'waiting_for_delivery_manager':
-        return 'Waiting for Delivery Manager';
-      case 'assigned_to_delivery':
-        return 'Assigned to Delivery';
-      case 'delivery_in_progress':
-        return 'Delivery In Progress';
-      case 'in_progress':
-        return 'In Progress';
-      case 'completed':
-        return 'Completed';
-      case 'rejected_by_delivery_manager':
-        return 'Rejected by Delivery Manager';
-      case 'rejected_by_admin':
-        return 'Rejected by Admin';
-      default:
-        // Format snake_case to Title Case
-        return status
-            .split('_')
-            .map(
-              (word) => word.isEmpty
-                  ? ''
-                  : word[0].toUpperCase() + word.substring(1).toLowerCase(),
-            )
-            .join(' ');
+  String _formatStatusText(String status, AppLocalizations localizations) {
+    // Use getOrderStatusLabel for order statuses
+    final localizedStatus = localizations.getOrderStatusLabel(status);
+    // If the localized status is different from the raw status, use it
+    if (localizedStatus.toLowerCase() != status.toLowerCase()) {
+      return localizedStatus;
     }
+    // Fallback to formatting snake_case to Title Case
+    return status
+        .split('_')
+        .map(
+          (word) => word.isEmpty
+              ? ''
+              : word[0].toUpperCase() + word.substring(1).toLowerCase(),
+        )
+        .join(' ');
   }
 
-  String _formatOrderTypeText(String orderType) {
+  String _formatOrderTypeText(
+    String orderType,
+    AppLocalizations localizations,
+  ) {
     switch (orderType.toLowerCase()) {
       case 'purchase':
-        return 'Purchase';
+        return localizations.purchase;
       case 'borrowing':
-        return 'Borrowing';
+        return localizations.borrowing;
       case 'return_collection':
-        return 'Return Collection';
+        return localizations.returnCollection;
       default:
         return orderType;
     }

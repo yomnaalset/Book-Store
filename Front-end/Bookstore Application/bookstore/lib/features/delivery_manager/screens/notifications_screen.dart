@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../core/translations.dart';
+import '../../../core/localization/app_localizations.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../notifications/utils/notification_translator.dart';
 import '../providers/notifications_provider.dart';
 
 class NotificationsScreen extends StatefulWidget {
@@ -37,13 +38,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: Text(AppTranslations.t(context, 'notifications')),
+        title: Text(AppLocalizations.of(context).notifications),
         backgroundColor: theme.colorScheme.primary,
         foregroundColor: theme.colorScheme.onPrimary,
         elevation: 0,
         actions: [
           Consumer<DeliveryNotificationsProvider>(
             builder: (context, provider, child) {
+              final localizations = AppLocalizations.of(context);
               if (provider.notifications.isEmpty) {
                 return IconButton(
                   icon: const Icon(Icons.refresh),
@@ -60,23 +62,30 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   }
                 },
                 itemBuilder: (context) => [
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'refresh',
                     child: Row(
                       children: [
-                        Icon(Icons.refresh, size: 20),
-                        SizedBox(width: 8),
-                        Text('Refresh'),
+                        const Icon(Icons.refresh, size: 20),
+                        const SizedBox(width: 8),
+                        Text(localizations.refresh),
                       ],
                     ),
                   ),
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'delete_all',
                     child: Row(
                       children: [
-                        Icon(Icons.delete_outline, size: 20, color: Colors.red),
-                        SizedBox(width: 8),
-                        Text('Delete All', style: TextStyle(color: Colors.red)),
+                        const Icon(
+                          Icons.delete_outline,
+                          size: 20,
+                          color: Colors.red,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          localizations.deleteAll,
+                          style: const TextStyle(color: Colors.red),
+                        ),
                       ],
                     ),
                   ),
@@ -114,7 +123,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   const SizedBox(height: 16),
                   ElevatedButton(
                     onPressed: _loadNotifications,
-                    child: Text(AppTranslations.t(context, 'retry')),
+                    child: Text(AppLocalizations.of(context).retry),
                   ),
                 ],
               ),
@@ -139,7 +148,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'No delivery notifications',
+                      AppLocalizations.of(context).noDeliveryNotifications,
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -150,7 +159,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 32),
                       child: Text(
-                        'You have $unreadCount unread notification${unreadCount > 1 ? 's' : ''} that are not linked to delivery-related activities.',
+                        AppLocalizations.of(
+                          context,
+                        ).unreadNotificationsCount(unreadCount),
                         style: TextStyle(
                           fontSize: 14,
                           color: theme.colorScheme.onSurfaceVariant,
@@ -162,13 +173,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     ElevatedButton.icon(
                       onPressed: _loadNotifications,
                       icon: const Icon(Icons.refresh),
-                      label: const Text('Refresh'),
+                      label: Text(AppLocalizations.of(context).refresh),
                     ),
                   ],
                 ),
               );
             }
-            
+
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -180,7 +191,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'No notifications',
+                    AppLocalizations.of(context).noNotifications,
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -189,7 +200,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'You are all caught up!',
+                    AppLocalizations.of(context).youAreAllCaughtUp,
                     style: TextStyle(
                       fontSize: 14,
                       color: theme.colorScheme.onSurfaceVariant,
@@ -209,16 +220,30 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (urgentNotifications.isNotEmpty) ...[
-                    _buildSectionHeader(
-                      'Urgent Notifications',
-                      AppColors.error,
+                    Builder(
+                      builder: (context) {
+                        final localizations = AppLocalizations.of(context);
+                        return _buildSectionHeader(
+                          localizations.urgentNotifications,
+                          AppColors.error,
+                        );
+                      },
                     ),
                     const SizedBox(height: 12),
-                    ...urgentNotifications.map(
-                      (notification) => _buildNotificationCard(
+                    ...urgentNotifications.map((notification) {
+                      final localizations = AppLocalizations.of(context);
+                      final originalTitle = notification['title'] ?? '';
+                      final originalMessage = notification['message'] ?? '';
+                      return _buildNotificationCard(
                         notification: notification,
-                        title: notification['title'] ?? 'Urgent Notification',
-                        subtitle: notification['message'] ?? 'No message',
+                        title: NotificationTranslator.translateTitle(
+                          originalTitle,
+                          localizations,
+                        ),
+                        subtitle: NotificationTranslator.translateMessage(
+                          originalMessage,
+                          localizations,
+                        ),
                         time:
                             DateTime.tryParse(
                               notification['created_at'] ?? '',
@@ -227,33 +252,45 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                         type: NotificationType.urgent,
                         isRead: notification['is_read'] ?? false,
                         onTap: () => _showNotificationDetails(notification),
-                      ),
-                    ),
+                      );
+                    }),
                     const SizedBox(height: 24),
                   ],
                   if (recentNotifications.isNotEmpty) ...[
-                    _buildSectionHeader(
-                      'Recent Notifications',
-                      AppColors.primary,
+                    Builder(
+                      builder: (context) {
+                        final localizations = AppLocalizations.of(context);
+                        return _buildSectionHeader(
+                          localizations.recentNotifications,
+                          AppColors.primary,
+                        );
+                      },
                     ),
                     const SizedBox(height: 12),
-                    ...recentNotifications
-                        .take(10)
-                        .map(
-                          (notification) => _buildNotificationCard(
-                            notification: notification,
-                            title: notification['title'] ?? 'Notification',
-                            subtitle: notification['message'] ?? 'No message',
-                            time:
-                                DateTime.tryParse(
-                                  notification['created_at'] ?? '',
-                                ) ??
-                                DateTime.now(),
-                            type: NotificationType.info,
-                            isRead: notification['is_read'] ?? false,
-                            onTap: () => _showNotificationDetails(notification),
-                          ),
+                    ...recentNotifications.take(10).map((notification) {
+                      final localizations = AppLocalizations.of(context);
+                      final originalTitle = notification['title'] ?? '';
+                      final originalMessage = notification['message'] ?? '';
+                      return _buildNotificationCard(
+                        notification: notification,
+                        title: NotificationTranslator.translateTitle(
+                          originalTitle,
+                          localizations,
                         ),
+                        subtitle: NotificationTranslator.translateMessage(
+                          originalMessage,
+                          localizations,
+                        ),
+                        time:
+                            DateTime.tryParse(
+                              notification['created_at'] ?? '',
+                            ) ??
+                            DateTime.now(),
+                        type: NotificationType.info,
+                        isRead: notification['is_read'] ?? false,
+                        onTap: () => _showNotificationDetails(notification),
+                      );
+                    }),
                   ],
                 ],
               ),
@@ -348,7 +385,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             ),
             const SizedBox(height: 4),
             Text(
-              _formatTime(time),
+              _formatTime(time, context),
               style: TextStyle(
                 fontSize: 11,
                 color: theme.colorScheme.onSurfaceVariant,
@@ -388,42 +425,55 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     );
   }
 
-  String _formatTime(DateTime time) {
+  String _formatTime(DateTime time, BuildContext context) {
     final now = DateTime.now();
     final difference = now.difference(time);
+    final localizations = AppLocalizations.of(context);
 
     if (difference.inDays > 0) {
-      return '${difference.inDays}d ago';
+      return localizations.dAgo(difference.inDays);
     } else if (difference.inHours > 0) {
-      return '${difference.inHours}h ago';
+      return localizations.hAgo(difference.inHours);
     } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}m ago';
+      return localizations.mAgo(difference.inMinutes);
     } else {
-      return 'Just now';
+      return localizations.justNow;
     }
   }
 
   void _showNotificationDetails(Map<String, dynamic> notification) {
+    final localizations = AppLocalizations.of(context);
+    final originalTitle = notification['title'] ?? '';
+    final originalMessage = notification['message'] ?? '';
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(notification['title'] ?? 'Notification'),
+        title: Text(
+          NotificationTranslator.translateTitle(originalTitle, localizations),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(notification['message'] ?? 'No message'),
-            const SizedBox(height: 8),
-            Text('Type: ${notification['type'] ?? 'info'}'),
             Text(
-              'Created: ${_formatTime(DateTime.tryParse(notification['created_at'] ?? '') ?? DateTime.now())}',
+              NotificationTranslator.translateMessage(
+                originalMessage,
+                localizations,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '${localizations.typeLabel} ${notification['type'] ?? 'info'}',
+            ),
+            Text(
+              '${localizations.createdLabel} ${_formatTime(DateTime.tryParse(notification['created_at'] ?? '') ?? DateTime.now(), context)}',
             ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+            child: Text(localizations.close),
           ),
           if (!(notification['is_read'] ?? false))
             TextButton(
@@ -436,7 +486,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 );
                 provider.markAsRead(notification['id'].toString());
               },
-              child: const Text('Mark as Read'),
+              child: Text(localizations.markAsRead),
             ),
         ],
       ),
@@ -447,22 +497,21 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     if (!mounted) return;
     final scaffoldMessenger = ScaffoldMessenger.of(context);
 
+    final localizations = AppLocalizations.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Notification'),
-        content: const Text(
-          'Are you sure you want to delete this notification?',
-        ),
+        title: Text(localizations.deleteNotification),
+        content: Text(localizations.confirmDeleteNotification),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text(localizations.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
+            child: Text(localizations.delete),
           ),
         ],
       ),
@@ -479,17 +528,18 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       );
 
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         if (success) {
           scaffoldMessenger.showSnackBar(
-            const SnackBar(
-              content: Text('Notification deleted successfully'),
+            SnackBar(
+              content: Text(localizations.notificationDeletedSuccessfully),
               backgroundColor: Colors.green,
             ),
           );
         } else {
           scaffoldMessenger.showSnackBar(
-            const SnackBar(
-              content: Text('Unable to delete notification. Please try again.'),
+            SnackBar(
+              content: Text(localizations.unableToDeleteNotification),
               backgroundColor: Colors.red,
             ),
           );
@@ -502,22 +552,21 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     if (!mounted) return;
     final scaffoldMessenger = ScaffoldMessenger.of(context);
 
+    final localizations = AppLocalizations.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete All Notifications'),
-        content: const Text(
-          'Are you sure you want to delete all notifications? This action cannot be undone.',
-        ),
+        title: Text(localizations.deleteAllNotifications),
+        content: Text(localizations.areYouSureDeleteAllNotifications),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text(localizations.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete All'),
+            child: Text(localizations.deleteAll),
           ),
         ],
       ),
@@ -532,19 +581,18 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       final success = await provider.deleteAllNotifications();
 
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         if (success) {
           scaffoldMessenger.showSnackBar(
-            const SnackBar(
-              content: Text('All notifications deleted successfully'),
+            SnackBar(
+              content: Text(localizations.allNotificationsDeletedSuccessfully),
               backgroundColor: Colors.green,
             ),
           );
         } else {
           scaffoldMessenger.showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Unable to delete notifications. Please try again.',
-              ),
+            SnackBar(
+              content: Text(localizations.unableToDeleteNotifications),
               backgroundColor: Colors.red,
             ),
           );

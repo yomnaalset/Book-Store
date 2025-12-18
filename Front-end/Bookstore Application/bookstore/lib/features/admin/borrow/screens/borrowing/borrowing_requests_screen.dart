@@ -7,6 +7,7 @@ import '../../../widgets/library_manager/status_chip.dart';
 import '../../../widgets/admin_search_bar.dart';
 import '../../../widgets/empty_state.dart';
 import '../../../../auth/providers/auth_provider.dart';
+import '../../../../../core/localization/app_localizations.dart';
 import 'borrowing_request_detail_screen.dart';
 
 class BorrowingRequestsScreen extends StatefulWidget {
@@ -26,18 +27,19 @@ class _BorrowingRequestsScreenState extends State<BorrowingRequestsScreen>
   List<BorrowRequest> _allRequests = [];
   List<BorrowRequest> _filteredRequests = [];
 
-  // Status tabs as per specification
-  final List<String> _statusTabs = [
-    'All',
-    'Pending',
-    'Approved',
-    'Borrowed',
+  // Status tabs - will be localized in build method
+  List<String> _getStatusTabs(AppLocalizations localizations) => [
+    localizations.all,
+    localizations.pending,
+    localizations.approved,
+    localizations.borrowed,
   ];
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: _statusTabs.length, vsync: this);
+    // Initialize with default length, will be updated in build
+    _tabController = TabController(length: 4, vsync: this);
 
     // Add listener to TabController
     _tabController.addListener(() {
@@ -45,8 +47,9 @@ class _BorrowingRequestsScreenState extends State<BorrowingRequestsScreen>
         'DEBUG: TabController listener triggered with index: ${_tabController.index}, indexIsChanging: ${_tabController.indexIsChanging}',
       );
       // Always call _onTabChanged when the index changes
-      if (!_tabController.indexIsChanging) {
-        _onTabChanged(_tabController.index);
+      if (!_tabController.indexIsChanging && mounted) {
+        final localizations = AppLocalizations.of(context);
+        _onTabChanged(_tabController.index, localizations);
       }
     });
 
@@ -63,25 +66,22 @@ class _BorrowingRequestsScreenState extends State<BorrowingRequestsScreen>
     super.dispose();
   }
 
-  void _onTabChanged(int index) {
-    final selectedTab = _statusTabs[index];
+  void _onTabChanged(int index, AppLocalizations localizations) {
+    final statusTabs = _getStatusTabs(localizations);
+    final selectedTab = statusTabs[index];
     String? status;
 
     debugPrint('DEBUG: Tab changed to: $selectedTab (index: $index)');
 
-    switch (selectedTab) {
-      case 'All':
-        status = null;
-        break;
-      case 'Pending':
-        status = 'pending';
-        break;
-      case 'Approved':
-        status = 'approved';
-        break;
-      case 'Borrowed':
-        status = 'active';
-        break;
+    // Compare with localized strings
+    if (selectedTab == localizations.all) {
+      status = null;
+    } else if (selectedTab == localizations.pending) {
+      status = 'pending';
+    } else if (selectedTab == localizations.approved) {
+      status = 'approved';
+    } else if (selectedTab == localizations.borrowed) {
+      status = 'active';
     }
 
     debugPrint('DEBUG: Selected status: $status');
@@ -577,9 +577,12 @@ class _BorrowingRequestsScreenState extends State<BorrowingRequestsScreen>
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
+    final statusTabs = _getStatusTabs(localizations);
+    
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Borrow Requests'),
+        title: Text(localizations.borrowRequests),
         backgroundColor: const Color(0xFFB5E7FF),
         foregroundColor: Colors.white,
         actions: [
@@ -587,20 +590,20 @@ class _BorrowingRequestsScreenState extends State<BorrowingRequestsScreen>
           IconButton(
             onPressed: () => _loadRequests(),
             icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh Requests',
+            tooltip: localizations.refreshRequests,
           ),
         ],
         bottom: TabBar(
           controller: _tabController,
           isScrollable: true,
-          tabs: _statusTabs.map((status) => Tab(text: status)).toList(),
+          tabs: statusTabs.map((status) => Tab(text: status)).toList(),
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white70,
           indicatorColor: Colors.white,
           onTap: (index) {
             debugPrint('DEBUG: TabBar onTap called with index: $index');
             // Update the selected status and reload requests
-            _onTabChanged(index);
+            _onTabChanged(index, localizations);
           },
         ),
       ),
@@ -609,11 +612,16 @@ class _BorrowingRequestsScreenState extends State<BorrowingRequestsScreen>
           // Search Bar
           Padding(
             padding: const EdgeInsets.all(16.0),
-            child: AdminSearchBar(
-              hintText: 'Search borrowing requests...',
-              controller: _searchController,
-              onChanged: _onSearch,
-              onSubmitted: _onSearchImmediate,
+            child: Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return AdminSearchBar(
+                  hintText: localizations.searchBorrowingRequests,
+                  controller: _searchController,
+                  onChanged: _onSearch,
+                  onSubmitted: _onSearchImmediate,
+                );
+              },
             ),
           ),
 
@@ -626,42 +634,56 @@ class _BorrowingRequestsScreenState extends State<BorrowingRequestsScreen>
                 }
 
                 if (provider.errorMessage != null && _allRequests.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          'Error: ${provider.errorMessage}',
-                          style: const TextStyle(color: Colors.red),
-                          textAlign: TextAlign.center,
+                  return Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              '${localizations.errorLoadingRequests}: ${provider.errorMessage}',
+                              style: const TextStyle(color: Colors.red),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 16),
+                            ElevatedButton(
+                              onPressed: () {
+                                provider.clearError();
+                                _loadRequests();
+                              },
+                              child: Text(localizations.retry),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: () {
-                            provider.clearError();
-                            _loadRequests();
-                          },
-                          child: const Text('Retry'),
-                        ),
-                      ],
-                    ),
+                      );
+                    },
                   );
                 }
 
                 if (_filteredRequests.isEmpty && _allRequests.isNotEmpty) {
-                  return const EmptyState(
-                    title: 'No Matching Requests',
-                    icon: Icons.search_off,
-                    message:
-                        'No borrowing requests match your search criteria.',
+                  return Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return EmptyState(
+                        title: localizations.noMatchingRequests,
+                        icon: Icons.search_off,
+                        message: localizations.noMatchingRequestsMessage,
+                      );
+                    },
                   );
                 }
 
                 if (_allRequests.isEmpty) {
-                  return const EmptyState(
-                    title: 'No Borrowing Requests',
-                    icon: Icons.book_outlined,
-                    message: 'There are no borrowing requests at the moment.',
+                  return Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return EmptyState(
+                        title: localizations.noBorrowingRequests,
+                        icon: Icons.book_outlined,
+                        message: localizations.noBorrowingRequestsMessage,
+                      );
+                    },
                   );
                 }
 
@@ -701,13 +723,18 @@ class _BorrowingRequestsScreenState extends State<BorrowingRequestsScreen>
               Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      'Request #${request.id}',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF2C3E50),
-                      ),
+                    child: Builder(
+                      builder: (context) {
+                        final localizations = AppLocalizations.of(context);
+                        return Text(
+                          localizations.requestNumber(request.id),
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF2C3E50),
+                          ),
+                        );
+                      },
                     ),
                   ),
                   StatusChip(status: request.status),
@@ -736,17 +763,25 @@ class _BorrowingRequestsScreenState extends State<BorrowingRequestsScreen>
                         ),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: Text(
-                            request.customerName?.isNotEmpty == true
-                                ? 'Customer: ${request.customerName}'
-                                : (request.customer?.fullName.isNotEmpty ==
-                                      true)
-                                ? 'Customer: ${request.customer!.fullName}'
-                                : 'User ID: ${request.userId ?? 'N/A'}',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w500,
-                              color: Color(0xFF495057),
-                            ),
+                          child: Builder(
+                            builder: (context) {
+                              final localizations = AppLocalizations.of(context);
+                              String customerText;
+                              if (request.customerName?.isNotEmpty == true) {
+                                customerText = '${localizations.customerLabel}: ${request.customerName}';
+                              } else if (request.customer?.fullName.isNotEmpty == true) {
+                                customerText = '${localizations.customerLabel}: ${request.customer!.fullName}';
+                              } else {
+                                customerText = '${localizations.userId}: ${request.userId ?? 'N/A'}';
+                              }
+                              return Text(
+                                customerText,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w500,
+                                  color: Color(0xFF495057),
+                                ),
+                              );
+                            },
                           ),
                         ),
                       ],
@@ -764,16 +799,25 @@ class _BorrowingRequestsScreenState extends State<BorrowingRequestsScreen>
                         ),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: Text(
-                            (request.bookTitle?.isNotEmpty == true)
-                                ? 'Book: ${request.bookTitle}'
-                                : (request.book?.title.isNotEmpty == true)
-                                ? 'Book: ${request.book!.title}'
-                                : 'Book ID: ${request.bookId ?? 'N/A'}',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w500,
-                              color: Color(0xFF495057),
-                            ),
+                          child: Builder(
+                            builder: (context) {
+                              final localizations = AppLocalizations.of(context);
+                              String bookText;
+                              if (request.bookTitle?.isNotEmpty == true) {
+                                bookText = '${localizations.bookLabel}: ${request.bookTitle}';
+                              } else if (request.book?.title.isNotEmpty == true) {
+                                bookText = '${localizations.bookLabel}: ${request.book!.title}';
+                              } else {
+                                bookText = '${localizations.bookId}: ${request.bookId ?? 'N/A'}';
+                              }
+                              return Text(
+                                bookText,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w500,
+                                  color: Color(0xFF495057),
+                                ),
+                              );
+                            },
                           ),
                         ),
                       ],
@@ -790,12 +834,17 @@ class _BorrowingRequestsScreenState extends State<BorrowingRequestsScreen>
                           color: Color(0xFF6C757D),
                         ),
                         const SizedBox(width: 8),
-                        Text(
-                          'Requested: ${_formatDate(request.requestDate)}',
-                          style: const TextStyle(
-                            color: Color(0xFF6C757D),
-                            fontSize: 14,
-                          ),
+                        Builder(
+                          builder: (context) {
+                            final localizations = AppLocalizations.of(context);
+                            return Text(
+                              '${localizations.requested}: ${_formatDate(request.requestDate)}',
+                              style: const TextStyle(
+                                color: Color(0xFF6C757D),
+                                fontSize: 14,
+                              ),
+                            );
+                          },
                         ),
                       ],
                     ),
@@ -810,34 +859,44 @@ class _BorrowingRequestsScreenState extends State<BorrowingRequestsScreen>
                 Row(
                   children: [
                     Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () => _approveRequest(request),
-                        icon: const Icon(Icons.check, size: 18),
-                        label: const Text('Approve'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF28A745),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
+                      child: Builder(
+                        builder: (context) {
+                          final localizations = AppLocalizations.of(context);
+                          return ElevatedButton.icon(
+                            onPressed: () => _approveRequest(request),
+                            icon: const Icon(Icons.check, size: 18),
+                            label: Text(localizations.approve),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF28A745),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          );
+                        },
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () => _rejectRequest(request),
-                        icon: const Icon(Icons.close, size: 18),
-                        label: const Text('Reject'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFFDC3545),
-                          side: const BorderSide(color: Color(0xFFDC3545)),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
+                      child: Builder(
+                        builder: (context) {
+                          final localizations = AppLocalizations.of(context);
+                          return OutlinedButton.icon(
+                            onPressed: () => _rejectRequest(request),
+                            icon: const Icon(Icons.close, size: 18),
+                            label: Text(localizations.reject),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFFDC3545),
+                              side: const BorderSide(color: Color(0xFFDC3545)),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          );
+                        },
                       ),
                     ),
                   ],

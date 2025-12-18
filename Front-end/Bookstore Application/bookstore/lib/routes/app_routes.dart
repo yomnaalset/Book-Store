@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../features/auth/screens/splash_screen.dart';
 import '../features/auth/screens/login_screen.dart';
 import '../features/auth/screens/register_screen.dart';
 import '../features/auth/screens/forgot_password_screen.dart';
-import '../features/auth/screens/onboarding_screen.dart';
 import '../features/books/screens/home/home_screen.dart';
+import '../web_ui/admin/admin_web_dashboard.dart';
+import '../web_ui/delivery/delivery_web_dashboard.dart';
 import '../features/books/screens/book_detail_screen.dart';
 import '../features/books/screens/categories_screen.dart';
 import '../features/books/screens/categories_list_screen.dart';
@@ -23,6 +25,7 @@ import '../features/favorites/screens/favorites_screen.dart';
 import '../features/borrow/screens/borrow_status_screen.dart';
 import '../features/borrow/screens/borrow_request_screen.dart';
 import '../features/borrow/screens/borrow_status_detail_screen.dart';
+import '../features/borrow/screens/fine_payment_method_screen.dart';
 import '../features/settings/screens/settings_screen.dart';
 import '../features/notifications/screens/notifications_screen.dart';
 import '../features/profile/screens/change_password_screen.dart';
@@ -68,6 +71,9 @@ import '../features/admin/books/screens/library/library_details_screen.dart';
 import '../features/admin/screens/profile/admin_profile_screen.dart';
 import '../features/ads/screens/public_ad_details_screen.dart';
 import '../features/admin/ads/screens/filter_test_screen.dart';
+import '../features/complaints/screens/customer_complaints_list_screen.dart';
+import '../features/complaints/screens/add_complaint_screen.dart';
+import '../features/complaints/screens/complaint_detail_screen.dart';
 
 class AppRoutes {
   // Authentication routes
@@ -75,7 +81,6 @@ class AppRoutes {
   static const String login = '/login';
   static const String register = '/register';
   static const String forgotPassword = '/forgot-password';
-  static const String onboarding = '/onboarding';
 
   // Customer routes
   static const String home = '/home';
@@ -89,6 +94,7 @@ class AppRoutes {
   static const String borrowStatus = '/borrow-status';
   static const String borrowStatusDetail = '/borrow-status-detail';
   static const String borrowRequest = '/borrow-request';
+  static const String finePaymentMethod = '/fine-payment-method';
   static const String settings = '/settings';
   static const String notifications = '/notifications';
   static const String changePassword = '/change-password';
@@ -108,6 +114,9 @@ class AppRoutes {
   static const String allDiscountedBooks = '/all-discounted-books';
   static const String publicAdDetails = '/public-ad-details';
   static const String filterTest = '/filter-test';
+  static const String customerComplaints = '/customer-complaints';
+  static const String addComplaint = '/add-complaint';
+  static const String complaintDetail = '/complaint-detail';
 
   // Library Manager routes
   static const String libraryDashboard = '/library/dashboard';
@@ -224,11 +233,6 @@ class AppRoutes {
         builder: (_) => const ForgotPasswordScreen(),
         settings: settings,
       );
-    } else if (routeName == AppRoutes.onboarding) {
-      return MaterialPageRoute(
-        builder: (_) => const OnboardingScreen(),
-        settings: settings,
-      );
     } else if (routeName == AppRoutes.home) {
       return MaterialPageRoute(
         builder: (_) => const HomeScreen(),
@@ -288,6 +292,17 @@ class AppRoutes {
       final args = settings.arguments as Map<String, dynamic>?;
       return MaterialPageRoute(
         builder: (_) => BorrowRequestScreen(book: args?['book']),
+        settings: settings,
+      );
+    } else if (routeName == AppRoutes.finePaymentMethod) {
+      final args = settings.arguments as Map<String, dynamic>?;
+      return MaterialPageRoute(
+        builder: (_) => FinePaymentMethodScreen(
+          fineId: args?['fineId'],
+          borrowRequestId: args?['borrowRequestId'],
+          fineAmount: args?['fineAmount'] ?? 0.0,
+          daysOverdue: args?['daysOverdue'] ?? 0,
+        ),
         settings: settings,
       );
     } else if (routeName == AppRoutes.settings) {
@@ -399,17 +414,56 @@ class AppRoutes {
         builder: (_) => const FilterTestScreen(),
         settings: settings,
       );
+    } else if (routeName == AppRoutes.customerComplaints) {
+      return MaterialPageRoute(
+        builder: (_) => const CustomerComplaintsListScreen(),
+        settings: settings,
+      );
+    } else if (routeName == AppRoutes.addComplaint) {
+      final args = settings.arguments as Map<String, dynamic>?;
+      return MaterialPageRoute(
+        builder: (_) => AddComplaintScreen(complaint: args?['complaint']),
+        settings: settings,
+      );
+    } else if (routeName == AppRoutes.complaintDetail) {
+      final args = settings.arguments as Map<String, dynamic>?;
+      return MaterialPageRoute(
+        builder: (_) =>
+            ComplaintDetailScreen(complaintId: args?['complaintId'] ?? 0),
+        settings: settings,
+      );
     } else if (routeName == AppRoutes.libraryDashboard) {
+      // Use web dashboard on web platform, mobile dashboard otherwise
+      if (kIsWeb) {
+        return MaterialPageRoute(
+          builder: (_) => const AdminWebDashboard(),
+          settings: settings,
+        );
+      }
       return MaterialPageRoute(
         builder: (_) => const ManagerDashboardScreen(),
         settings: settings,
       );
     } else if (routeName == AppRoutes.adminDashboard) {
+      // Use web dashboard on web platform, mobile dashboard otherwise
+      if (kIsWeb) {
+        return MaterialPageRoute(
+          builder: (_) => const AdminWebDashboard(),
+          settings: settings,
+        );
+      }
       return MaterialPageRoute(
         builder: (_) => const AdminDashboardScreen(),
         settings: settings,
       );
     } else if (routeName == AppRoutes.deliveryDashboard) {
+      // Use web dashboard on web platform, mobile dashboard otherwise
+      if (kIsWeb) {
+        return MaterialPageRoute(
+          builder: (_) => const DeliveryWebDashboard(),
+          settings: settings,
+        );
+      }
       return MaterialPageRoute(
         builder: (_) => const DeliveryManagerDashboardScreen(),
         settings: settings,
@@ -596,9 +650,8 @@ class AppRoutes {
     } else if (routeName == AppRoutes.adminReturnRequestDetail) {
       final returnRequestId = settings.arguments as int;
       return MaterialPageRoute(
-        builder: (_) => AdminReturnRequestDetailScreen(
-          returnRequestId: returnRequestId,
-        ),
+        builder: (_) =>
+            AdminReturnRequestDetailScreen(returnRequestId: returnRequestId),
         settings: settings,
       );
     } else {
@@ -657,7 +710,6 @@ class AppRoutes {
     login,
     register,
     forgotPassword,
-    onboarding,
     home,
     bookDetail,
     profile,
@@ -669,6 +721,7 @@ class AppRoutes {
     borrowStatus,
     borrowStatusDetail,
     borrowRequest,
+    finePaymentMethod,
     settings,
     notifications,
     changePassword,
@@ -687,6 +740,9 @@ class AppRoutes {
     allDiscountedBooks,
     publicAdDetails,
     filterTest,
+    customerComplaints,
+    addComplaint,
+    complaintDetail,
     libraryDashboard,
     libraryBooks,
     libraryBookDetail,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
+import '../../../core/localization/app_localizations.dart';
 import '../../books/providers/books_provider.dart';
 import '../../books/models/book.dart';
 import '../../books/screens/book_detail_screen.dart';
@@ -80,9 +81,10 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Search Results'),
+        title: Text(localizations.searchResultsTitle),
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Theme.of(context).colorScheme.onPrimary,
         elevation: 0,
@@ -90,7 +92,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
           IconButton(
             onPressed: _performSearch,
             icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh',
+            tooltip: localizations.refresh,
           ),
         ],
       ),
@@ -99,6 +101,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
   }
 
   Widget _buildBody() {
+    final localizations = AppLocalizations.of(context);
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -114,9 +117,9 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
               color: AppColors.error.withValues(alpha: 0.5),
             ),
             const SizedBox(height: 16),
-            const Text(
-              'Search Failed',
-              style: TextStyle(
+            Text(
+              localizations.searchFailed,
+              style: const TextStyle(
                 fontSize: AppDimensions.fontSizeL,
                 fontWeight: FontWeight.w600,
                 color: AppColors.textSecondary,
@@ -138,7 +141,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                 backgroundColor: AppColors.primary,
                 foregroundColor: AppColors.white,
               ),
-              child: const Text('Retry'),
+              child: Text(localizations.retry),
             ),
           ],
         ),
@@ -156,18 +159,18 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
               color: AppColors.textHint.withValues(alpha: 0.5),
             ),
             const SizedBox(height: 16),
-            const Text(
-              'No Results Found',
-              style: TextStyle(
+            Text(
+              localizations.noResultsFoundSearch,
+              style: const TextStyle(
                 fontSize: AppDimensions.fontSizeL,
                 fontWeight: FontWeight.w600,
                 color: AppColors.textSecondary,
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'No books found matching your search criteria',
-              style: TextStyle(
+            Text(
+              localizations.noBooksMatchingCriteria,
+              style: const TextStyle(
                 fontSize: AppDimensions.fontSizeM,
                 color: AppColors.textHint,
               ),
@@ -180,7 +183,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                 backgroundColor: AppColors.primary,
                 foregroundColor: AppColors.white,
               ),
-              child: const Text('Back to Search'),
+              child: Text(localizations.backToSearch),
             ),
           ],
         ),
@@ -203,7 +206,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
             ),
           ),
           child: Text(
-            'Search Results (${_searchResults.length})',
+            localizations.searchResultsCount(_searchResults.length),
             style: TextStyle(
               fontSize: AppDimensions.fontSizeL,
               fontWeight: FontWeight.bold,
@@ -301,14 +304,19 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                     const SizedBox(height: 4),
 
                     if (book.author != null)
-                      Text(
-                        'By ${book.author!.name}',
-                        style: TextStyle(
-                          fontSize: AppDimensions.fontSizeM,
-                          color: Theme.of(context).textTheme.bodyMedium?.color,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      Builder(
+                        builder: (context) {
+                          final localizations = AppLocalizations.of(context);
+                          return Text(
+                            localizations.byAuthorPrefix(book.author!.name),
+                            style: TextStyle(
+                              fontSize: AppDimensions.fontSizeM,
+                              color: Theme.of(context).textTheme.bodyMedium?.color,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          );
+                        },
                       ),
 
                     const SizedBox(height: 8),
@@ -329,13 +337,18 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                           ),
                           const SizedBox(width: 16),
                         ],
-                        Text(
-                          'Price: \$${book.priceAsDouble.toStringAsFixed(2)}',
-                          style: const TextStyle(
-                            fontSize: AppDimensions.fontSizeS,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.primary,
-                          ),
+                        Builder(
+                          builder: (context) {
+                            final localizations = AppLocalizations.of(context);
+                            return Text(
+                              localizations.priceLabelPrefix('\$${book.priceAsDouble.toStringAsFixed(2)}'),
+                              style: const TextStyle(
+                                fontSize: AppDimensions.fontSizeS,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.primary,
+                              ),
+                            );
+                          },
                         ),
                       ],
                     ),
@@ -344,29 +357,34 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
 
                     Row(
                       children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: (book.isAvailable ?? false)
-                                ? AppColors.success.withValues(alpha: 0.1)
-                                : AppColors.error.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            (book.isAvailable ?? false)
-                                ? 'Available'
-                                : 'Unavailable',
-                            style: TextStyle(
-                              fontSize: AppDimensions.fontSizeS,
-                              color: (book.isAvailable ?? false)
-                                  ? AppColors.success
-                                  : AppColors.error,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+                        Builder(
+                          builder: (context) {
+                            final localizations = AppLocalizations.of(context);
+                            return Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: (book.isAvailable ?? false)
+                                    ? AppColors.success.withValues(alpha: 0.1)
+                                    : AppColors.error.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                (book.isAvailable ?? false)
+                                    ? localizations.availableStatus
+                                    : localizations.unavailableStatus,
+                                style: TextStyle(
+                                  fontSize: AppDimensions.fontSizeS,
+                                  color: (book.isAvailable ?? false)
+                                      ? AppColors.success
+                                      : AppColors.error,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            );
+                          },
                         ),
                         const Spacer(),
                         Icon(

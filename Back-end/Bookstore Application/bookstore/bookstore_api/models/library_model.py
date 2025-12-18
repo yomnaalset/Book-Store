@@ -801,13 +801,15 @@ class BookEvaluation(models.Model):
     Library administrators can view all evaluations.
     """
     
-    # Rating (1-5 stars)
+    # Rating (1-5 stars) - Optional
     rating = models.IntegerField(
+        null=True,
+        blank=True,
         validators=[
             MinValueValidator(1),
             MaxValueValidator(5)
         ],
-        help_text="Rating from 1 to 5 stars"
+        help_text="Rating from 1 to 5 stars (optional)"
     )
     
     # Comment/Review text
@@ -858,28 +860,52 @@ class BookEvaluation(models.Model):
         unique_together = ['book', 'user']
     
     def __str__(self):
-        return f"{self.user.email}'s {self.rating}-star evaluation for '{self.book.name}'"
+        rating_text = f"{self.rating}-star" if self.rating else "evaluation"
+        return f"{self.user.email}'s {rating_text} for '{self.book.name}'"
 
 
-class ReviewLike(models.Model):
+class Like(models.Model):
     """
-    Model for storing likes on book reviews.
-    Users can like/unlike reviews.
+    Unified model for storing likes on reviews and replies.
+    Merges review_like and reply_like into a single table with target_type.
     """
     
-    # Relationships
+    TARGET_TYPE_CHOICES = [
+        ('review', 'Review'),
+        ('reply', 'Reply'),
+    ]
+    
+    # Target type to distinguish between review and reply likes
+    target_type = models.CharField(
+        max_length=10,
+        choices=TARGET_TYPE_CHOICES,
+        help_text="Type of target being liked (review or reply)"
+    )
+    
+    # Relationships - one of these will be set based on target_type
     review = models.ForeignKey(
         BookEvaluation,
         on_delete=models.CASCADE,
         related_name='likes',
-        help_text="Review that was liked"
+        null=True,
+        blank=True,
+        help_text="Review that was liked (for target_type='review')"
+    )
+    
+    reply = models.ForeignKey(
+        'ReviewReply',
+        on_delete=models.CASCADE,
+        related_name='likes',
+        null=True,
+        blank=True,
+        help_text="Reply that was liked (for target_type='reply')"
     )
     
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name='review_likes',
-        help_text="User who liked the review"
+        related_name='likes',
+        help_text="User who liked the target"
     )
     
     # Metadata
@@ -889,20 +915,75 @@ class ReviewLike(models.Model):
     )
     
     class Meta:
-        db_table = 'review_like'
-        verbose_name = 'Review Like'
-        verbose_name_plural = 'Review Likes'
+        db_table = 'like'
+        verbose_name = 'Like'
+        verbose_name_plural = 'Likes'
         ordering = ['-created_at']
         indexes = [
-            models.Index(fields=['review']),
+            models.Index(fields=['target_type', 'review']),
+            models.Index(fields=['target_type', 'reply']),
             models.Index(fields=['user']),
             models.Index(fields=['created_at']),
         ]
-        # Ensure a user can only like a review once
-        unique_together = ['review', 'user']
+        # Ensure a user can only like a target once
+        # Note: MySQL doesn't support conditional unique constraints, so we enforce at application level
+    
+    def clean(self):
+        """
+        Validate that the correct target is set based on target_type.
+        """
+        from django.core.exceptions import ValidationError
+        
+        if self.target_type == 'review':
+            if not self.review:
+                raise ValidationError("review is required when target_type is 'review'")
+            if self.reply:
+                raise ValidationError("reply must be null when target_type is 'review'")
+        elif self.target_type == 'reply':
+            if not self.reply:
+                raise ValidationError("reply is required when target_type is 'reply'")
+            if self.review:
+                raise ValidationError("review must be null when target_type is 'reply'")
+        else:
+            raise ValidationError(f"Invalid target_type: {self.target_type}")
+    
+    def save(self, *args, **kwargs):
+        """Override save to validate before saving."""
+        self.full_clean()
+        super().save(*args, **kwargs)
     
     def __str__(self):
-        return f"{self.user.email} liked {self.review.user.email}'s review"
+        if self.target_type == 'review' and self.review:
+            return f"{self.user.email} liked {self.review.user.email}'s review"
+        elif self.target_type == 'reply' and self.reply:
+            return f"{self.user.email} liked {self.reply.user.email}'s reply"
+        return f"{self.user.email} liked {self.target_type}"
+
+
+# NOTE: These models will be removed after migration runs.
+# Keeping for backward compatibility during migration.
+class ReviewLike(models.Model):
+    """
+    DEPRECATED: This model is being merged into Like.
+    Will be removed after migration.
+    """
+    review = models.ForeignKey(
+        BookEvaluation,
+        on_delete=models.CASCADE,
+        related_name='legacy_likes',
+        help_text="Review that was liked"
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='legacy_review_likes',
+        help_text="User who liked the review"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        db_table = 'review_like'
+        managed = False  # Don't manage this model - it will be deleted by migration
 
 
 class ReviewReply(models.Model):
@@ -957,48 +1038,30 @@ class ReviewReply(models.Model):
         return f"{self.user.email}'s reply to {self.review.user.email}'s review"
 
 
+# NOTE: This model will be removed after migration runs.
+# Keeping for backward compatibility during migration.
 class ReplyLike(models.Model):
     """
-    Model for storing likes on review replies.
-    Users can like/unlike individual replies.
+    DEPRECATED: This model is being merged into Like.
+    Will be removed after migration.
     """
-    
-    # Relationships
     reply = models.ForeignKey(
         ReviewReply,
         on_delete=models.CASCADE,
-        related_name='likes',
+        related_name='legacy_likes',
         help_text="Reply that was liked"
     )
-    
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name='reply_likes',
+        related_name='legacy_reply_likes',
         help_text="User who liked the reply"
     )
-    
-    # Metadata
-    created_at = models.DateTimeField(
-        auto_now_add=True,
-        help_text="Date and time when like was created"
-    )
+    created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
         db_table = 'reply_like'
-        verbose_name = 'Reply Like'
-        verbose_name_plural = 'Reply Likes'
-        ordering = ['-created_at']
-        indexes = [
-            models.Index(fields=['reply']),
-            models.Index(fields=['user']),
-            models.Index(fields=['created_at']),
-        ]
-        # Ensure a user can only like a reply once
-        unique_together = ['reply', 'user']
-    
-    def __str__(self):
-        return f"{self.user.email} liked {self.reply.user.email}'s reply"
+        managed = False  # Don't manage this model - it will be deleted by migration
 
 
 class Favorite(models.Model):

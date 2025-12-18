@@ -93,7 +93,6 @@ from .borrowing_serializers import (
     BorrowApprovalSerializer,
     BorrowExtensionCreateSerializer,
     BorrowExtensionSerializer,
-    BorrowFineSerializer,
     BorrowRatingSerializer,
     EarlyReturnSerializer,
     DeliveryUpdateSerializer,
@@ -133,6 +132,7 @@ from .complaint_serializers import (
     ComplaintDetailSerializer,
     ComplaintCreateSerializer,
     ComplaintUpdateSerializer,
+    ComplaintCustomerUpdateSerializer,
     ComplaintResponseSerializer,
     ComplaintResponseCreateSerializer,
 )
@@ -281,7 +281,6 @@ __all__ = [
     'BorrowApprovalSerializer',
     'BorrowExtensionCreateSerializer',
     'BorrowExtensionSerializer',
-    'BorrowFineSerializer',
     'BorrowRatingSerializer',
     'EarlyReturnSerializer',
     'DeliveryUpdateSerializer',
@@ -317,6 +316,7 @@ __all__ = [
     'ComplaintDetailSerializer',
     'ComplaintCreateSerializer',
     'ComplaintUpdateSerializer',
+    'ComplaintCustomerUpdateSerializer',
     'ComplaintResponseSerializer',
     'ComplaintResponseCreateSerializer',
     # Report serializers

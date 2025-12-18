@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:bookstore/core/constants/app_colors.dart';
-import 'package:bookstore/core/services/location_management_service.dart';
-import 'package:bookstore/core/services/location_service.dart';
-import 'package:bookstore/features/auth/providers/auth_provider.dart';
+import 'package:readgo/core/constants/app_colors.dart';
+import 'package:readgo/core/services/location_management_service.dart';
+import 'package:readgo/core/services/location_service.dart';
+import 'package:readgo/core/localization/app_localizations.dart';
+import 'package:readgo/features/auth/providers/auth_provider.dart';
 
 class LocationManagementScreen extends StatefulWidget {
   const LocationManagementScreen({super.key});
@@ -43,8 +44,9 @@ class _LocationManagementScreenState extends State<LocationManagementScreen> {
       final token = authProvider.token;
 
       if (token == null) {
+        final localizations = AppLocalizations.of(context);
         setState(() {
-          _errorMessage = 'Please log in to manage your location';
+          _errorMessage = localizations.pleaseLogInToManageLocation;
           _isLoading = false;
         });
         return;
@@ -61,15 +63,17 @@ class _LocationManagementScreenState extends State<LocationManagementScreen> {
           _isLoading = false;
         });
       } else if (mounted) {
+        final localizations = AppLocalizations.of(context);
         setState(() {
-          _errorMessage = result['error'] ?? 'Failed to load location';
+          _errorMessage = result['error'] ?? localizations.failedToLoadLocation;
           _isLoading = false;
         });
       }
     } catch (e) {
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         setState(() {
-          _errorMessage = 'Error loading location: ${e.toString()}';
+          _errorMessage = localizations.errorLoadingLocation(e.toString());
           _isLoading = false;
         });
       }
@@ -96,16 +100,17 @@ class _LocationManagementScreenState extends State<LocationManagementScreen> {
           address: _addressController.text.trim(),
         );
       } else if (mounted) {
+        final localizations = AppLocalizations.of(context);
         setState(() {
-          _errorMessage =
-              'Failed to get GPS location. Please check location permissions.';
+          _errorMessage = localizations.failedToGetGpsLocation;
           _isUpdating = false;
         });
       }
     } catch (e) {
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         setState(() {
-          _errorMessage = 'Error getting GPS location: ${e.toString()}';
+          _errorMessage = localizations.errorGettingGpsLocation(e.toString());
           _isUpdating = false;
         });
       }
@@ -127,8 +132,9 @@ class _LocationManagementScreenState extends State<LocationManagementScreen> {
       final token = authProvider.token;
 
       if (token == null) {
+        final localizations = AppLocalizations.of(context);
         setState(() {
-          _errorMessage = 'Please log in to update your location';
+          _errorMessage = localizations.pleaseLogInToUpdateLocation;
           _isUpdating = false;
         });
         return;
@@ -147,22 +153,28 @@ class _LocationManagementScreenState extends State<LocationManagementScreen> {
           _isUpdating = false;
         });
 
+        final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Location updated successfully'),
+          SnackBar(
+            content: Text(localizations.locationUpdatedSuccessfully),
             backgroundColor: AppColors.success,
           ),
         );
       } else if (mounted) {
+        final localizations = AppLocalizations.of(context);
         setState(() {
-          _errorMessage = result['error'] ?? 'Failed to update location';
+          _errorMessage =
+              result['error'] ?? localizations.failedToUpdateLocation;
           _isUpdating = false;
         });
       }
     } catch (e) {
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         setState(() {
-          _errorMessage = 'Error updating location: ${e.toString()}';
+          _errorMessage = localizations.errorUpdatingLocationWithError(
+            e.toString(),
+          );
           _isUpdating = false;
         });
       }
@@ -172,8 +184,9 @@ class _LocationManagementScreenState extends State<LocationManagementScreen> {
   Future<void> _updateAddressOnly() async {
     final address = _addressController.text.trim();
     if (address.isEmpty) {
+      final localizations = AppLocalizations.of(context);
       setState(() {
-        _errorMessage = 'Please enter an address';
+        _errorMessage = localizations.pleaseEnterAnAddress;
       });
       return;
     }
@@ -183,9 +196,11 @@ class _LocationManagementScreenState extends State<LocationManagementScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Manage Location'),
+        title: Text(localizations.manageLocation),
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.white,
         elevation: 0,
@@ -206,34 +221,35 @@ class _LocationManagementScreenState extends State<LocationManagementScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Current Location Status',
+                            localizations.currentLocationStatus,
                             style: Theme.of(context).textTheme.titleMedium
                                 ?.copyWith(fontWeight: FontWeight.bold),
                           ),
                           const SizedBox(height: 12),
                           if (_currentLocation != null) ...[
                             _buildLocationInfo(
-                              'Address',
-                              _currentLocation!['address'] ?? 'Not set',
+                              localizations.addressLabel,
+                              _currentLocation!['address'] ??
+                                  localizations.notSet,
                             ),
                             _buildLocationInfo(
-                              'Coordinates',
+                              localizations.coordinatesLabel,
                               _currentLocation!['latitude'] != null &&
                                       _currentLocation!['longitude'] != null
                                   ? '${_currentLocation!['latitude']}, ${_currentLocation!['longitude']}'
-                                  : 'Not set',
+                                  : localizations.notSet,
                             ),
                             _buildLocationInfo(
-                              'Last Updated',
+                              localizations.lastUpdated,
                               _currentLocation!['location_updated_at'] != null
                                   ? DateTime.parse(
                                       _currentLocation!['location_updated_at'],
                                     ).toString()
-                                  : 'Never',
+                                  : localizations.never,
                             ),
                           ] else ...[
                             Text(
-                              'No location set',
+                              localizations.noLocationSet,
                               style: TextStyle(
                                 color: Theme.of(
                                   context,
@@ -258,7 +274,7 @@ class _LocationManagementScreenState extends State<LocationManagementScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Update Location',
+                            localizations.updateLocation,
                             style: Theme.of(context).textTheme.titleMedium
                                 ?.copyWith(fontWeight: FontWeight.bold),
                           ),
@@ -267,12 +283,12 @@ class _LocationManagementScreenState extends State<LocationManagementScreen> {
                           // Address Input
                           TextField(
                             controller: _addressController,
-                            decoration: const InputDecoration(
-                              labelText: 'Address (Optional)',
-                              hintText:
-                                  'Enter your address or location description',
-                              border: OutlineInputBorder(),
-                              prefixIcon: Icon(Icons.location_on),
+                            decoration: InputDecoration(
+                              labelText: localizations.addressOptional,
+                              hintText: localizations
+                                  .enterAddressOrLocationDescription,
+                              border: const OutlineInputBorder(),
+                              prefixIcon: const Icon(Icons.location_on),
                             ),
                             maxLines: 3,
                           ),
@@ -298,8 +314,8 @@ class _LocationManagementScreenState extends State<LocationManagementScreen> {
                                       : const Icon(Icons.my_location),
                                   label: Text(
                                     _isUpdating
-                                        ? 'Getting Location...'
-                                        : 'Use GPS Location',
+                                        ? localizations.gettingLocation
+                                        : localizations.useGpsLocation,
                                   ),
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: AppColors.primary,
@@ -314,7 +330,7 @@ class _LocationManagementScreenState extends State<LocationManagementScreen> {
                                       ? null
                                       : _updateAddressOnly,
                                   icon: const Icon(Icons.save),
-                                  label: const Text('Save Address'),
+                                  label: Text(localizations.saveAddress),
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: AppColors.secondary,
                                     foregroundColor: AppColors.white,
@@ -339,18 +355,18 @@ class _LocationManagementScreenState extends State<LocationManagementScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Instructions',
+                            localizations.instructions,
                             style: Theme.of(context).textTheme.titleMedium
                                 ?.copyWith(fontWeight: FontWeight.bold),
                           ),
                           const SizedBox(height: 12),
-                          const Text(
-                            '• Use "Use GPS Location" to automatically get your current coordinates\n'
-                            '• Enter an address manually for better location description\n'
-                            '• Your location helps customers track their orders\n'
-                            '• Admins can monitor delivery manager locations\n'
-                            '• Location data is used for delivery optimization',
-                            style: TextStyle(fontSize: 14),
+                          Text(
+                            '• ${localizations.instructionUseGpsLocation}\n'
+                            '• ${localizations.instructionEnterAddressManually}\n'
+                            '• ${localizations.instructionLocationHelpsCustomers}\n'
+                            '• ${localizations.instructionAdminsMonitorLocations}\n'
+                            '• ${localizations.instructionLocationDataOptimization}',
+                            style: const TextStyle(fontSize: 14),
                           ),
                         ],
                       ),

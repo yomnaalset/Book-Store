@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 import '../../../core/widgets/common/loading_indicator.dart';
+import '../../../core/localization/app_localizations.dart';
 import '../../borrow/providers/return_request_provider.dart';
 import '../../borrow/models/return_request.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -211,7 +212,9 @@ class _DeliveryManagerReturnRequestsScreenState
                     ),
                   ),
                   child: Text(
-                    returnRequest.statusDisplay,
+                    AppLocalizations.of(
+                      context,
+                    ).getReturnRequestStatusLabel(returnRequest.status),
                     style: TextStyle(
                       fontSize: AppDimensions.fontSizeXS,
                       color: _getStatusColor(returnRequest.status),

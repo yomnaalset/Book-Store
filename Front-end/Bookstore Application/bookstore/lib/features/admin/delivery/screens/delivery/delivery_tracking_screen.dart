@@ -4,6 +4,7 @@ import '../../providers/delivery_provider.dart';
 import '../../../models/delivery_assignment.dart';
 import '../../../../../shared/widgets/status_chip.dart';
 import '../../../../../shared/widgets/empty_state.dart';
+import '../../../../../../core/localization/app_localizations.dart';
 
 class DeliveryTrackingScreen extends StatefulWidget {
   const DeliveryTrackingScreen({super.key});
@@ -31,9 +32,10 @@ class _DeliveryTrackingScreenState extends State<DeliveryTrackingScreen> {
       await provider.loadDeliveryAssignments();
     } catch (e) {
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error loading delivery data: ${e.toString()}'),
+            content: Text(localizations.errorLoadingDeliveryData(e.toString())),
             backgroundColor: Colors.red,
           ),
         );
@@ -49,13 +51,15 @@ class _DeliveryTrackingScreenState extends State<DeliveryTrackingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Delivery Tracking'),
+        title: Text(localizations.deliveryTracking),
         actions: [
           IconButton(
             onPressed: _loadDeliveryData,
             icon: const Icon(Icons.refresh),
+            tooltip: localizations.refresh,
           ),
         ],
       ),
@@ -69,13 +73,13 @@ class _DeliveryTrackingScreenState extends State<DeliveryTrackingScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          'Error: ${provider.error}',
+                          '${localizations.error}: ${provider.error}',
                           style: const TextStyle(color: Colors.red),
                         ),
                         const SizedBox(height: 16),
                         ElevatedButton(
                           onPressed: _loadDeliveryData,
-                          child: const Text('Retry'),
+                          child: Text(localizations.retry),
                         ),
                       ],
                     ),
@@ -84,9 +88,9 @@ class _DeliveryTrackingScreenState extends State<DeliveryTrackingScreen> {
 
                 if (provider.deliveryAssignments.isEmpty) {
                   return EmptyState(
-                    message: 'No delivery assignments found',
+                    message: localizations.noDeliveryAssignmentsFound,
                     icon: Icons.local_shipping,
-                    actionText: 'Refresh',
+                    actionText: localizations.refresh,
                     onAction: _loadDeliveryData,
                   );
                 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../../../core/constants/app_colors.dart';
+import '../../../../../../core/localization/app_localizations.dart';
 import '../../../models/book.dart';
 import '../../../providers/books_provider.dart';
 import '../../../../auth/providers/auth_provider.dart';
@@ -91,25 +92,34 @@ class _BorrowedBooksSectionState extends State<BorrowedBooksSection> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    Text(
-                      'Borrowed Books',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                    Builder(
+                      builder: (context) {
+                        final localizations = AppLocalizations.of(context);
+                        return Text(
+                          localizations.borrowedBooks,
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        );
+                      },
                     ),
                   ],
                 ),
-                TextButton(
-                  onPressed: () {
-                    Navigator.pushNamed(context, '/all-borrowed-books');
+                Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return TextButton(
+                      onPressed: () {
+                        Navigator.pushNamed(context, '/all-borrowed-books');
+                      },
+                      child: Text(
+                        localizations.viewAll,
+                        style: const TextStyle(
+                          color: AppColors.success,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    );
                   },
-                  child: const Text(
-                    'View All',
-                    style: TextStyle(
-                      color: AppColors.success,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
                 ),
               ],
             ),
@@ -124,11 +134,19 @@ class _BorrowedBooksSectionState extends State<BorrowedBooksSection> {
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                   const SizedBox(height: 16),
-                  Text(
-                    'No borrowed books found',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Text(
+                        localizations.noBorrowedBooksFound,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
+                            ),
+                      );
+                    },
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -169,25 +187,35 @@ class _BorrowedBooksSectionState extends State<BorrowedBooksSection> {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  Text(
-                    'Borrowed Books',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Text(
+                        localizations.borrowedBooks,
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),
-              TextButton(
-                onPressed: () {
-                  Navigator.pushNamed(context, '/all-borrowed-books');
+              Builder(
+                builder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return TextButton(
+                    onPressed: () {
+                      Navigator.pushNamed(context, '/all-borrowed-books');
+                    },
+                    child: Text(
+                      localizations.viewAll,
+                      style: const TextStyle(
+                        color: AppColors.success,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  );
                 },
-                child: const Text(
-                  'View All',
-                  style: TextStyle(
-                    color: AppColors.success,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
               ),
             ],
           ),
@@ -315,7 +343,9 @@ class _BorrowedBooksSectionState extends State<BorrowedBooksSection> {
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
-                              'Borrow: \$${book.borrowPrice}',
+                              AppLocalizations.of(
+                                context,
+                              ).borrowLabel('\$${book.borrowPrice}'),
                               style: const TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w600,

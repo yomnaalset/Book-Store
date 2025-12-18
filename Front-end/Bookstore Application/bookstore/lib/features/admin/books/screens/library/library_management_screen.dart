@@ -4,6 +4,7 @@ import '../../../../../../core/constants/app_colors.dart' as app_colors;
 import '../../../providers/library_manager/library_provider.dart'
     as library_provider;
 import '../../../../../../routes/app_routes.dart';
+import '../../../../../../core/localization/app_localizations.dart';
 
 class LibraryManagementScreen extends StatefulWidget {
   const LibraryManagementScreen({super.key});
@@ -24,9 +25,10 @@ class _LibraryManagementScreenState extends State<LibraryManagementScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Library Management'),
+        title: Text(localizations.libraryManagement),
         backgroundColor: app_colors.AppColors.primary,
         foregroundColor: app_colors.AppColors.white,
         elevation: 0,
@@ -65,62 +67,97 @@ class _LibraryManagementScreenState extends State<LibraryManagementScreen> {
                         : Theme.of(context).colorScheme.error,
                   ),
                   const SizedBox(height: 16),
-                  Text(
-                    isAuthError
-                        ? 'Authentication Required'
-                        : isNoLibraryError
-                        ? 'No Library Found'
-                        : 'Error: ${libraryProvider.error}',
-                    style: TextStyle(
-                      color: isNoLibraryError
-                          ? app_colors.AppColors.primary
-                          : Theme.of(context).colorScheme.error,
-                      fontSize: 16,
-                    ),
-                    textAlign: TextAlign.center,
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Text(
+                        isAuthError
+                            ? localizations.authenticationRequired
+                            : isNoLibraryError
+                            ? localizations.noLibraryFound
+                            : '${localizations.error}: ${libraryProvider.error}',
+                        style: TextStyle(
+                          color: isNoLibraryError
+                              ? app_colors.AppColors.primary
+                              : Theme.of(context).colorScheme.error,
+                          fontSize: 16,
+                        ),
+                        textAlign: TextAlign.center,
+                      );
+                    },
                   ),
                   if (isAuthError) ...[
                     const SizedBox(height: 8),
-                    const Text(
-                      'Please log in to access library management.',
-                      style: TextStyle(color: Colors.grey, fontSize: 14),
-                      textAlign: TextAlign.center,
+                    Builder(
+                      builder: (context) {
+                        final localizations = AppLocalizations.of(context);
+                        return Text(
+                          localizations.pleaseLogInLibrary,
+                          style: const TextStyle(
+                            color: Colors.grey,
+                            fontSize: 14,
+                          ),
+                          textAlign: TextAlign.center,
+                        );
+                      },
                     ),
                   ],
                   if (isNoLibraryError) ...[
                     const SizedBox(height: 8),
-                    const Text(
-                      'Create your first library to get started',
-                      style: TextStyle(color: Colors.grey, fontSize: 14),
-                      textAlign: TextAlign.center,
+                    Builder(
+                      builder: (context) {
+                        final localizations = AppLocalizations.of(context);
+                        return Text(
+                          localizations.createYourFirstLibrary,
+                          style: const TextStyle(
+                            color: Colors.grey,
+                            fontSize: 14,
+                          ),
+                          textAlign: TextAlign.center,
+                        );
+                      },
                     ),
                   ],
                   const SizedBox(height: 16),
                   if (isNoLibraryError)
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.pushNamed(
-                          context,
-                          AppRoutes.managerLibraryForm,
+                    Builder(
+                      builder: (context) {
+                        final localizations = AppLocalizations.of(context);
+                        return ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.pushNamed(
+                              context,
+                              AppRoutes.managerLibraryForm,
+                            );
+                          },
+                          icon: const Icon(Icons.add),
+                          label: Text(localizations.createLibrary),
                         );
                       },
-                      icon: const Icon(Icons.add),
-                      label: const Text('Create Library'),
                     )
                   else
-                    ElevatedButton(
-                      onPressed: () {
-                        if (isAuthError) {
-                          Navigator.pushNamedAndRemoveUntil(
-                            context,
-                            AppRoutes.login,
-                            (route) => false,
-                          );
-                        } else {
-                          libraryProvider.getLibrary();
-                        }
+                    Builder(
+                      builder: (context) {
+                        final localizations = AppLocalizations.of(context);
+                        return ElevatedButton(
+                          onPressed: () {
+                            if (isAuthError) {
+                              Navigator.pushNamedAndRemoveUntil(
+                                context,
+                                AppRoutes.login,
+                                (route) => false,
+                              );
+                            } else {
+                              libraryProvider.getLibrary();
+                            }
+                          },
+                          child: Text(
+                            isAuthError
+                                ? localizations.goToLogin
+                                : localizations.retry,
+                          ),
+                        );
                       },
-                      child: Text(isAuthError ? 'Go to Login' : 'Retry'),
                     ),
                 ],
               ),
@@ -139,28 +176,46 @@ class _LibraryManagementScreenState extends State<LibraryManagementScreen> {
                     color: app_colors.AppColors.primary,
                   ),
                   const SizedBox(height: 16),
-                  const Text(
-                    'No Library Information',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Text(
+                        localizations.noLibraryInformation,
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      );
+                    },
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    'Set up your library information to get started',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 16),
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Text(
+                        localizations.setUpLibraryInformation,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 16),
+                      );
+                    },
                   ),
                   const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: () => _navigateToForm(context),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: app_colors.AppColors.primary,
-                      foregroundColor: app_colors.AppColors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 32,
-                        vertical: 16,
-                      ),
-                    ),
-                    child: const Text('Set Up Library'),
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return ElevatedButton(
+                        onPressed: () => _navigateToForm(context),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: app_colors.AppColors.primary,
+                          foregroundColor: app_colors.AppColors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 32,
+                            vertical: 16,
+                          ),
+                        ),
+                        child: Text(localizations.setUpLibrary),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -168,6 +223,7 @@ class _LibraryManagementScreenState extends State<LibraryManagementScreen> {
           }
 
           return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -251,17 +307,19 @@ class _LibraryManagementScreenState extends State<LibraryManagementScreen> {
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                           children: [
                             _buildInfoCard(
-                              'Status',
-                              library.isActive ? 'Active' : 'Inactive',
+                              localizations.status,
+                              library.isActive
+                                  ? localizations.active
+                                  : localizations.inactive,
                               Icons.check_circle,
                             ),
                             _buildInfoCard(
-                              'Created',
+                              localizations.created,
                               library.createdAt.toString().split(' ')[0],
                               Icons.calendar_today,
                             ),
                             _buildInfoCard(
-                              'Updated',
+                              localizations.updated,
                               library.updatedAt.toString().split(' ')[0],
                               Icons.update,
                             ),
@@ -280,7 +338,7 @@ class _LibraryManagementScreenState extends State<LibraryManagementScreen> {
                       child: ElevatedButton.icon(
                         onPressed: () => _navigateToDetails(context),
                         icon: const Icon(Icons.visibility),
-                        label: const Text('View Details'),
+                        label: Text(localizations.viewDetails),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: app_colors.AppColors.primary,
                           foregroundColor: app_colors.AppColors.white,
@@ -293,7 +351,7 @@ class _LibraryManagementScreenState extends State<LibraryManagementScreen> {
                       child: OutlinedButton.icon(
                         onPressed: () => _showDeleteConfirmation(context),
                         icon: const Icon(Icons.delete),
-                        label: const Text('Delete'),
+                        label: Text(localizations.delete),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: Colors.red,
                           side: const BorderSide(color: Colors.red),
@@ -360,18 +418,17 @@ class _LibraryManagementScreenState extends State<LibraryManagementScreen> {
   }
 
   void _showDeleteConfirmation(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('Delete Library'),
-          content: const Text(
-            'Are you sure you want to delete this library? This action cannot be undone.',
-          ),
+          title: Text(localizations.deleteLibrary),
+          content: Text(localizations.areYouSureDeleteLibrary),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
+              child: Text(localizations.cancel),
             ),
             TextButton(
               onPressed: () async {
@@ -379,7 +436,7 @@ class _LibraryManagementScreenState extends State<LibraryManagementScreen> {
                 await _deleteLibrary(context);
               },
               style: TextButton.styleFrom(foregroundColor: Colors.red),
-              child: const Text('Delete'),
+              child: Text(localizations.delete),
             ),
           ],
         );
@@ -390,6 +447,7 @@ class _LibraryManagementScreenState extends State<LibraryManagementScreen> {
   Future<void> _deleteLibrary(BuildContext context) async {
     final provider = context.read<library_provider.LibraryProvider>();
     final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final localizations = AppLocalizations.of(context);
 
     try {
       final success = await provider.deleteLibrary();
@@ -397,15 +455,19 @@ class _LibraryManagementScreenState extends State<LibraryManagementScreen> {
       if (mounted) {
         if (success) {
           scaffoldMessenger.showSnackBar(
-            const SnackBar(
-              content: Text('Library deleted successfully'),
+            SnackBar(
+              content: Text(localizations.libraryDeletedSuccessfully),
               backgroundColor: Colors.green,
             ),
           );
         } else {
           scaffoldMessenger.showSnackBar(
             SnackBar(
-              content: Text('Failed to delete library: ${provider.error}'),
+              content: Text(
+                localizations.failedToDeleteLibrary(
+                  provider.error ?? localizations.unknownError,
+                ),
+              ),
               backgroundColor: Colors.red,
             ),
           );
@@ -415,7 +477,7 @@ class _LibraryManagementScreenState extends State<LibraryManagementScreen> {
       if (mounted) {
         scaffoldMessenger.showSnackBar(
           SnackBar(
-            content: Text('Error deleting library: $e'),
+            content: Text(localizations.errorDeletingLibrary(e.toString())),
             backgroundColor: Colors.red,
           ),
         );

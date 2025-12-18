@@ -8,6 +8,7 @@ import '../../../widgets/library_manager/filters_bar.dart';
 import '../../../widgets/library_manager/status_chip.dart';
 import '../../../widgets/library_manager/empty_state.dart';
 import '../../../../auth/providers/auth_provider.dart';
+import '../../../../../core/localization/app_localizations.dart';
 import 'complaint_detail_screen.dart';
 
 class ComplaintsListScreen extends StatefulWidget {
@@ -20,15 +21,19 @@ class ComplaintsListScreen extends StatefulWidget {
 class _ComplaintsListScreenState extends State<ComplaintsListScreen> {
   String _searchQuery = '';
   String? _selectedStatus;
-  String? _selectedPriority;
 
   @override
   void initState() {
     super.initState();
-    _loadComplaints();
+    // Defer loading until after the first frame is built
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadComplaints();
+    });
   }
 
   Future<void> _loadComplaints() async {
+    if (!mounted) return;
+
     // Check authentication first
     final authProvider = context.read<AuthProvider>();
     developer.log(
@@ -57,12 +62,19 @@ class _ComplaintsListScreenState extends State<ComplaintsListScreen> {
       return;
     }
 
+    if (!mounted) return;
+
     final provider = context.read<ComplaintsProvider>();
-    await provider.getComplaints(
-      search: _searchQuery.isEmpty ? null : _searchQuery,
-      status: _selectedStatus,
-      // priority: _selectedPriority, // Temporarily commented out due to linter issue
-    );
+    try {
+      await provider.getComplaints(
+        search: _searchQuery.isEmpty ? null : _searchQuery,
+        status: _selectedStatus,
+        // priority: _selectedPriority, // Temporarily commented out due to linter issue
+      );
+    } catch (e) {
+      developer.log('ComplaintsListScreen: Exception loading complaints: $e');
+      // Error is already handled in the provider, just log it
+    }
   }
 
   void _onSearch(String query) {
@@ -79,31 +91,31 @@ class _ComplaintsListScreenState extends State<ComplaintsListScreen> {
     _loadComplaints();
   }
 
-  void _onPriorityFilterChanged(String? filter) {
-    setState(() {
-      _selectedPriority = filter;
-    });
-    _loadComplaints();
-  }
-
-  void _navigateToComplaintDetails(Complaint complaint) {
-    Navigator.push(
+  void _navigateToComplaintDetails(Complaint complaint) async {
+    final result = await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => ComplaintDetailScreen(complaint: complaint),
       ),
     );
+
+    // Refresh complaints list if complaint was updated
+    if (result == true && mounted) {
+      _loadComplaints();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Complaints'),
+        title: Text(localizations.complaints),
         actions: [
           IconButton(
             onPressed: () => _loadComplaints(),
             icon: const Icon(Icons.refresh),
+            tooltip: localizations.refresh,
           ),
         ],
       ),
@@ -112,43 +124,36 @@ class _ComplaintsListScreenState extends State<ComplaintsListScreen> {
           // Search and Filters
           Padding(
             padding: const EdgeInsets.all(16.0),
-            child: Column(
-              children: [
-                AdminSearchBar(
-                  hintText: 'Search complaints...',
-                  onSubmitted: _onSearch,
-                ),
-                const SizedBox(height: 16),
-                FiltersBar(
-                  filterOptions: const [
-                    'Open',
-                    'In Progress',
-                    'Resolved',
-                    'Closed',
+            child: Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Column(
+                  children: [
+                    AdminSearchBar(
+                      hintText: localizations.searchComplaints,
+                      onSubmitted: _onSearch,
+                    ),
+                    const SizedBox(height: 16),
+                    FiltersBar(
+                      filterOptions: [
+                        localizations.open,
+                        localizations.inProgress,
+                        localizations.resolved,
+                      ],
+                      selectedFilter: _convertStatusToDisplay(
+                        _selectedStatus,
+                        localizations,
+                      ),
+                      onFilterChanged: (filter) {
+                        _onStatusFilterChanged(
+                          _convertDisplayToStatus(filter, localizations),
+                        );
+                      },
+                      onClearFilters: () => _onStatusFilterChanged(null),
+                    ),
                   ],
-                  selectedFilter: _selectedStatus,
-                  onFilterChanged: (filter) {
-                    _onStatusFilterChanged(
-                      filter?.toLowerCase().replaceAll(' ', '_'),
-                    );
-                  },
-                  onClearFilters: () => _onStatusFilterChanged(null),
-                ),
-                FiltersBar(
-                  filterOptions: const ['Low', 'Medium', 'High', 'Urgent'],
-                  selectedFilter: _selectedPriority,
-                  onFilterChanged: (filter) {
-                    if (filter == 'All') {
-                      _onPriorityFilterChanged(null);
-                    } else {
-                      _onPriorityFilterChanged(
-                        filter?.toLowerCase().replaceAll(' ', '_'),
-                      );
-                    }
-                  },
-                  onClearFilters: () => _onPriorityFilterChanged(null),
-                ),
-              ],
+                );
+              },
             ),
           ),
 
@@ -161,33 +166,65 @@ class _ComplaintsListScreenState extends State<ComplaintsListScreen> {
                 }
 
                 if (provider.error != null && provider.complaints.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          'Error: ${provider.error}',
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.error,
+                  return Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.error_outline,
+                                size: 64,
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                localizations.errorLoadingComplaints,
+                                style: Theme.of(context).textTheme.titleLarge
+                                    ?.copyWith(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.error,
+                                    ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                provider.error ?? localizations.unknownError,
+                                style: Theme.of(context).textTheme.bodyMedium,
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 16),
+                              ElevatedButton.icon(
+                                onPressed: () {
+                                  provider.clearError();
+                                  _loadComplaints();
+                                },
+                                icon: const Icon(Icons.refresh),
+                                label: Text(localizations.retry),
+                              ),
+                            ],
                           ),
                         ),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: _loadComplaints,
-                          child: const Text('Retry'),
-                        ),
-                      ],
-                    ),
+                      );
+                    },
                   );
                 }
 
                 if (provider.complaints.isEmpty) {
-                  return EmptyState(
-                    title: 'No Complaints',
-                    message: 'No complaints found',
-                    icon: Icons.report_problem,
-                    actionText: 'Refresh',
-                    onAction: _loadComplaints,
+                  return Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return EmptyState(
+                        title: localizations.noComplaints,
+                        message: localizations.noComplaintsFound,
+                        icon: Icons.report_problem,
+                        actionText: localizations.refresh,
+                        onAction: _loadComplaints,
+                      );
+                    },
                   );
                 }
 
@@ -218,31 +255,48 @@ class _ComplaintsListScreenState extends State<ComplaintsListScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Header with ID and Status
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Complaint #${complaint.id}',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
+              Builder(
+                builder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          localizations.complaintNumber(complaint.id),
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                  StatusChip(status: complaint.status),
-                ],
+                      StatusChip(status: complaint.status),
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 8),
 
               // Subject
-              Text(
-                complaint.title,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
+              Builder(
+                builder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  String displayTitle = complaint.title;
+                  // Translate common complaint titles
+                  final titleLower = complaint.title.toLowerCase();
+                  if (titleLower.contains('complaint about the app') ||
+                      titleLower.contains('complaint about app')) {
+                    displayTitle = localizations.complaintAboutTheApp;
+                  }
+                  return Text(
+                    displayTitle,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  );
+                },
               ),
               const SizedBox(height: 8),
 
@@ -267,12 +321,17 @@ class _ComplaintsListScreenState extends State<ComplaintsListScreen> {
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    complaint.customerName ?? 'Unknown',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Text(
+                        complaint.customerName ?? localizations.unknown,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      );
+                    },
                   ),
                   const SizedBox(width: 16),
                   Icon(
@@ -281,38 +340,25 @@ class _ComplaintsListScreenState extends State<ComplaintsListScreen> {
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    complaint.customerEmail ?? 'Unknown',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Text(
+                        complaint.customerEmail ?? localizations.unknown,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),
               const SizedBox(height: 8),
 
-              // Priority and Date
+              // Date
               Row(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _getPriorityColor(complaint.priority),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      complaint.priority.toUpperCase(),
-                      style: const TextStyle(
-                        fontSize: 10,
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
                   const Spacer(),
                   Text(
                     _formatDate(complaint.createdAt),
@@ -323,28 +369,6 @@ class _ComplaintsListScreenState extends State<ComplaintsListScreen> {
                   ),
                 ],
               ),
-
-              // Assigned To
-              if (complaint.assignedTo != null) ...[
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Icon(
-                      Icons.assignment_ind,
-                      size: 16,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Assigned to: ${complaint.assignedTo}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
             ],
           ),
         ),
@@ -352,22 +376,38 @@ class _ComplaintsListScreenState extends State<ComplaintsListScreen> {
     );
   }
 
-  Color _getPriorityColor(String priority) {
-    switch (priority.toLowerCase()) {
-      case 'urgent':
-        return Colors.red;
-      case 'high':
-        return Colors.orange;
-      case 'medium':
-        return Colors.yellow;
-      case 'low':
-        return Colors.green;
+  String _formatDate(DateTime date) {
+    return '${date.day}/${date.month}/${date.year}';
+  }
+
+  String? _convertStatusToDisplay(
+    String? status,
+    AppLocalizations localizations,
+  ) {
+    if (status == null) return null;
+    switch (status) {
+      case 'open':
+        return localizations.open;
+      case 'in_progress':
+        return localizations.inProgress;
+      case 'resolved':
+        return localizations.resolved;
+      case 'closed':
+        return localizations.closed;
       default:
-        return Colors.grey;
+        return status;
     }
   }
 
-  String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year}';
+  String? _convertDisplayToStatus(
+    String? display,
+    AppLocalizations localizations,
+  ) {
+    if (display == null) return null;
+    if (display == localizations.open) return 'open';
+    if (display == localizations.inProgress) return 'in_progress';
+    if (display == localizations.resolved) return 'resolved';
+    if (display == localizations.closed) return 'closed';
+    return display.toLowerCase().replaceAll(' ', '_');
   }
 }

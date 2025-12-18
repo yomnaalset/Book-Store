@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' hide Category;
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
@@ -9,6 +10,7 @@ import '../../../models/book.dart';
 import '../../../models/category.dart';
 import '../../../models/author.dart';
 import '../../../../auth/providers/auth_provider.dart';
+import '../../../../../../core/localization/app_localizations.dart';
 
 class BookFormScreen extends StatefulWidget {
   final Book? book;
@@ -36,6 +38,8 @@ class _BookFormScreenState extends State<BookFormScreen> {
   String? _selectedCategoryId;
   String? _selectedAuthorId;
   File? _selectedImage;
+  Uint8List? _selectedImageBytes; // For web platform
+  String? _selectedImageFileName; // Store filename for web platform
   bool _isAvailable = true;
   bool _isAvailableForBorrow = true;
   bool _isNew = false;
@@ -127,30 +131,36 @@ class _BookFormScreenState extends State<BookFormScreen> {
   ) {
     // Find the category by ID
     if (_selectedCategoryId != null) {
-      _selectedCategory = categoriesProvider.categories
+      final activeCategories = categoriesProvider.categories
           .where((c) => c.isActive)
           .cast<Category>()
-          .firstWhere(
-            (c) => c.id == _selectedCategoryId,
-            orElse: () => categoriesProvider.categories
-                .where((c) => c.isActive)
-                .cast<Category>()
-                .first,
-          );
+          .toList();
+      try {
+        _selectedCategory = activeCategories.firstWhere(
+          (c) => c.id == _selectedCategoryId,
+        );
+      } catch (e) {
+        // If not found, use first available category or null
+        _selectedCategory = activeCategories.isNotEmpty
+            ? activeCategories.first
+            : null;
+      }
     }
 
     // Find the author by ID
     if (_selectedAuthorId != null) {
-      _selectedAuthor = authorsProvider.authors
+      final activeAuthors = authorsProvider.authors
           .where((a) => a.isActive)
           .cast<Author>()
-          .firstWhere(
-            (a) => a.id == _selectedAuthorId,
-            orElse: () => authorsProvider.authors
-                .where((a) => a.isActive)
-                .cast<Author>()
-                .first,
-          );
+          .toList();
+      try {
+        _selectedAuthor = activeAuthors.firstWhere(
+          (a) => a.id == _selectedAuthorId,
+        );
+      } catch (e) {
+        // If not found, use first available author or null
+        _selectedAuthor = activeAuthors.isNotEmpty ? activeAuthors.first : null;
+      }
     }
   }
 
@@ -173,15 +183,31 @@ class _BookFormScreenState extends State<BookFormScreen> {
       final ImagePicker picker = ImagePicker();
       final XFile? image = await picker.pickImage(source: source);
       if (image != null) {
-        setState(() {
-          _selectedImage = File(image.path);
-        });
+        if (kIsWeb) {
+          // On web, read bytes instead of using File
+          final bytes = await image.readAsBytes();
+          if (mounted) {
+            setState(() {
+              _selectedImageBytes = bytes;
+              _selectedImageFileName = image.name;
+              _selectedImage = null;
+            });
+          }
+        } else {
+          // On mobile, use File
+          setState(() {
+            _selectedImage = File(image.path);
+            _selectedImageBytes = null;
+            _selectedImageFileName = null;
+          });
+        }
       }
     } catch (e) {
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error picking image: $e'),
+            content: Text('${localizations.error}: ${e.toString()}'),
             backgroundColor: Colors.red,
           ),
         );
@@ -193,10 +219,11 @@ class _BookFormScreenState extends State<BookFormScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     // Validate category and author selection
+    final localizations = AppLocalizations.of(context);
     if (_selectedCategory == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select a category'),
+        SnackBar(
+          content: Text(localizations.pleaseSelectCategory),
           backgroundColor: Colors.red,
         ),
       );
@@ -205,8 +232,8 @@ class _BookFormScreenState extends State<BookFormScreen> {
 
     if (_selectedAuthor == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select an author'),
+        SnackBar(
+          content: Text(localizations.pleaseSelectAuthor),
           backgroundColor: Colors.red,
         ),
       );
@@ -231,8 +258,8 @@ class _BookFormScreenState extends State<BookFormScreen> {
       } else {
         debugPrint('DEBUG: Book form - No token available from AuthProvider');
         scaffoldMessenger.showSnackBar(
-          const SnackBar(
-            content: Text('Authentication required. Please log in again.'),
+          SnackBar(
+            content: Text(localizations.authenticationRequiredPleaseLogIn),
             backgroundColor: Colors.red,
           ),
         );
@@ -249,11 +276,12 @@ class _BookFormScreenState extends State<BookFormScreen> {
         description: _descriptionController.text.trim(),
         author: _selectedAuthor,
         category: _selectedCategory,
-        primaryImageUrl: _selectedImage != null
-            ? _selectedImage!.path
-            : (_imageUrlController.text.trim().isEmpty
+        // Only set primaryImageUrl if no image file is selected (use URL input instead)
+        primaryImageUrl: (_selectedImage == null && _selectedImageBytes == null)
+            ? (_imageUrlController.text.trim().isEmpty
                   ? null
-                  : _imageUrlController.text.trim()),
+                  : _imageUrlController.text.trim())
+            : null, // Don't set path when uploading file
         price: _priceController.text.trim(), // Now mandatory, no null check
         borrowPrice: _isAvailableForBorrow
             ? _borrowPriceController.text.trim()
@@ -276,17 +304,24 @@ class _BookFormScreenState extends State<BookFormScreen> {
         debugPrint(
           'DEBUG: Book form - Creating book with data: ${bookData.toJson()}',
         );
-        final createdBook = await provider.createBook(bookData);
+        final createdBook = await provider.createBook(
+          bookData,
+          imageFile: _selectedImage,
+          imageBytes: _selectedImageBytes,
+          imageFileName: _selectedImageFileName,
+        );
         if (mounted) {
           if (createdBook != null) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Book created successfully')),
+              SnackBar(content: Text(localizations.bookCreatedSuccessfully)),
             );
           } else {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(
-                  'Failed to create book: ${provider.error ?? 'Unknown error'}',
+                  localizations.failedToCreateBook(
+                    provider.error ?? localizations.unknownError,
+                  ),
                 ),
                 backgroundColor: Colors.red,
               ),
@@ -303,17 +338,24 @@ class _BookFormScreenState extends State<BookFormScreen> {
           );
         }
 
-        final updatedBook = await provider.updateBook(bookData);
+        final updatedBook = await provider.updateBook(
+          bookData,
+          imageFile: _selectedImage,
+          imageBytes: _selectedImageBytes,
+          imageFileName: _selectedImageFileName,
+        );
         if (mounted) {
           if (updatedBook != null) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Book updated successfully')),
+              SnackBar(content: Text(localizations.bookUpdatedSuccessfully)),
             );
           } else {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(
-                  'Failed to update book: ${provider.error ?? 'Unknown error'}',
+                  localizations.failedToUpdateBook(
+                    provider.error ?? localizations.unknownError,
+                  ),
                 ),
                 backgroundColor: Colors.red,
               ),
@@ -331,7 +373,7 @@ class _BookFormScreenState extends State<BookFormScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: ${e.toString()}'),
+            content: Text('${localizations.error}: ${e.toString()}'),
             backgroundColor: Colors.red,
           ),
         );
@@ -347,9 +389,12 @@ class _BookFormScreenState extends State<BookFormScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.book == null ? 'Add Book' : 'Edit Book'),
+        title: Text(
+          widget.book == null ? localizations.addBook : localizations.editBook,
+        ),
         actions: [
           if (widget.book != null)
             IconButton(
@@ -362,6 +407,7 @@ class _BookFormScreenState extends State<BookFormScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.all(16.0),
               child: Form(
                 key: _formKey,
@@ -375,107 +421,146 @@ class _BookFormScreenState extends State<BookFormScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Row(
-                              children: [
-                                Icon(Icons.book, color: Colors.orange),
-                                SizedBox(width: 12),
-                                Text(
-                                  'Book Information',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
+                            Builder(
+                              builder: (context) {
+                                final localizations = AppLocalizations.of(
+                                  context,
+                                );
+                                return Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.book,
+                                      color: Colors.orange,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      localizations.bookInformation,
+                                      style: const TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
                             ),
                             const SizedBox(height: 24),
 
                             // Name Field
-                            TextFormField(
-                              controller: _nameController,
-                              decoration: const InputDecoration(
-                                labelText: 'Book Name *',
-                                border: OutlineInputBorder(),
-                                hintText: 'Enter book name',
-                                prefixIcon: Icon(Icons.book),
-                              ),
-                              validator: (value) {
-                                if (value == null || value.trim().isEmpty) {
-                                  return 'Book name is required';
-                                }
-                                return null;
+                            Builder(
+                              builder: (context) {
+                                final localizations = AppLocalizations.of(
+                                  context,
+                                );
+                                return TextFormField(
+                                  controller: _nameController,
+                                  decoration: InputDecoration(
+                                    labelText: '${localizations.bookName} *',
+                                    border: const OutlineInputBorder(),
+                                    hintText: localizations.enterBookName,
+                                    prefixIcon: const Icon(Icons.book),
+                                  ),
+                                  validator: (value) {
+                                    if (value == null || value.trim().isEmpty) {
+                                      return localizations.bookNameRequired;
+                                    }
+                                    return null;
+                                  },
+                                );
                               },
                             ),
                             const SizedBox(height: 16),
 
                             // Description Field
-                            TextFormField(
-                              controller: _descriptionController,
-                              decoration: const InputDecoration(
-                                labelText: 'Description *',
-                                border: OutlineInputBorder(),
-                                hintText: 'Enter book description',
-                                prefixIcon: Icon(Icons.description),
-                                alignLabelWithHint: true,
-                              ),
-                              maxLines: 4,
-                              validator: (value) {
-                                if (value == null || value.trim().isEmpty) {
-                                  return 'Description is required';
-                                }
-                                return null;
+                            Builder(
+                              builder: (context) {
+                                final localizations = AppLocalizations.of(
+                                  context,
+                                );
+                                return TextFormField(
+                                  controller: _descriptionController,
+                                  decoration: InputDecoration(
+                                    labelText: '${localizations.description} *',
+                                    border: const OutlineInputBorder(),
+                                    hintText:
+                                        localizations.enterBookDescription,
+                                    prefixIcon: const Icon(Icons.description),
+                                    alignLabelWithHint: true,
+                                  ),
+                                  maxLines: 4,
+                                  validator: (value) {
+                                    if (value == null || value.trim().isEmpty) {
+                                      return localizations.descriptionRequired;
+                                    }
+                                    return null;
+                                  },
+                                );
                               },
                             ),
                             const SizedBox(height: 16),
 
                             // Book Picture Section
-                            const Text(
-                              'Book Picture',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-
-                            // Image Selection Buttons
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: OutlinedButton.icon(
-                                    onPressed: () =>
-                                        _pickImage(ImageSource.gallery),
-                                    icon: const Icon(Icons.photo_library),
-                                    label: const Text('Gallery'),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: OutlinedButton.icon(
-                                    onPressed: () =>
-                                        _pickImage(ImageSource.camera),
-                                    icon: const Icon(Icons.camera_alt),
-                                    label: const Text('Camera'),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-
-                            // Image URL Field
-                            TextFormField(
-                              controller: _imageUrlController,
-                              decoration: const InputDecoration(
-                                labelText: 'Or enter image URL',
-                                border: OutlineInputBorder(),
-                                hintText: 'Enter image URL',
-                                prefixIcon: Icon(Icons.link),
-                              ),
+                            Builder(
+                              builder: (context) {
+                                final localizations = AppLocalizations.of(
+                                  context,
+                                );
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      localizations.bookPicture,
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    // Image Selection Buttons
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: OutlinedButton.icon(
+                                            onPressed: () =>
+                                                _pickImage(ImageSource.gallery),
+                                            icon: const Icon(
+                                              Icons.photo_library,
+                                            ),
+                                            label: Text(localizations.gallery),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: OutlinedButton.icon(
+                                            onPressed: () =>
+                                                _pickImage(ImageSource.camera),
+                                            icon: const Icon(Icons.camera_alt),
+                                            label: Text(localizations.camera),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+                                    // Image URL Field
+                                    TextFormField(
+                                      controller: _imageUrlController,
+                                      decoration: InputDecoration(
+                                        labelText:
+                                            localizations.orEnterImageUrl,
+                                        border: const OutlineInputBorder(),
+                                        hintText: localizations.enterImageUrl,
+                                        prefixIcon: const Icon(Icons.link),
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
                             ),
                             const SizedBox(height: 12),
 
                             // Selected Image Preview
-                            if (_selectedImage != null)
+                            if (_selectedImage != null ||
+                                _selectedImageBytes != null)
                               Container(
                                 height: 200,
                                 width: double.infinity,
@@ -485,10 +570,17 @@ class _BookFormScreenState extends State<BookFormScreen> {
                                 ),
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(8),
-                                  child: Image.file(
-                                    _selectedImage!,
-                                    fit: BoxFit.cover,
-                                  ),
+                                  child: kIsWeb && _selectedImageBytes != null
+                                      ? Image.memory(
+                                          _selectedImageBytes!,
+                                          fit: BoxFit.cover,
+                                        )
+                                      : _selectedImage != null
+                                      ? Image.file(
+                                          _selectedImage!,
+                                          fit: BoxFit.cover,
+                                        )
+                                      : const SizedBox.shrink(),
                                 ),
                               ),
                           ],
@@ -504,36 +596,49 @@ class _BookFormScreenState extends State<BookFormScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Row(
-                              children: [
-                                Icon(Icons.category, color: Colors.green),
-                                SizedBox(width: 12),
-                                Text(
-                                  'Classification',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
+                            Builder(
+                              builder: (context) {
+                                final localizations = AppLocalizations.of(
+                                  context,
+                                );
+                                return Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.category,
+                                      color: Colors.green,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      localizations.classification,
+                                      style: const TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
                             ),
                             const SizedBox(height: 24),
 
                             // Category Selection
                             Consumer<CategoriesProvider>(
                               builder: (context, provider, child) {
+                                final localizations = AppLocalizations.of(
+                                  context,
+                                );
                                 return DropdownButtonFormField<Category>(
                                   // ignore: deprecated_member_use
                                   value: _selectedCategory,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Category *',
-                                    border: OutlineInputBorder(),
-                                    prefixIcon: Icon(Icons.category),
+                                  decoration: InputDecoration(
+                                    labelText: '${localizations.category} *',
+                                    border: const OutlineInputBorder(),
+                                    prefixIcon: const Icon(Icons.category),
                                   ),
                                   items: [
-                                    const DropdownMenuItem(
+                                    DropdownMenuItem(
                                       value: null,
-                                      child: Text('Select Category'),
+                                      child: Text(localizations.selectCategory),
                                     ),
                                     ...provider.categories
                                         .where((category) => category.isActive)
@@ -551,7 +656,7 @@ class _BookFormScreenState extends State<BookFormScreen> {
                                   },
                                   validator: (value) {
                                     if (value == null) {
-                                      return 'Please select a category';
+                                      return localizations.pleaseSelectCategory;
                                     }
                                     return null;
                                   },
@@ -563,18 +668,23 @@ class _BookFormScreenState extends State<BookFormScreen> {
                             // Author Selection
                             Consumer<AuthorsProvider>(
                               builder: (context, provider, child) {
+                                final localizations = AppLocalizations.of(
+                                  context,
+                                );
                                 return DropdownButtonFormField<Author>(
                                   // ignore: deprecated_member_use
                                   value: _selectedAuthor,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Author *',
-                                    border: OutlineInputBorder(),
-                                    prefixIcon: Icon(Icons.person),
+                                  decoration: InputDecoration(
+                                    labelText: '${localizations.author} *',
+                                    border: const OutlineInputBorder(),
+                                    prefixIcon: const Icon(Icons.person),
                                   ),
                                   items: [
-                                    const DropdownMenuItem(
+                                    DropdownMenuItem(
                                       value: null,
-                                      child: Text('Select Author'),
+                                      child: Text(
+                                        localizations.selectAuthorLabel,
+                                      ),
                                     ),
                                     ...provider.authors
                                         .where((author) => author.isActive)
@@ -592,7 +702,7 @@ class _BookFormScreenState extends State<BookFormScreen> {
                                   },
                                   validator: (value) {
                                     if (value == null) {
-                                      return 'Please select an author';
+                                      return localizations.pleaseSelectAuthor;
                                     }
                                     return null;
                                   },
@@ -612,178 +722,258 @@ class _BookFormScreenState extends State<BookFormScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Row(
-                              children: [
-                                Icon(Icons.attach_money, color: Colors.blue),
-                                SizedBox(width: 12),
-                                Text(
-                                  'Pricing & Availability',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
+                            Builder(
+                              builder: (context) {
+                                final localizations = AppLocalizations.of(
+                                  context,
+                                );
+                                return Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.attach_money,
+                                      color: Colors.blue,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      localizations.pricingAvailability,
+                                      style: const TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
                             ),
                             const SizedBox(height: 24),
 
                             // Price Field
-                            TextFormField(
-                              controller: _priceController,
-                              decoration: const InputDecoration(
-                                labelText: 'Purchase Price *',
-                                border: OutlineInputBorder(),
-                                hintText: 'Enter purchase price',
-                                prefixIcon: Icon(Icons.attach_money),
-                              ),
-                              keyboardType: TextInputType.number,
-                              validator: (value) {
-                                if (value == null || value.trim().isEmpty) {
-                                  return 'Purchase price is required';
-                                }
-                                if (double.tryParse(value) == null) {
-                                  return 'Please enter a valid price';
-                                }
-                                return null;
+                            Builder(
+                              builder: (context) {
+                                final localizations = AppLocalizations.of(
+                                  context,
+                                );
+                                return TextFormField(
+                                  controller: _priceController,
+                                  decoration: InputDecoration(
+                                    labelText:
+                                        '${localizations.purchasePrice} *',
+                                    border: const OutlineInputBorder(),
+                                    hintText: localizations.enterPurchasePrice,
+                                    prefixIcon: const Icon(Icons.attach_money),
+                                  ),
+                                  keyboardType: TextInputType.number,
+                                  validator: (value) {
+                                    if (value == null || value.trim().isEmpty) {
+                                      return localizations
+                                          .purchasePriceRequired;
+                                    }
+                                    if (double.tryParse(value) == null) {
+                                      return localizations
+                                          .pleaseEnterValidPrice;
+                                    }
+                                    return null;
+                                  },
+                                );
                               },
                             ),
                             const SizedBox(height: 16),
 
                             // Borrow Price Field
-                            TextFormField(
-                              controller: _borrowPriceController,
-                              decoration: InputDecoration(
-                                labelText: _isAvailableForBorrow
-                                    ? 'Borrow Price *'
-                                    : 'Borrow Price',
-                                border: const OutlineInputBorder(),
-                                hintText: 'Enter borrow price',
-                                prefixIcon: const Icon(Icons.money),
-                              ),
-                              keyboardType: TextInputType.number,
-                              validator: (value) {
-                                if (_isAvailableForBorrow) {
-                                  if (value == null || value.trim().isEmpty) {
-                                    return 'Borrow price is required';
-                                  }
-                                  if (double.tryParse(value) == null) {
-                                    return 'Please enter a valid price';
-                                  }
-                                }
-                                return null;
+                            Builder(
+                              builder: (context) {
+                                final localizations = AppLocalizations.of(
+                                  context,
+                                );
+                                return TextFormField(
+                                  controller: _borrowPriceController,
+                                  decoration: InputDecoration(
+                                    labelText: _isAvailableForBorrow
+                                        ? '${localizations.borrowPrice} *'
+                                        : localizations.borrowPrice,
+                                    border: const OutlineInputBorder(),
+                                    hintText: localizations.enterBorrowPrice,
+                                    prefixIcon: const Icon(Icons.money),
+                                  ),
+                                  keyboardType: TextInputType.number,
+                                  validator: (value) {
+                                    if (_isAvailableForBorrow) {
+                                      if (value == null ||
+                                          value.trim().isEmpty) {
+                                        return localizations
+                                            .borrowPriceRequired;
+                                      }
+                                      if (double.tryParse(value) == null) {
+                                        return localizations
+                                            .pleaseEnterValidPrice;
+                                      }
+                                    }
+                                    return null;
+                                  },
+                                );
                               },
                             ),
                             const SizedBox(height: 16),
 
                             // Total Stock Field
-                            TextFormField(
-                              controller: _totalStockController,
-                              decoration: const InputDecoration(
-                                labelText: 'Total Stock *',
-                                border: OutlineInputBorder(),
-                                hintText:
-                                    'Enter total number of books in stock',
-                                prefixIcon: Icon(Icons.inventory_2),
-                              ),
-                              keyboardType: TextInputType.number,
-                              validator: (value) {
-                                if (value == null || value.trim().isEmpty) {
-                                  return 'Total stock is required';
-                                }
-                                if (int.tryParse(value) == null ||
-                                    int.parse(value) <= 0) {
-                                  return 'Please enter a valid stock quantity';
-                                }
-                                return null;
+                            Builder(
+                              builder: (context) {
+                                final localizations = AppLocalizations.of(
+                                  context,
+                                );
+                                return TextFormField(
+                                  controller: _totalStockController,
+                                  decoration: InputDecoration(
+                                    labelText: '${localizations.totalStock} *',
+                                    border: const OutlineInputBorder(),
+                                    hintText:
+                                        localizations.enterTotalNumberBooks,
+                                    prefixIcon: const Icon(Icons.inventory_2),
+                                  ),
+                                  keyboardType: TextInputType.number,
+                                  validator: (value) {
+                                    if (value == null || value.trim().isEmpty) {
+                                      return localizations.totalStockRequired;
+                                    }
+                                    if (int.tryParse(value) == null ||
+                                        int.parse(value) <= 0) {
+                                      return localizations
+                                          .pleaseEnterValidStockQuantity;
+                                    }
+                                    return null;
+                                  },
+                                );
                               },
                             ),
                             const SizedBox(height: 16),
 
                             // Available Copies Field
-                            TextFormField(
-                              controller: _availableCopiesController,
-                              decoration: const InputDecoration(
-                                labelText: 'Available Copies *',
-                                border: OutlineInputBorder(),
-                                hintText: 'Enter number of available copies',
-                                prefixIcon: Icon(Icons.check_circle),
-                              ),
-                              keyboardType: TextInputType.number,
-                              validator: (value) {
-                                if (value == null || value.trim().isEmpty) {
-                                  return 'Available copies is required';
-                                }
-                                if (int.tryParse(value) == null ||
-                                    int.parse(value) <= 0) {
-                                  return 'Please enter a valid quantity';
-                                }
-                                return null;
+                            Builder(
+                              builder: (context) {
+                                final localizations = AppLocalizations.of(
+                                  context,
+                                );
+                                return TextFormField(
+                                  controller: _availableCopiesController,
+                                  decoration: InputDecoration(
+                                    labelText:
+                                        '${localizations.availableCopiesLabel} *',
+                                    border: const OutlineInputBorder(),
+                                    hintText: localizations
+                                        .enterNumberAvailableCopies,
+                                    prefixIcon: const Icon(Icons.check_circle),
+                                  ),
+                                  keyboardType: TextInputType.number,
+                                  validator: (value) {
+                                    if (value == null || value.trim().isEmpty) {
+                                      return localizations
+                                          .availableCopiesRequired;
+                                    }
+                                    if (int.tryParse(value) == null ||
+                                        int.parse(value) <= 0) {
+                                      return localizations
+                                          .pleaseEnterValidQuantity;
+                                    }
+                                    return null;
+                                  },
+                                );
                               },
                             ),
                             const SizedBox(height: 16),
 
                             // Quantity Field (for borrowing)
-                            TextFormField(
-                              controller: _quantityController,
-                              decoration: InputDecoration(
-                                labelText: _isAvailableForBorrow
-                                    ? 'Number of Books for Borrowing *'
-                                    : 'Number of Books for Borrowing',
-                                border: const OutlineInputBorder(),
-                                hintText:
-                                    'Enter number of books available for borrowing',
-                                prefixIcon: const Icon(Icons.inventory),
-                              ),
-                              keyboardType: TextInputType.number,
-                              validator: (value) {
-                                if (_isAvailableForBorrow) {
-                                  if (value == null || value.trim().isEmpty) {
-                                    return 'Quantity is required';
-                                  }
-                                  if (int.tryParse(value) == null ||
-                                      int.parse(value) <= 0) {
-                                    return 'Please enter a valid quantity';
-                                  }
-                                }
-                                return null;
+                            Builder(
+                              builder: (context) {
+                                final localizations = AppLocalizations.of(
+                                  context,
+                                );
+                                return TextFormField(
+                                  controller: _quantityController,
+                                  decoration: InputDecoration(
+                                    labelText: _isAvailableForBorrow
+                                        ? '${localizations.numberOfBooksForBorrowing} *'
+                                        : localizations
+                                              .numberOfBooksForBorrowing,
+                                    border: const OutlineInputBorder(),
+                                    hintText:
+                                        localizations.enterNumberBooksBorrowing,
+                                    prefixIcon: const Icon(Icons.inventory),
+                                  ),
+                                  keyboardType: TextInputType.number,
+                                  validator: (value) {
+                                    if (_isAvailableForBorrow) {
+                                      if (value == null ||
+                                          value.trim().isEmpty) {
+                                        return localizations.quantityRequired;
+                                      }
+                                      if (int.tryParse(value) == null ||
+                                          int.parse(value) <= 0) {
+                                        return localizations
+                                            .pleaseEnterValidQuantity;
+                                      }
+                                    }
+                                    return null;
+                                  },
+                                );
                               },
                             ),
                             const SizedBox(height: 16),
 
                             // Availability Switches
-                            SwitchListTile(
-                              title: const Text('Available for Purchase'),
-                              subtitle: const Text('Book can be purchased'),
-                              value: _isAvailable,
-                              onChanged: (value) {
-                                setState(() {
-                                  _isAvailable = value;
-                                });
-                              },
-                            ),
-                            SwitchListTile(
-                              title: const Text('Available for Borrowing'),
-                              subtitle: const Text('Book can be borrowed'),
-                              value: _isAvailableForBorrow,
-                              onChanged: (value) {
-                                setState(() {
-                                  _isAvailableForBorrow = value;
-                                  // Clear borrow fields when borrowing is disabled
-                                  if (!value) {
-                                    _borrowPriceController.clear();
-                                    _quantityController.clear();
-                                  }
-                                });
-                              },
-                            ),
-                            SwitchListTile(
-                              title: const Text('New Book'),
-                              subtitle: const Text('Mark as new arrival'),
-                              value: _isNew,
-                              onChanged: (value) {
-                                setState(() {
-                                  _isNew = value;
-                                });
+                            Builder(
+                              builder: (context) {
+                                final localizations = AppLocalizations.of(
+                                  context,
+                                );
+                                return Column(
+                                  children: [
+                                    SwitchListTile(
+                                      title: Text(
+                                        localizations.availableForPurchase,
+                                      ),
+                                      subtitle: Text(
+                                        localizations.bookCanBePurchased,
+                                      ),
+                                      value: _isAvailable,
+                                      onChanged: (value) {
+                                        setState(() {
+                                          _isAvailable = value;
+                                        });
+                                      },
+                                    ),
+                                    SwitchListTile(
+                                      title: Text(
+                                        localizations.availableForBorrowing,
+                                      ),
+                                      subtitle: Text(
+                                        localizations.bookCanBeBorrowed,
+                                      ),
+                                      value: _isAvailableForBorrow,
+                                      onChanged: (value) {
+                                        setState(() {
+                                          _isAvailableForBorrow = value;
+                                          // Clear borrow fields when borrowing is disabled
+                                          if (!value) {
+                                            _borrowPriceController.clear();
+                                            _quantityController.clear();
+                                          }
+                                        });
+                                      },
+                                    ),
+                                    SwitchListTile(
+                                      title: Text(localizations.newBook),
+                                      subtitle: Text(
+                                        localizations.markAsNewArrival,
+                                      ),
+                                      value: _isNew,
+                                      onChanged: (value) {
+                                        setState(() {
+                                          _isNew = value;
+                                        });
+                                      },
+                                    ),
+                                  ],
+                                );
                               },
                             ),
                           ],
@@ -793,19 +983,24 @@ class _BookFormScreenState extends State<BookFormScreen> {
                     const SizedBox(height: 32),
 
                     // Save Button
-                    SizedBox(
-                      width: double.infinity,
-                      height: 48,
-                      child: ElevatedButton(
-                        onPressed: _isLoading ? null : _saveBook,
-                        child: _isLoading
-                            ? const CircularProgressIndicator()
-                            : Text(
-                                widget.book == null
-                                    ? 'Add Book'
-                                    : 'Update Book',
-                              ),
-                      ),
+                    Builder(
+                      builder: (context) {
+                        final localizations = AppLocalizations.of(context);
+                        return SizedBox(
+                          width: double.infinity,
+                          height: 48,
+                          child: ElevatedButton(
+                            onPressed: _isLoading ? null : _saveBook,
+                            child: _isLoading
+                                ? const CircularProgressIndicator()
+                                : Text(
+                                    widget.book == null
+                                        ? localizations.addBook
+                                        : localizations.updateBook,
+                                  ),
+                          ),
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -815,22 +1010,23 @@ class _BookFormScreenState extends State<BookFormScreen> {
   }
 
   Future<void> _deleteBook() async {
+    final localizations = AppLocalizations.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Book'),
+        title: Text(localizations.deleteBook),
         content: Text(
-          'Are you sure you want to delete "${widget.book!.title}"? This action cannot be undone.',
+          localizations.areYouSureDeleteBookWithTitle(widget.book!.title),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text(localizations.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
+            child: Text(localizations.delete),
           ),
         ],
       ),
@@ -857,9 +1053,10 @@ class _BookFormScreenState extends State<BookFormScreen> {
             'DEBUG: Book form - No token available for delete operation',
           );
           if (mounted) {
+            final localizations = AppLocalizations.of(context);
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Authentication required. Please log in again.'),
+              SnackBar(
+                content: Text(localizations.authenticationRequiredPleaseLogIn),
                 backgroundColor: Colors.red,
               ),
             );
@@ -870,16 +1067,19 @@ class _BookFormScreenState extends State<BookFormScreen> {
         final success = await provider.deleteBook(int.parse(widget.book!.id));
 
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           if (success) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Book deleted successfully')),
+              SnackBar(content: Text(localizations.bookDeletedSuccessfully)),
             );
             Navigator.pop(context);
           } else {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(
-                  'Failed to delete book: ${provider.error ?? 'Unknown error'}',
+                  localizations.failedToDeleteBook(
+                    provider.error ?? localizations.unknownError,
+                  ),
                 ),
                 backgroundColor: Colors.red,
               ),
@@ -889,9 +1089,10 @@ class _BookFormScreenState extends State<BookFormScreen> {
       } catch (e) {
         debugPrint('DEBUG: Book form - Error during delete operation: $e');
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Error: ${e.toString()}'),
+              content: Text('${localizations.error}: ${e.toString()}'),
               backgroundColor: Colors.red,
             ),
           );

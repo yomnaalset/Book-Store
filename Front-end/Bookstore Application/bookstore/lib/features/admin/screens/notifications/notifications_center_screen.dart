@@ -6,7 +6,9 @@ import '../../../admin/providers/notifications_provider.dart'
 import '../../../admin/models/notification_model.dart';
 import '../../../admin/widgets/library_manager/admin_search_bar.dart';
 import '../../../admin/widgets/empty_state.dart';
-import 'package:bookstore/features/auth/providers/auth_provider.dart';
+import 'package:readgo/features/auth/providers/auth_provider.dart';
+import '../../../../../core/localization/app_localizations.dart';
+import '../../../notifications/utils/notification_translator.dart';
 
 class NotificationsCenterScreen extends StatefulWidget {
   const NotificationsCenterScreen({super.key});
@@ -62,9 +64,12 @@ class _NotificationsCenterScreenState extends State<NotificationsCenterScreen> {
     } catch (e) {
       debugPrint('NotificationsCenter: Error loading notifications: $e');
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error loading notifications: ${e.toString()}'),
+            content: Text(
+              localizations.errorLoadingNotificationsAdmin(e.toString()),
+            ),
           ),
         );
       }
@@ -123,8 +128,9 @@ class _NotificationsCenterScreenState extends State<NotificationsCenterScreen> {
 
       if (mounted) {
         try {
+          final localizations = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Notification marked as read')),
+            SnackBar(content: Text(localizations.notificationMarkedAsRead)),
           );
         } catch (e) {
           // Widget disposed, ignore
@@ -168,8 +174,9 @@ class _NotificationsCenterScreenState extends State<NotificationsCenterScreen> {
       );
 
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('All notifications marked as read')),
+          SnackBar(content: Text(localizations.allNotificationsMarkedAsRead)),
         );
       }
     } catch (e) {
@@ -183,22 +190,21 @@ class _NotificationsCenterScreenState extends State<NotificationsCenterScreen> {
   }
 
   Future<void> _deleteNotification(NotificationModel notification) async {
+    final localizations = AppLocalizations.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Notification'),
-        content: const Text(
-          'Are you sure you want to delete this notification?',
-        ),
+        title: Text(localizations.deleteNotification),
+        content: Text(localizations.areYouSureDeleteNotification),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text(localizations.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
+            child: Text(localizations.delete),
           ),
         ],
       ),
@@ -212,18 +218,20 @@ class _NotificationsCenterScreenState extends State<NotificationsCenterScreen> {
         await provider.deleteNotification(notification.id!);
 
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Notification deleted successfully'),
+            SnackBar(
+              content: Text(localizations.notificationDeletedSuccessfully),
               backgroundColor: Colors.green,
             ),
           );
         }
       } catch (e) {
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Unable to delete notification. Please try again.'),
+            SnackBar(
+              content: Text(localizations.unableToDeleteNotification),
               backgroundColor: Colors.red,
             ),
           );
@@ -233,22 +241,21 @@ class _NotificationsCenterScreenState extends State<NotificationsCenterScreen> {
   }
 
   Future<void> _deleteAllNotifications() async {
+    final localizations = AppLocalizations.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete All Notifications'),
-        content: const Text(
-          'Are you sure you want to delete all notifications? This action cannot be undone.',
-        ),
+        title: Text(localizations.deleteAllNotifications),
+        content: Text(localizations.areYouSureDeleteAllNotifications),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text(localizations.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete All'),
+            child: Text(localizations.deleteAll),
           ),
         ],
       ),
@@ -262,20 +269,20 @@ class _NotificationsCenterScreenState extends State<NotificationsCenterScreen> {
         await provider.deleteAllNotifications();
 
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('All notifications deleted successfully'),
+            SnackBar(
+              content: Text(localizations.allNotificationsDeletedSuccessfully),
               backgroundColor: Colors.green,
             ),
           );
         }
       } catch (e) {
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Unable to delete notifications. Please try again.',
-              ),
+            SnackBar(
+              content: Text(localizations.unableToDeleteNotifications),
               backgroundColor: Colors.red,
             ),
           );
@@ -286,9 +293,10 @@ class _NotificationsCenterScreenState extends State<NotificationsCenterScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Notifications'),
+        title: Text(localizations.notifications),
         actions: [
           Consumer<admin_notifications_provider.NotificationsProvider>(
             builder: (context, provider, child) {
@@ -309,39 +317,53 @@ class _NotificationsCenterScreenState extends State<NotificationsCenterScreen> {
                     _loadNotifications();
                   }
                 },
-                itemBuilder: (context) => [
-                  if (provider.unreadCount > 0)
+                itemBuilder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return [
+                    if (provider.unreadCount > 0)
+                      PopupMenuItem(
+                        value: 'mark_all_read',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.done_all, size: 20),
+                            const SizedBox(width: 8),
+                            Text(
+                              localizations.markAllReadWithCount(
+                                provider.unreadCount,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     PopupMenuItem(
-                      value: 'mark_all_read',
+                      value: 'refresh',
                       child: Row(
                         children: [
-                          const Icon(Icons.done_all, size: 20),
+                          const Icon(Icons.refresh, size: 20),
                           const SizedBox(width: 8),
-                          Text('Mark All Read (${provider.unreadCount})'),
+                          Text(localizations.refresh),
                         ],
                       ),
                     ),
-                  const PopupMenuItem(
-                    value: 'refresh',
-                    child: Row(
-                      children: [
-                        Icon(Icons.refresh, size: 20),
-                        SizedBox(width: 8),
-                        Text('Refresh'),
-                      ],
+                    PopupMenuItem(
+                      value: 'delete_all',
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.delete_outline,
+                            size: 20,
+                            color: Colors.red,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            localizations.deleteAll,
+                            style: const TextStyle(color: Colors.red),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  const PopupMenuItem(
-                    value: 'delete_all',
-                    child: Row(
-                      children: [
-                        Icon(Icons.delete_outline, size: 20, color: Colors.red),
-                        SizedBox(width: 8),
-                        Text('Delete All', style: TextStyle(color: Colors.red)),
-                      ],
-                    ),
-                  ),
-                ],
+                  ];
+                },
               );
             },
           ),
@@ -354,116 +376,141 @@ class _NotificationsCenterScreenState extends State<NotificationsCenterScreen> {
             padding: const EdgeInsets.all(16.0),
             child: Column(
               children: [
-                AdminSearchBar(onChanged: _onSearch),
+                Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return AdminSearchBar(
+                      hintText: localizations.searchNotificationsPlaceholder,
+                      onChanged: _onSearch,
+                    );
+                  },
+                ),
                 const SizedBox(height: 16),
                 // Type Filter
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    Text(
-                      'Type:',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
-                    ),
-                    FilterChip(
-                      label: const Text('All'),
-                      selected: _selectedType == null,
-                      onSelected: (_) => _onTypeFilterChanged(null),
-                      selectedColor: Theme.of(
-                        context,
-                      ).colorScheme.primaryContainer,
-                      checkmarkColor: Theme.of(
-                        context,
-                      ).colorScheme.onPrimaryContainer,
-                      backgroundColor: Theme.of(
-                        context,
-                      ).colorScheme.surfaceContainerHighest,
-                      labelStyle: TextStyle(
-                        color: _selectedType == null
-                            ? Theme.of(context).colorScheme.onPrimaryContainer
-                            : Theme.of(context).colorScheme.onSurface,
-                      ),
-                    ),
-                    FilterChip(
-                      label: const Text('Order'),
-                      selected: _selectedType == 'new_order',
-                      onSelected: (_) => _onTypeFilterChanged('new_order'),
-                      selectedColor: Theme.of(
-                        context,
-                      ).colorScheme.primaryContainer,
-                      checkmarkColor: Theme.of(
-                        context,
-                      ).colorScheme.onPrimaryContainer,
-                      backgroundColor: Theme.of(
-                        context,
-                      ).colorScheme.surfaceContainerHighest,
-                      labelStyle: TextStyle(
-                        color: _selectedType == 'new_order'
-                            ? Theme.of(context).colorScheme.onPrimaryContainer
-                            : Theme.of(context).colorScheme.onSurface,
-                      ),
-                    ),
-                    FilterChip(
-                      label: const Text('Borrowing'),
-                      selected: _selectedType == 'borrow_request',
-                      onSelected: (_) => _onTypeFilterChanged('borrow_request'),
-                      selectedColor: Theme.of(
-                        context,
-                      ).colorScheme.primaryContainer,
-                      checkmarkColor: Theme.of(
-                        context,
-                      ).colorScheme.onPrimaryContainer,
-                      backgroundColor: Theme.of(
-                        context,
-                      ).colorScheme.surfaceContainerHighest,
-                      labelStyle: TextStyle(
-                        color: _selectedType == 'borrow_request'
-                            ? Theme.of(context).colorScheme.onPrimaryContainer
-                            : Theme.of(context).colorScheme.onSurface,
-                      ),
-                    ),
-                    FilterChip(
-                      label: const Text('Delivery'),
-                      selected: _selectedType == 'delivery_task_created',
-                      onSelected: (_) =>
-                          _onTypeFilterChanged('delivery_task_created'),
-                      selectedColor: Theme.of(
-                        context,
-                      ).colorScheme.primaryContainer,
-                      checkmarkColor: Theme.of(
-                        context,
-                      ).colorScheme.onPrimaryContainer,
-                      backgroundColor: Theme.of(
-                        context,
-                      ).colorScheme.surfaceContainerHighest,
-                      labelStyle: TextStyle(
-                        color: _selectedType == 'delivery_task_created'
-                            ? Theme.of(context).colorScheme.onPrimaryContainer
-                            : Theme.of(context).colorScheme.onSurface,
-                      ),
-                    ),
-                    FilterChip(
-                      label: const Text('Complaint'),
-                      selected: _selectedType == 'new_complaint',
-                      onSelected: (_) => _onTypeFilterChanged('new_complaint'),
-                      selectedColor: Theme.of(
-                        context,
-                      ).colorScheme.primaryContainer,
-                      checkmarkColor: Theme.of(
-                        context,
-                      ).colorScheme.onPrimaryContainer,
-                      backgroundColor: Theme.of(
-                        context,
-                      ).colorScheme.surfaceContainerHighest,
-                      labelStyle: TextStyle(
-                        color: _selectedType == 'new_complaint'
-                            ? Theme.of(context).colorScheme.onPrimaryContainer
-                            : Theme.of(context).colorScheme.onSurface,
-                      ),
-                    ),
-                  ],
+                Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return Wrap(
+                      spacing: 8,
+                      children: [
+                        Text(
+                          '${localizations.type}:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).colorScheme.onSurface,
+                          ),
+                        ),
+                        FilterChip(
+                          label: Text(localizations.all),
+                          selected: _selectedType == null,
+                          onSelected: (_) => _onTypeFilterChanged(null),
+                          selectedColor: Theme.of(
+                            context,
+                          ).colorScheme.primaryContainer,
+                          checkmarkColor: Theme.of(
+                            context,
+                          ).colorScheme.onPrimaryContainer,
+                          backgroundColor: Theme.of(
+                            context,
+                          ).colorScheme.surfaceContainerHighest,
+                          labelStyle: TextStyle(
+                            color: _selectedType == null
+                                ? Theme.of(
+                                    context,
+                                  ).colorScheme.onPrimaryContainer
+                                : Theme.of(context).colorScheme.onSurface,
+                          ),
+                        ),
+                        FilterChip(
+                          label: Text(localizations.order),
+                          selected: _selectedType == 'new_order',
+                          onSelected: (_) => _onTypeFilterChanged('new_order'),
+                          selectedColor: Theme.of(
+                            context,
+                          ).colorScheme.primaryContainer,
+                          checkmarkColor: Theme.of(
+                            context,
+                          ).colorScheme.onPrimaryContainer,
+                          backgroundColor: Theme.of(
+                            context,
+                          ).colorScheme.surfaceContainerHighest,
+                          labelStyle: TextStyle(
+                            color: _selectedType == 'new_order'
+                                ? Theme.of(
+                                    context,
+                                  ).colorScheme.onPrimaryContainer
+                                : Theme.of(context).colorScheme.onSurface,
+                          ),
+                        ),
+                        FilterChip(
+                          label: Text(localizations.borrowing),
+                          selected: _selectedType == 'borrow_request',
+                          onSelected: (_) =>
+                              _onTypeFilterChanged('borrow_request'),
+                          selectedColor: Theme.of(
+                            context,
+                          ).colorScheme.primaryContainer,
+                          checkmarkColor: Theme.of(
+                            context,
+                          ).colorScheme.onPrimaryContainer,
+                          backgroundColor: Theme.of(
+                            context,
+                          ).colorScheme.surfaceContainerHighest,
+                          labelStyle: TextStyle(
+                            color: _selectedType == 'borrow_request'
+                                ? Theme.of(
+                                    context,
+                                  ).colorScheme.onPrimaryContainer
+                                : Theme.of(context).colorScheme.onSurface,
+                          ),
+                        ),
+                        FilterChip(
+                          label: Text(localizations.delivery),
+                          selected: _selectedType == 'delivery_task_created',
+                          onSelected: (_) =>
+                              _onTypeFilterChanged('delivery_task_created'),
+                          selectedColor: Theme.of(
+                            context,
+                          ).colorScheme.primaryContainer,
+                          checkmarkColor: Theme.of(
+                            context,
+                          ).colorScheme.onPrimaryContainer,
+                          backgroundColor: Theme.of(
+                            context,
+                          ).colorScheme.surfaceContainerHighest,
+                          labelStyle: TextStyle(
+                            color: _selectedType == 'delivery_task_created'
+                                ? Theme.of(
+                                    context,
+                                  ).colorScheme.onPrimaryContainer
+                                : Theme.of(context).colorScheme.onSurface,
+                          ),
+                        ),
+                        FilterChip(
+                          label: Text(localizations.complaint),
+                          selected: _selectedType == 'new_complaint',
+                          onSelected: (_) =>
+                              _onTypeFilterChanged('new_complaint'),
+                          selectedColor: Theme.of(
+                            context,
+                          ).colorScheme.primaryContainer,
+                          checkmarkColor: Theme.of(
+                            context,
+                          ).colorScheme.onPrimaryContainer,
+                          backgroundColor: Theme.of(
+                            context,
+                          ).colorScheme.surfaceContainerHighest,
+                          labelStyle: TextStyle(
+                            color: _selectedType == 'new_complaint'
+                                ? Theme.of(
+                                    context,
+                                  ).colorScheme.onPrimaryContainer
+                                : Theme.of(context).colorScheme.onSurface,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ],
             ),
@@ -483,35 +530,45 @@ class _NotificationsCenterScreenState extends State<NotificationsCenterScreen> {
 
                     if (provider.error != null &&
                         provider.notifications.isEmpty) {
-                      return Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              'Error: ${provider.error}',
-                              style: TextStyle(
-                                color: Theme.of(context).colorScheme.error,
-                              ),
+                      return Builder(
+                        builder: (context) {
+                          final localizations = AppLocalizations.of(context);
+                          return Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  '${localizations.error}: ${provider.error}',
+                                  style: TextStyle(
+                                    color: Theme.of(context).colorScheme.error,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                ElevatedButton(
+                                  onPressed: _loadNotifications,
+                                  child: Text(localizations.retry),
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 16),
-                            ElevatedButton(
-                              onPressed: _loadNotifications,
-                              child: const Text('Retry'),
-                            ),
-                          ],
-                        ),
+                          );
+                        },
                       );
                     }
 
                     if (provider.notifications.isEmpty) {
-                      return EmptyState(
-                        title: 'No Notifications',
-                        message: 'No notifications found',
-                        icon: Icons.notifications_none,
-                        action: ElevatedButton(
-                          onPressed: _loadNotifications,
-                          child: const Text('Refresh'),
-                        ),
+                      return Builder(
+                        builder: (context) {
+                          final localizations = AppLocalizations.of(context);
+                          return EmptyState(
+                            title: localizations.noNotifications,
+                            message: localizations.noNotificationsFound,
+                            icon: Icons.notifications_none,
+                            action: ElevatedButton(
+                              onPressed: _loadNotifications,
+                              child: Text(localizations.refresh),
+                            ),
+                          );
+                        },
                       );
                     }
 
@@ -555,54 +612,75 @@ class _NotificationsCenterScreenState extends State<NotificationsCenterScreen> {
             size: 20,
           ),
         ),
-        title: Text(
-          notification.title,
-          style: TextStyle(
-            fontWeight: notification.isRead
-                ? FontWeight.normal
-                : FontWeight.bold,
-          ),
+        title: Builder(
+          builder: (context) {
+            final localizations = AppLocalizations.of(context);
+            return Text(
+              NotificationTranslator.translateTitle(
+                notification.title,
+                localizations,
+              ),
+              style: TextStyle(
+                fontWeight: notification.isRead
+                    ? FontWeight.normal
+                    : FontWeight.bold,
+              ),
+            );
+          },
         ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              notification.message,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Text(
+                  NotificationTranslator.translateMessage(
+                    notification.message,
+                    localizations,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                );
+              },
             ),
             const SizedBox(height: 4),
-            Row(
-              children: [
-                Text(
-                  _formatDate(notification.createdAt),
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _getNotificationColor(
-                      notification.type,
-                    ).withValues(alpha: 26),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    notification.type,
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: _getNotificationColor(notification.type),
-                      fontWeight: FontWeight.bold,
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Row(
+                  children: [
+                    Text(
+                      _formatDate(notification.createdAt, localizations),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
-                  ),
-                ),
-              ],
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _getNotificationColor(
+                          notification.type,
+                        ).withValues(alpha: 26),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        notification.type,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: _getNotificationColor(notification.type),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           ],
         ),
@@ -610,19 +688,24 @@ class _NotificationsCenterScreenState extends State<NotificationsCenterScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (!notification.isRead)
-              TextButton(
-                onPressed: () => _markAsRead(notification),
-                style: TextButton.styleFrom(
-                  foregroundColor: Theme.of(context).colorScheme.primary,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                ),
-                child: const Text(
-                  'Mark as read',
-                  style: TextStyle(fontSize: 12),
-                ),
+              Builder(
+                builder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return TextButton(
+                    onPressed: () => _markAsRead(notification),
+                    style: TextButton.styleFrom(
+                      foregroundColor: Theme.of(context).colorScheme.primary,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                    ),
+                    child: Text(
+                      localizations.markAsRead,
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  );
+                },
               ),
             PopupMenuButton<String>(
               onSelected: (value) {
@@ -632,9 +715,15 @@ class _NotificationsCenterScreenState extends State<NotificationsCenterScreen> {
                     break;
                 }
               },
-              itemBuilder: (context) => [
-                const PopupMenuItem(value: 'delete', child: Text('Delete')),
-              ],
+              itemBuilder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return [
+                  PopupMenuItem(
+                    value: 'delete',
+                    child: Text(localizations.delete),
+                  ),
+                ];
+              },
             ),
           ],
         ),
@@ -712,18 +801,18 @@ class _NotificationsCenterScreenState extends State<NotificationsCenterScreen> {
     }
   }
 
-  String _formatDate(DateTime date) {
+  String _formatDate(DateTime date, AppLocalizations localizations) {
     final now = DateTime.now();
     final difference = now.difference(date);
 
     if (difference.inDays > 0) {
-      return '${difference.inDays}d ago';
+      return '${difference.inDays} ${localizations.daysAgo}';
     } else if (difference.inHours > 0) {
-      return '${difference.inHours}h ago';
+      return '${difference.inHours} ${localizations.hoursAgo}';
     } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}m ago';
+      return '${difference.inMinutes} ${localizations.minutesAgo}';
     } else {
-      return 'Just now';
+      return localizations.justNow;
     }
   }
 }

@@ -131,6 +131,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
       body: Consumer<BorrowProvider>(
         builder: (context, borrowProvider, child) {
           return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(AppDimensions.paddingL),
             child: Form(
               key: _formKey,

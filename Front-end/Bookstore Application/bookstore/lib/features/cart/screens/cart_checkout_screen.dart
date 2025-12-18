@@ -242,6 +242,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
           }
 
           return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(16),
             child: Form(
               key: _formKey,

@@ -8,6 +8,7 @@ import '../../../core/widgets/common/error_message.dart';
 import '../../../core/utils/validators.dart';
 import '../../../core/services/auth_service.dart';
 import '../../../core/services/api_client.dart';
+import '../../../web_ui/utils/platform_router.dart';
 import '../providers/auth_provider.dart';
 import 'register_screen.dart';
 import 'forgot_password_screen.dart';
@@ -39,16 +40,21 @@ class _LoginScreenState extends State<LoginScreen> {
       final isConnected = await ApiClient.testConnectivity();
       debugPrint('API Connectivity Test Result: $isConnected');
       if (!isConnected) {
-        setState(() {
-          _errorMessage =
-              'Cannot connect to server. Please check your internet connection and try again.';
-        });
+        if (mounted) {
+          final localizations = AppLocalizations.of(context);
+          setState(() {
+            _errorMessage = localizations.cannotConnectToServer;
+          });
+        }
       }
     } catch (e) {
       debugPrint('API Connectivity Test Error: $e');
-      setState(() {
-        _errorMessage = 'Network error: $e';
-      });
+      if (mounted) {
+        final localizations = AppLocalizations.of(context);
+        setState(() {
+          _errorMessage = localizations.networkErrorLabel(e.toString());
+        });
+      }
     }
   }
 
@@ -169,7 +175,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
         // Email Field
         CustomTextField(
-          label: 'Email',
+          label: l10n.emailLabelLogin,
           hint: l10n.emailHint,
           controller: _emailController,
           type: TextFieldType.email,
@@ -183,7 +189,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
         // Password Field
         CustomTextField(
-          label: 'Password',
+          label: l10n.passwordLabelLogin,
           hint: l10n.passwordHint,
           controller: _passwordController,
           type: TextFieldType.password,
@@ -212,7 +218,7 @@ class _LoginScreenState extends State<LoginScreen> {
     return Consumer<AuthProvider>(
       builder: (context, authProvider, child) {
         return CustomButton(
-          text: 'Login',
+          text: l10n.loginButton,
           onPressed: authProvider.isLoading
               ? null
               : () {
@@ -244,7 +250,7 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       },
       child: Text(
-        'Forgot Password?',
+        l10n.forgotPasswordQuestion,
         style: TextStyle(
           color: theme.colorScheme.primary,
           fontWeight: FontWeight.w500,
@@ -260,7 +266,7 @@ class _LoginScreenState extends State<LoginScreen> {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Text(
-          "Don't have an account? ",
+          l10n.dontHaveAccount,
           style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
         ),
         TextButton(
@@ -271,7 +277,7 @@ class _LoginScreenState extends State<LoginScreen> {
             );
           },
           child: Text(
-            'Register',
+            l10n.registerLink,
             style: TextStyle(
               color: theme.colorScheme.primary,
               fontWeight: FontWeight.w600,
@@ -318,7 +324,14 @@ class _LoginScreenState extends State<LoginScreen> {
         _navigateToHome(authProvider.userRole);
       } else {
         debugPrint('Login failed, showing error: ${authProvider.errorMessage}');
-        _showErrorSnackBar(authProvider.errorMessage ?? 'Login failed');
+        final localizations = AppLocalizations.of(context);
+        // Localize the error message if it's "Invalid credentials provided"
+        String errorMessage =
+            authProvider.errorMessage ?? localizations.loginFailed;
+        if (errorMessage.toLowerCase().contains('invalid credentials')) {
+          errorMessage = localizations.invalidCredentialsProvided;
+        }
+        _showErrorSnackBar(errorMessage);
       }
     }
     debugPrint('=== LOGIN ATTEMPT COMPLETED ===');
@@ -327,15 +340,10 @@ class _LoginScreenState extends State<LoginScreen> {
   void _navigateToHome(String? userRole) {
     debugPrint('Navigating to home for user role: $userRole');
 
-    // Navigate directly to the appropriate screen based on user role
-    if (userRole == 'library_admin') {
-      Navigator.pushReplacementNamed(context, '/library/dashboard');
-    } else if (userRole == 'delivery_admin') {
-      Navigator.pushReplacementNamed(context, '/delivery/dashboard');
-    } else {
-      // Default to customer home (for 'customer' or any other role)
-      Navigator.pushReplacementNamed(context, '/home');
-    }
+    // Use PlatformRouter to get the appropriate route based on platform and role
+    final route = PlatformRouter.getRouteForUser(userRole);
+    debugPrint('PlatformRouter determined route: $route');
+    Navigator.pushReplacementNamed(context, route);
   }
 
   void _showErrorSnackBar(String message) {

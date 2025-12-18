@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
+import '../../../core/localization/app_localizations.dart';
 import '../../../core/widgets/common/error_message.dart';
 import '../../../core/widgets/common/loading_indicator.dart';
 import '../providers/books_provider.dart';
@@ -23,7 +24,8 @@ class _WriterBooksScreenState extends State<WriterBooksScreen> {
   String? _error;
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
-  String _selectedFilter = 'All'; // New filter state
+  String _selectedFilter =
+      'all'; // New filter state - using keys instead of labels
 
   @override
   void initState() {
@@ -74,12 +76,17 @@ class _WriterBooksScreenState extends State<WriterBooksScreen> {
         backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
         foregroundColor: Theme.of(context).appBarTheme.foregroundColor,
         actions: [
-          IconButton(
-            onPressed: () {
-              _loadWriterBooks();
+          Builder(
+            builder: (context) {
+              final localizations = AppLocalizations.of(context);
+              return IconButton(
+                onPressed: () {
+                  _loadWriterBooks();
+                },
+                icon: const Icon(Icons.refresh),
+                tooltip: localizations.refresh,
+              );
             },
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh',
           ),
         ],
       ),
@@ -116,7 +123,7 @@ class _WriterBooksScreenState extends State<WriterBooksScreen> {
         controller: _searchController,
         onChanged: (value) => setState(() => _searchQuery = value),
         decoration: InputDecoration(
-          hintText: 'Search books...',
+          hintText: AppLocalizations.of(context).searchBooksPlaceholder,
           prefixIcon: const Icon(Icons.search),
           suffixIcon: _searchQuery.isNotEmpty
               ? IconButton(
@@ -142,24 +149,36 @@ class _WriterBooksScreenState extends State<WriterBooksScreen> {
       child: ListView(
         scrollDirection: Axis.horizontal,
         children: [
-          _buildFilterChip('All'),
-          const SizedBox(width: 8),
-          _buildFilterChip('New Books'),
-          const SizedBox(width: 8),
-          _buildFilterChip('Highest Rated'),
+          Builder(
+            builder: (context) {
+              final localizations = AppLocalizations.of(context);
+              return Row(
+                children: [
+                  _buildFilterChip(localizations.filterAll, 'all'),
+                  const SizedBox(width: 8),
+                  _buildFilterChip(localizations.filterNewBooks, 'new_books'),
+                  const SizedBox(width: 8),
+                  _buildFilterChip(
+                    localizations.filterHighestRated,
+                    'highest_rated',
+                  ),
+                ],
+              );
+            },
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildFilterChip(String label) {
-    final isSelected = _selectedFilter == label;
+  Widget _buildFilterChip(String label, String filterKey) {
+    final isSelected = _selectedFilter == filterKey;
     return FilterChip(
       label: Text(label),
       selected: isSelected,
       onSelected: (selected) {
         setState(() {
-          _selectedFilter = label;
+          _selectedFilter = filterKey;
         });
       },
       selectedColor: AppColors.uranianBlue.withValues(alpha: 0.2),
@@ -189,10 +208,10 @@ class _WriterBooksScreenState extends State<WriterBooksScreen> {
     }
 
     // Apply filter based on selected filter
-    if (_selectedFilter == 'New Books') {
+    if (_selectedFilter == 'new_books') {
       // Sort by creation date (assuming newer books have higher IDs)
       filteredBooks.sort((a, b) => b.id.compareTo(a.id));
-    } else if (_selectedFilter == 'Highest Rated') {
+    } else if (_selectedFilter == 'highest_rated') {
       // Filter books with ratings and sort by rating
       filteredBooks = filteredBooks
           .where((book) => book.averageRating != null)
@@ -201,7 +220,7 @@ class _WriterBooksScreenState extends State<WriterBooksScreen> {
         (a, b) => (b.averageRating ?? 0).compareTo(a.averageRating ?? 0),
       );
     }
-    // 'All' filter doesn't need additional sorting
+    // 'all' filter doesn't need additional sorting
 
     return filteredBooks;
   }
@@ -287,12 +306,19 @@ class _WriterBooksScreenState extends State<WriterBooksScreen> {
                     const SizedBox(height: 4),
 
                     if (book.author != null)
-                      Text(
-                        'by ${book.author!.name}',
-                        style: TextStyle(
-                          fontSize: AppDimensions.fontSizeM,
-                          color: Theme.of(context).textTheme.bodyMedium?.color,
-                        ),
+                      Builder(
+                        builder: (context) {
+                          final localizations = AppLocalizations.of(context);
+                          return Text(
+                            localizations.byAuthor(book.author!.name),
+                            style: TextStyle(
+                              fontSize: AppDimensions.fontSizeM,
+                              color: Theme.of(
+                                context,
+                              ).textTheme.bodyMedium?.color,
+                            ),
+                          );
+                        },
                       ),
 
                     const SizedBox(height: 8),
@@ -333,13 +359,20 @@ class _WriterBooksScreenState extends State<WriterBooksScreen> {
                               ),
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: Text(
-                              'Borrow: \$${book.borrowPrice}',
-                              style: const TextStyle(
-                                fontSize: AppDimensions.fontSizeS,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.uranianBlue,
-                              ),
+                            child: Builder(
+                              builder: (context) {
+                                final localizations = AppLocalizations.of(
+                                  context,
+                                );
+                                return Text(
+                                  '${localizations.borrowPrefix} \$${book.borrowPrice}',
+                                  style: const TextStyle(
+                                    fontSize: AppDimensions.fontSizeS,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.uranianBlue,
+                                  ),
+                                );
+                              },
                             ),
                           ),
                       ],
@@ -349,44 +382,52 @@ class _WriterBooksScreenState extends State<WriterBooksScreen> {
 
                     Row(
                       children: [
-                        if (book.isAvailable == true)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.success.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Text(
-                              'Available',
-                              style: TextStyle(
-                                fontSize: AppDimensions.fontSizeS,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.success,
-                              ),
-                            ),
-                          )
-                        else
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.error.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Text(
-                              'Unavailable',
-                              style: TextStyle(
-                                fontSize: AppDimensions.fontSizeS,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.error,
-                              ),
-                            ),
-                          ),
+                        Builder(
+                          builder: (context) {
+                            final localizations = AppLocalizations.of(context);
+                            if (book.isAvailable == true) {
+                              return Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.success.withValues(
+                                    alpha: 0.1,
+                                  ),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  localizations.availableStatus,
+                                  style: const TextStyle(
+                                    fontSize: AppDimensions.fontSizeS,
+                                    fontWeight: FontWeight.w500,
+                                    color: AppColors.success,
+                                  ),
+                                ),
+                              );
+                            } else {
+                              return Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.error.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  localizations.unavailableStatus,
+                                  style: const TextStyle(
+                                    fontSize: AppDimensions.fontSizeS,
+                                    fontWeight: FontWeight.w500,
+                                    color: AppColors.error,
+                                  ),
+                                ),
+                              );
+                            }
+                          },
+                        ),
 
                         const Spacer(),
 
@@ -420,26 +461,35 @@ class _WriterBooksScreenState extends State<WriterBooksScreen> {
               color: AppColors.textHint.withValues(alpha: 128),
             ),
             const SizedBox(height: AppDimensions.spacingL),
-            Text(
-              'No books found',
-              style: TextStyle(
-                fontSize: AppDimensions.fontSizeL,
-                fontWeight: FontWeight.w600,
-                color: Theme.of(context).textTheme.bodyLarge?.color,
-              ),
-            ),
-            const SizedBox(height: AppDimensions.spacingM),
-            Text(
-              _searchQuery.isNotEmpty
-                  ? 'No books match "$_searchQuery"'
-                  : _selectedFilter != 'All'
-                  ? 'No books match the selected filter'
-                  : '${widget.writerName ?? 'This writer'} has no books available at the moment',
-              style: TextStyle(
-                fontSize: AppDimensions.fontSizeM,
-                color: Theme.of(context).textTheme.bodyMedium?.color,
-              ),
-              textAlign: TextAlign.center,
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Column(
+                  children: [
+                    Text(
+                      localizations.noBooksFoundAuthor,
+                      style: TextStyle(
+                        fontSize: AppDimensions.fontSizeL,
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(context).textTheme.bodyLarge?.color,
+                      ),
+                    ),
+                    const SizedBox(height: AppDimensions.spacingM),
+                    Text(
+                      _searchQuery.isNotEmpty
+                          ? localizations.noBooksMatchSearch(_searchQuery)
+                          : _selectedFilter != 'all'
+                          ? localizations.noBooksAvailable
+                          : localizations.noBooksAvailable,
+                      style: TextStyle(
+                        fontSize: AppDimensions.fontSizeM,
+                        color: Theme.of(context).textTheme.bodyMedium?.color,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                );
+              },
             ),
           ],
         ),

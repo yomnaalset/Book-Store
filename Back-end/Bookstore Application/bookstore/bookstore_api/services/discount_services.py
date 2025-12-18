@@ -4,7 +4,7 @@ from django.utils import timezone
 from typing import Dict, Any, Optional, Tuple
 import logging
 
-from ..models import DiscountCode, DiscountUsage, User, Cart, BookDiscount, BookDiscountUsage, Book, AppliedDiscountCode
+from ..models import DiscountCode, DiscountUsage, User, Cart, BookDiscount, Book, AppliedDiscountCode
 from ..serializers import (
     DiscountCodeCreateSerializer,
     DiscountCodeUpdateSerializer,
@@ -13,7 +13,6 @@ from ..serializers import (
     BookDiscountCreateSerializer,
     BookDiscountUpdateSerializer,
     BookDiscountListSerializer,
-    BookDiscountUsageCreateSerializer,
     AvailableBooksSerializer,
 )
 from ..utils import format_error_message
@@ -857,6 +856,7 @@ class BookDiscountValidationService:
             # Create usage record
             usage_data = {
                 'book_discount': book_discount.id,
+                'book': book.id,
                 'customer': user.id,
                 'order': order.id if order else None,
                 'original_price': original_price,
@@ -864,7 +864,7 @@ class BookDiscountValidationService:
                 'final_price': final_price
             }
             
-            serializer = BookDiscountUsageCreateSerializer(data=usage_data)
+            serializer = DiscountUsageCreateSerializer(data=usage_data)
             if serializer.is_valid():
                 with transaction.atomic():
                     usage_record = serializer.save()

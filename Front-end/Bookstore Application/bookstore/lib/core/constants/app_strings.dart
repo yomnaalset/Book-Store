@@ -1,6 +1,6 @@
 class AppStrings {
   // App Information
-  static const String appName = 'E-Library';
+  static const String appName = 'ReadGo';
   static const String appVersion = '1.0.0';
   static const String appDescription = 'Digital Library Management System';
 

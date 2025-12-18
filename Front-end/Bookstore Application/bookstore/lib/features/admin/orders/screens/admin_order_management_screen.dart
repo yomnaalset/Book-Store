@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../../orders/models/order.dart';
 import '../widgets/order_approval_card.dart';
 import '../providers/orders_provider.dart' as admin_orders_provider;
+import '../../../../core/localization/app_localizations.dart';
 
 class AdminOrderManagementScreen extends StatefulWidget {
   const AdminOrderManagementScreen({super.key});
@@ -55,9 +56,13 @@ class _AdminOrderManagementScreenState extends State<AdminOrderManagementScreen>
         _loadDeliveredOrders(),
       ]);
     } catch (e) {
-      setState(() {
-        _errorMessage = 'Failed to load data: ${e.toString()}';
-      });
+      if (mounted) {
+        final localizations = AppLocalizations.of(context);
+        setState(() {
+          _errorMessage =
+              '${localizations.failedToLoadOrders}: ${e.toString()}';
+        });
+      }
     } finally {
       setState(() {
         _isLoading = false;
@@ -107,9 +112,12 @@ class _AdminOrderManagementScreenState extends State<AdminOrderManagementScreen>
     } catch (e) {
       debugPrint('Error loading delivery managers: $e');
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to load delivery managers: ${e.toString()}'),
+            content: Text(
+              localizations.errorLoadingDeliveryManagers(e.toString()),
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -151,9 +159,10 @@ class _AdminOrderManagementScreenState extends State<AdminOrderManagementScreen>
 
       if (response.statusCode == 200) {
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Order approved successfully'),
+            SnackBar(
+              content: Text(localizations.orderApprovedSuccessfully),
               backgroundColor: Colors.green,
             ),
           );
@@ -162,9 +171,12 @@ class _AdminOrderManagementScreenState extends State<AdminOrderManagementScreen>
       } else {
         final errorData = jsonDecode(response.body);
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(errorData['error'] ?? 'Failed to approve order'),
+              content: Text(
+                errorData['error'] ?? localizations.failedToApproveOrder,
+              ),
               backgroundColor: Colors.red,
             ),
           );
@@ -172,9 +184,10 @@ class _AdminOrderManagementScreenState extends State<AdminOrderManagementScreen>
       }
     } catch (e) {
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error approving order: ${e.toString()}'),
+            content: Text(localizations.errorApprovingOrder(e.toString())),
             backgroundColor: Colors.red,
           ),
         );
@@ -183,22 +196,23 @@ class _AdminOrderManagementScreenState extends State<AdminOrderManagementScreen>
   }
 
   Future<void> _rejectOrder(String orderId) async {
+    final localizations = AppLocalizations.of(context);
     final TextEditingController reasonController = TextEditingController();
 
     final bool? confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Reject Order'),
+        title: Text(localizations.rejectOrder),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Please provide a reason for rejecting this order:'),
+            Text(localizations.pleaseProvideReasonForRejecting),
             const SizedBox(height: 16),
             TextField(
               controller: reasonController,
-              decoration: const InputDecoration(
-                labelText: 'Rejection Reason',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: localizations.rejectionReason,
+                border: const OutlineInputBorder(),
               ),
               maxLines: 3,
             ),
@@ -207,7 +221,7 @@ class _AdminOrderManagementScreenState extends State<AdminOrderManagementScreen>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text(localizations.cancel),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
@@ -215,7 +229,7 @@ class _AdminOrderManagementScreenState extends State<AdminOrderManagementScreen>
               backgroundColor: Colors.red,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Reject Order'),
+            child: Text(localizations.rejectOrder),
           ),
         ],
       ),
@@ -234,10 +248,11 @@ class _AdminOrderManagementScreenState extends State<AdminOrderManagementScreen>
 
         if (response.statusCode == 200) {
           if (mounted) {
+            final localizations = AppLocalizations.of(context);
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(
-                  'Order rejected. Reason: ${reasonController.text}',
+                  '${localizations.orderRejectedSuccessfully}. ${localizations.rejectionReason}: ${reasonController.text}',
                 ),
                 backgroundColor: Colors.red,
               ),
@@ -247,9 +262,12 @@ class _AdminOrderManagementScreenState extends State<AdminOrderManagementScreen>
         } else {
           final errorData = jsonDecode(response.body);
           if (mounted) {
+            final localizations = AppLocalizations.of(context);
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(errorData['error'] ?? 'Failed to reject order'),
+                content: Text(
+                  errorData['error'] ?? localizations.failedToRejectOrder,
+                ),
                 backgroundColor: Colors.red,
               ),
             );
@@ -257,9 +275,10 @@ class _AdminOrderManagementScreenState extends State<AdminOrderManagementScreen>
         }
       } catch (e) {
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Error rejecting order: ${e.toString()}'),
+              content: Text(localizations.errorRejectingOrder(e.toString())),
               backgroundColor: Colors.red,
             ),
           );
@@ -270,22 +289,36 @@ class _AdminOrderManagementScreenState extends State<AdminOrderManagementScreen>
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Order Management'),
+        title: Text(localizations.orderManagement),
         backgroundColor: Theme.of(context).primaryColor,
         foregroundColor: Colors.white,
         bottom: TabBar(
           controller: _tabController,
-          tabs: const [
-            Tab(text: 'Pending', icon: Icon(Icons.schedule)),
-            Tab(text: 'Confirmed', icon: Icon(Icons.check_circle)),
-            Tab(text: 'In Delivery', icon: Icon(Icons.local_shipping)),
-            Tab(text: 'Delivered', icon: Icon(Icons.home)),
+          tabs: [
+            Tab(
+              text: localizations.statusPending,
+              icon: const Icon(Icons.schedule),
+            ),
+            Tab(
+              text: localizations.confirmed,
+              icon: const Icon(Icons.check_circle),
+            ),
+            Tab(
+              text: localizations.inDelivery,
+              icon: const Icon(Icons.local_shipping),
+            ),
+            Tab(text: localizations.delivered, icon: const Icon(Icons.home)),
           ],
         ),
         actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadData),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadData,
+            tooltip: localizations.refreshOrders,
+          ),
         ],
       ),
       body: _isLoading
@@ -301,7 +334,7 @@ class _AdminOrderManagementScreenState extends State<AdminOrderManagementScreen>
                   const SizedBox(height: 16),
                   ElevatedButton(
                     onPressed: _loadData,
-                    child: const Text('Retry'),
+                    child: Text(localizations.retry),
                   ),
                 ],
               ),
@@ -319,6 +352,7 @@ class _AdminOrderManagementScreenState extends State<AdminOrderManagementScreen>
   }
 
   Widget _buildPendingOrdersTab() {
+    final localizations = AppLocalizations.of(context);
     if (_pendingOrders.isEmpty) {
       return Center(
         child: Column(
@@ -327,12 +361,12 @@ class _AdminOrderManagementScreenState extends State<AdminOrderManagementScreen>
             const Icon(Icons.inbox, size: 64, color: Colors.grey),
             const SizedBox(height: 16),
             Text(
-              'No pending orders',
+              localizations.noPendingOrders,
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 8),
             Text(
-              'All orders have been processed',
+              localizations.allOrdersProcessed,
               style: Theme.of(
                 context,
               ).textTheme.bodyMedium?.copyWith(color: Colors.grey),
@@ -362,18 +396,25 @@ class _AdminOrderManagementScreenState extends State<AdminOrderManagementScreen>
   }
 
   Widget _buildConfirmedOrdersTab() {
-    return _buildOrdersList(_confirmedOrders, 'No confirmed orders');
+    final localizations = AppLocalizations.of(context);
+    return _buildOrdersList(_confirmedOrders, localizations.noConfirmedOrders);
   }
 
   Widget _buildInDeliveryOrdersTab() {
-    return _buildOrdersList(_inDeliveryOrders, 'No orders in delivery');
+    final localizations = AppLocalizations.of(context);
+    return _buildOrdersList(
+      _inDeliveryOrders,
+      localizations.noOrdersInDelivery,
+    );
   }
 
   Widget _buildDeliveredOrdersTab() {
-    return _buildOrdersList(_deliveredOrders, 'No delivered orders');
+    final localizations = AppLocalizations.of(context);
+    return _buildOrdersList(_deliveredOrders, localizations.noDeliveredOrders);
   }
 
   Widget _buildOrdersList(List<Order> orders, String emptyMessage) {
+    final localizations = AppLocalizations.of(context);
     if (orders.isEmpty) {
       return Center(
         child: Column(
@@ -408,15 +449,17 @@ class _AdminOrderManagementScreenState extends State<AdminOrderManagementScreen>
                 ),
               ),
             ),
-            title: Text('Order #${order.orderNumber}'),
+            title: Text('${localizations.orders} #${order.orderNumber}'),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Customer: ${order.userId}',
+                  '${localizations.customerLabel}: ${order.userId}',
                 ), // This would be customer name
-                Text('Total: \$${order.totalAmount.toStringAsFixed(2)}'),
-                Text('Date: ${_formatDate(order.createdAt)}'),
+                Text(
+                  '${localizations.total}: \$${order.totalAmount.toStringAsFixed(2)}',
+                ),
+                Text('${localizations.dates}: ${_formatDate(order.createdAt)}'),
               ],
             ),
             trailing: Container(
@@ -427,7 +470,7 @@ class _AdminOrderManagementScreenState extends State<AdminOrderManagementScreen>
                 border: Border.all(color: _getStatusColor(order.status)),
               ),
               child: Text(
-                _getStatusText(order.status),
+                _getStatusText(order.status, localizations),
                 style: TextStyle(
                   color: _getStatusColor(order.status),
                   fontWeight: FontWeight.bold,
@@ -459,19 +502,9 @@ class _AdminOrderManagementScreenState extends State<AdminOrderManagementScreen>
     }
   }
 
-  String _getStatusText(String status) {
-    switch (status) {
-      case 'pending':
-        return 'Pending';
-      case 'confirmed':
-        return 'Confirmed';
-      case 'in_delivery':
-        return 'In Delivery';
-      case 'delivered':
-        return 'Delivered';
-      default:
-        return status.toUpperCase();
-    }
+  String _getStatusText(String status, AppLocalizations localizations) {
+    // Use the translation method to handle all order statuses
+    return localizations.getOrderStatusLabel(status);
   }
 
   String _formatDate(DateTime date) {

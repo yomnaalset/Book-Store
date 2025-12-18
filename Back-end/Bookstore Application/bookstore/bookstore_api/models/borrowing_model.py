@@ -354,109 +354,10 @@ class BorrowExtension(models.Model):
         self.save()
 
 
-class BorrowFine(models.Model):
-    """
-    Model for managing fines related to borrow requests
-    """
-    borrow_request = models.OneToOneField(
-        BorrowRequest,
-        on_delete=models.CASCADE,
-        related_name='fine'
-    )
-    
-    daily_rate = models.DecimalField(
-        max_digits=8,
-        decimal_places=2,
-        default=1.00,
-        help_text="Daily fine rate"
-    )
-    
-    days_overdue = models.PositiveIntegerField(
-        default=0,
-        help_text="Number of days overdue"
-    )
-    
-    total_amount = models.DecimalField(
-        max_digits=8,
-        decimal_places=2,
-        default=0.00,
-        help_text="Total fine amount (daily_rate * days_overdue)"
-    )
-    
-    status = models.CharField(
-        max_length=10,
-        choices=FineStatusChoices.choices,
-        default=FineStatusChoices.UNPAID
-    )
-    
-    reason = models.TextField(
-        default="Late return",
-        help_text="Reason for the fine"
-    )
-    
-    paid_date = models.DateTimeField(null=True, blank=True)
-    paid_by = models.ForeignKey(
-        User,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='paid_fines'
-    )
-    
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    
-    class Meta:
-        db_table = 'borrow_fine'
-        verbose_name = 'Borrow Fine'
-        verbose_name_plural = 'Borrow Fines'
-        ordering = ['-created_at']
-    
-    def __str__(self):
-        return f"Fine for {self.borrow_request} - ${self.total_amount}"
-    
-    def save(self, *args, **kwargs):
-        """Override save to calculate total amount."""
-        self.total_amount = self.daily_rate * self.days_overdue
-        super().save(*args, **kwargs)
-    
-    def update_fine(self, days_overdue):
-        """Update fine based on current days overdue."""
-        self.days_overdue = days_overdue
-        self.total_amount = self.daily_rate * days_overdue
-        self.save()
-    
-    def mark_as_paid(self, paid_by):
-        """Mark the fine as paid."""
-        self.status = FineStatusChoices.PAID
-        self.paid_by = paid_by
-        self.paid_date = timezone.now()
-        self.save()
-        
-        # Update the borrow request fine status
-        self.borrow_request.fine_status = FineStatusChoices.PAID
-        self.borrow_request.fine_amount = self.total_amount
-        self.borrow_request.save()
-    
-    @classmethod
-    def get_unpaid_fines(cls):
-        """Get all unpaid fines."""
-        return cls.objects.filter(status=FineStatusChoices.UNPAID)
-    
-    @classmethod
-    def get_fine_stats(cls):
-        """
-        Get statistics about fines.
-        """
-        total_fines = cls.objects.count()
-        unpaid_fines = cls.objects.filter(status=FineStatusChoices.UNPAID).count()
-        paid_fines = cls.objects.filter(status=FineStatusChoices.PAID).count()
-        
-        return {
-            'total_fines': total_fines,
-            'unpaid_fines': unpaid_fines,
-            'paid_fines': paid_fines,
-        }
+# NOTE: BorrowFine model has been merged into ReturnFine model
+# All borrow fines are now stored in ReturnFine with fine_type='borrow'
+# This provides unified financial fine tracking for both borrow and return fines
+# The BorrowFine class was removed after migration 0005 successfully merged all data
 class BorrowStatistics(models.Model):
     """
     Model for storing borrowing statistics
@@ -513,15 +414,18 @@ class BorrowStatistics(models.Model):
             status=ExtensionStatusChoices.APPROVED
         ).count()
         
-        # Count fines issued today
-        stats.fines_issued = BorrowFine.objects.filter(
-            created_at__date=today
+        # Count fines issued today (using unified ReturnFine model)
+        from ..models.return_model import ReturnFine, ReturnFinePaymentStatus
+        stats.fines_issued = ReturnFine.objects.filter(
+            created_at__date=today,
+            fine_type='borrow'
         ).count()
         
         # Count fines paid today
-        stats.fines_paid = BorrowFine.objects.filter(
-            paid_date__date=today,
-            status=FineStatusChoices.PAID
+        stats.fines_paid = ReturnFine.objects.filter(
+            paid_at__date=today,
+            fine_type='borrow',
+            payment_status=ReturnFinePaymentStatus.COMPLETED
         ).count()
         
         stats.save()

@@ -4,6 +4,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 import '../../../core/widgets/common/custom_button.dart';
 import '../../../core/widgets/common/loading_indicator.dart';
+import '../../../core/localization/app_localizations.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/user_settings_provider.dart';
 
@@ -62,9 +63,10 @@ class _NotificationSettingsScreenState
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Notification Settings'),
+        title: Text(localizations.notificationSettingsTitle),
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.white,
         elevation: 0,
@@ -73,9 +75,9 @@ class _NotificationSettingsScreenState
             builder: (context, settingsProvider, child) {
               return TextButton(
                 onPressed: () => _saveSettings(settingsProvider),
-                child: const Text(
-                  'Save',
-                  style: TextStyle(color: AppColors.white),
+                child: Text(
+                  localizations.save,
+                  style: const TextStyle(color: AppColors.white),
                 ),
               );
             },
@@ -112,23 +114,39 @@ class _NotificationSettingsScreenState
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              'Notification Preferences',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Theme.of(context).colorScheme.onSurface,
-                              ),
-                            ),
-                            const SizedBox(height: AppDimensions.spacingXS),
-                            Text(
-                              'Choose how you want to be notified about updates',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Theme.of(
+                            Builder(
+                              builder: (context) {
+                                final localizations = AppLocalizations.of(
                                   context,
-                                ).colorScheme.onSurfaceVariant,
-                              ),
+                                );
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      localizations.notificationPreferences,
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.onSurface,
+                                      ),
+                                    ),
+                                    const SizedBox(
+                                      height: AppDimensions.spacingXS,
+                                    ),
+                                    Text(
+                                      localizations.chooseHowToBeNotified,
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
                             ),
                           ],
                         ),
@@ -140,87 +158,110 @@ class _NotificationSettingsScreenState
                 const SizedBox(height: AppDimensions.spacingXL),
 
                 // Notification Channels
-                _buildSectionTitle('Notification Channels'),
-                const SizedBox(height: AppDimensions.spacingM),
-                _buildSwitchTile(
-                  title: 'Email Notifications',
-                  subtitle: 'Receive notifications via email',
-                  value: settingsProvider.emailNotifications,
-                  onChanged: (value) => settingsProvider
-                      .updateNotificationSettings(emailNotifications: value),
-                  icon: Icons.email_outlined,
-                ),
-                _buildSwitchTile(
-                  title: 'Push Notifications',
-                  subtitle: 'Receive push notifications on your device',
-                  value: settingsProvider.pushNotifications,
-                  onChanged: (value) => settingsProvider
-                      .updateNotificationSettings(pushNotifications: value),
-                  icon: Icons.phone_android_outlined,
-                ),
-                _buildSwitchTile(
-                  title: 'SMS Notifications',
-                  subtitle: 'Receive notifications via SMS',
-                  value: settingsProvider.smsNotifications,
-                  onChanged: (value) => settingsProvider
-                      .updateNotificationSettings(smsNotifications: value),
-                  icon: Icons.sms_outlined,
-                ),
-
-                const SizedBox(height: AppDimensions.spacingXL),
-
-                // Notification Types
-                _buildSectionTitle('What to Notify Me About'),
-                const SizedBox(height: AppDimensions.spacingM),
-                _buildSwitchTile(
-                  title: 'Order Updates',
-                  subtitle: 'Updates about your orders and purchases',
-                  value: settingsProvider.orderUpdates,
-                  onChanged: (value) => settingsProvider
-                      .updateNotificationSettings(orderUpdates: value),
-                  icon: Icons.shopping_bag_outlined,
-                ),
-                // Book Availability removed as per user request
-                _buildSwitchTile(
-                  title: 'Borrow Reminders',
-                  subtitle: 'Reminders about borrowed books and due dates',
-                  value: settingsProvider.borrowReminders,
-                  onChanged: (value) => settingsProvider
-                      .updateNotificationSettings(borrowReminders: value),
-                  icon: Icons.schedule_outlined,
-                ),
-                _buildSwitchTile(
-                  title: 'Delivery Updates',
-                  subtitle: 'Updates about book delivery status',
-                  value: settingsProvider.deliveryUpdates,
-                  onChanged: (value) => settingsProvider
-                      .updateNotificationSettings(deliveryUpdates: value),
-                  icon: Icons.local_shipping_outlined,
+                Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildSectionTitle(localizations.notificationChannels),
+                        const SizedBox(height: AppDimensions.spacingM),
+                        _buildSwitchTile(
+                          title: localizations.emailNotifications,
+                          subtitle: localizations.receiveNotificationsViaEmail,
+                          value: settingsProvider.emailNotifications,
+                          onChanged: (value) =>
+                              settingsProvider.updateNotificationSettings(
+                                emailNotifications: value,
+                              ),
+                          icon: Icons.email_outlined,
+                        ),
+                        _buildSwitchTile(
+                          title: localizations.pushNotifications,
+                          subtitle: localizations.receivePushNotifications,
+                          value: settingsProvider.pushNotifications,
+                          onChanged: (value) =>
+                              settingsProvider.updateNotificationSettings(
+                                pushNotifications: value,
+                              ),
+                          icon: Icons.phone_android_outlined,
+                        ),
+                        _buildSwitchTile(
+                          title: localizations.smsNotifications,
+                          subtitle: localizations.receiveNotificationsViaSms,
+                          value: settingsProvider.smsNotifications,
+                          onChanged: (value) =>
+                              settingsProvider.updateNotificationSettings(
+                                smsNotifications: value,
+                              ),
+                          icon: Icons.sms_outlined,
+                        ),
+                        const SizedBox(height: AppDimensions.spacingXL),
+                        // Notification Types
+                        _buildSectionTitle(localizations.whatToNotifyMeAbout),
+                        const SizedBox(height: AppDimensions.spacingM),
+                        _buildSwitchTile(
+                          title: localizations.orderUpdates,
+                          subtitle: localizations.updatesAboutOrders,
+                          value: settingsProvider.orderUpdates,
+                          onChanged: (value) => settingsProvider
+                              .updateNotificationSettings(orderUpdates: value),
+                          icon: Icons.shopping_bag_outlined,
+                        ),
+                        // Book Availability removed as per user request
+                        _buildSwitchTile(
+                          title: localizations.borrowReminders,
+                          subtitle: localizations.remindersAboutBorrowedBooks,
+                          value: settingsProvider.borrowReminders,
+                          onChanged: (value) =>
+                              settingsProvider.updateNotificationSettings(
+                                borrowReminders: value,
+                              ),
+                          icon: Icons.schedule_outlined,
+                        ),
+                        _buildSwitchTile(
+                          title: localizations.deliveryUpdates,
+                          subtitle: localizations.updatesAboutDeliveryStatus,
+                          value: settingsProvider.deliveryUpdates,
+                          onChanged: (value) =>
+                              settingsProvider.updateNotificationSettings(
+                                deliveryUpdates: value,
+                              ),
+                          icon: Icons.local_shipping_outlined,
+                        ),
+                      ],
+                    );
+                  },
                 ),
 
                 // Marketing & Updates section removed as per user request
                 const SizedBox(height: AppDimensions.spacingXL),
 
                 // Action Buttons
-                Row(
-                  children: [
-                    Expanded(
-                      child: CustomButton(
-                        text: 'Reset to Default',
-                        onPressed: () => _resetToDefault(settingsProvider),
-                        backgroundColor: AppColors.background,
-                        textColor: AppColors.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(width: AppDimensions.spacingM),
-                    Expanded(
-                      child: CustomButton(
-                        text: 'Save Settings',
-                        onPressed: () => _saveSettings(settingsProvider),
-                        isLoading: settingsProvider.isLoading,
-                      ),
-                    ),
-                  ],
+                Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return Row(
+                      children: [
+                        Expanded(
+                          child: CustomButton(
+                            text: localizations.resetToDefault,
+                            onPressed: () => _resetToDefault(settingsProvider),
+                            backgroundColor: AppColors.background,
+                            textColor: AppColors.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(width: AppDimensions.spacingM),
+                        Expanded(
+                          child: CustomButton(
+                            text: localizations.saveSettings,
+                            onPressed: () => _saveSettings(settingsProvider),
+                            isLoading: settingsProvider.isLoading,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
 
                 const SizedBox(height: AppDimensions.spacingXL),
@@ -282,9 +323,10 @@ class _NotificationSettingsScreenState
     await settingsProvider.resetNotificationSettings();
 
     if (mounted) {
+      final localizations = AppLocalizations.of(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Settings reset to default'),
+        SnackBar(
+          content: Text(localizations.settingsResetToDefault),
           backgroundColor: AppColors.primary,
         ),
       );
@@ -301,9 +343,10 @@ class _NotificationSettingsScreenState
       await settingsProvider.forceSaveAllSettings();
 
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Notification settings saved successfully!'),
+          SnackBar(
+            content: Text(localizations.notificationSettingsSaved),
             backgroundColor: AppColors.success,
           ),
         );
@@ -312,9 +355,12 @@ class _NotificationSettingsScreenState
     } catch (e) {
       debugPrint('NotificationSettingsScreen: Error saving settings: $e');
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error saving settings: $e'),
+            content: Text(
+              '${localizations.errorSavingSettings}: ${e.toString()}',
+            ),
             backgroundColor: AppColors.error,
           ),
         );

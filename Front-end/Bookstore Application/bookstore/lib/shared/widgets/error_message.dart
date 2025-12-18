@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_dimensions.dart';
+import '../../core/localization/app_localizations.dart';
 import 'custom_button.dart';
 
 class ErrorMessage extends StatelessWidget {
@@ -19,6 +20,7 @@ class ErrorMessage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(AppDimensions.paddingL),
@@ -27,9 +29,9 @@ class ErrorMessage extends StatelessWidget {
           children: [
             Icon(icon ?? Icons.error_outline, size: 64, color: AppColors.error),
             const SizedBox(height: AppDimensions.spacingM),
-            const Text(
-              'Oops! Something went wrong',
-              style: TextStyle(
+            Text(
+              localizations.oopsSomethingWentWrong,
+              style: const TextStyle(
                 fontSize: AppDimensions.fontSizeL,
                 fontWeight: FontWeight.bold,
                 color: AppColors.textPrimary,
@@ -48,7 +50,7 @@ class ErrorMessage extends StatelessWidget {
             if (onRetry != null) ...[
               const SizedBox(height: AppDimensions.spacingL),
               CustomButton(
-                text: retryText ?? 'Try Again',
+                text: retryText ?? localizations.tryAgain,
                 onPressed: onRetry,
                 backgroundColor: AppColors.primary,
                 icon: const Icon(Icons.refresh, color: AppColors.white),
@@ -92,15 +94,20 @@ class InlineErrorMessage extends StatelessWidget {
           ),
           if (onRetry != null) ...[
             const SizedBox(width: AppDimensions.spacingS),
-            TextButton(
-              onPressed: onRetry,
-              child: const Text(
-                'Retry',
-                style: TextStyle(
-                  color: AppColors.error,
-                  fontSize: AppDimensions.fontSizeS,
-                ),
-              ),
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return TextButton(
+                  onPressed: onRetry,
+                  child: Text(
+                    localizations.retry,
+                    style: const TextStyle(
+                      color: AppColors.error,
+                      fontSize: AppDimensions.fontSizeS,
+                    ),
+                  ),
+                );
+              },
             ),
           ],
         ],

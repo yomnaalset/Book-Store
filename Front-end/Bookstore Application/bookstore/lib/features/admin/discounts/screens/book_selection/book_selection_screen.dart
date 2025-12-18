@@ -4,6 +4,7 @@ import '../../../models/book_discount.dart';
 import '../../../services/manager_api_service.dart';
 import '../../../../auth/providers/auth_provider.dart';
 import '../../../../../core/services/api_config.dart';
+import '../../../../../core/localization/app_localizations.dart';
 import 'package:provider/provider.dart';
 
 class BookSelectionScreen extends StatefulWidget {
@@ -101,9 +102,10 @@ class _BookSelectionScreenState extends State<BookSelectionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Select Book'),
+        title: Text(localizations.selectBook),
         actions: [
           IconButton(onPressed: _loadBooks, icon: const Icon(Icons.refresh)),
         ],
@@ -117,10 +119,10 @@ class _BookSelectionScreenState extends State<BookSelectionScreen> {
               children: [
                 // Search Bar
                 TextField(
-                  decoration: const InputDecoration(
-                    labelText: 'Search books...',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.search),
+                  decoration: InputDecoration(
+                    labelText: localizations.searchBooksPlaceholder,
+                    border: const OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.search),
                   ),
                   onChanged: _onSearchChanged,
                 ),
@@ -129,15 +131,17 @@ class _BookSelectionScreenState extends State<BookSelectionScreen> {
                 // Category Filter
                 DropdownButtonFormField<String>(
                   initialValue: _selectedCategory,
-                  decoration: const InputDecoration(
-                    labelText: 'Category',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: localizations.category,
+                    border: const OutlineInputBorder(),
                   ),
                   items: _getCategories().map((category) {
                     return DropdownMenuItem(
                       value: category,
                       child: Text(
-                        category == 'all' ? 'All Categories' : category,
+                        category == 'all'
+                            ? localizations.allCategories
+                            : category,
                       ),
                     );
                   }).toList(),
@@ -264,11 +268,19 @@ class _BookSelectionScreenState extends State<BookSelectionScreen> {
                     const SizedBox(height: 4),
 
                     // Author
-                    Text(
-                      'By ${book.authorName}',
-                      style: const TextStyle(fontSize: 14, color: Colors.grey),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    Builder(
+                      builder: (context) {
+                        final localizations = AppLocalizations.of(context);
+                        return Text(
+                          localizations.byAuthor(book.authorName),
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        );
+                      },
                     ),
                     const SizedBox(height: 4),
 
@@ -308,23 +320,30 @@ class _BookSelectionScreenState extends State<BookSelectionScreen> {
                           const SizedBox(width: 8),
                         ],
                         if (book.hasActiveDiscount)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.orange.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Text(
-                              'Has Discount',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.orange,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
+                          Builder(
+                            builder: (context) {
+                              final localizations = AppLocalizations.of(
+                                context,
+                              );
+                              return Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  localizations.hasDiscount,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.orange,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              );
+                            },
                           ),
                       ],
                     ),

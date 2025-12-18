@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../../../core/constants/app_colors.dart';
+import '../../../../../../core/localization/app_localizations.dart';
 
 class OffersSection extends StatelessWidget {
   const OffersSection({super.key});
@@ -37,34 +38,44 @@ class OffersSection extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                   // FORCE WHITE COLOR - TEMPORARY FIX
-                  Text(
-                    'Special Offers',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white, // HARDCODED WHITE
-                      shadows: [
-                        Shadow(
-                          color: Colors.black.withValues(alpha: 0.5),
-                          offset: const Offset(0, 1),
-                          blurRadius: 2,
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Text(
+                        localizations.specialOffers,
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white, // HARDCODED WHITE
+                          shadows: [
+                            Shadow(
+                              color: Colors.black.withValues(alpha: 0.5),
+                              offset: const Offset(0, 1),
+                              blurRadius: 2,
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
+                      );
+                    },
                   ),
                 ],
               ),
-              TextButton(
-                onPressed: () {
-                  Navigator.pushNamed(context, '/categories');
+              Builder(
+                builder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return TextButton(
+                    onPressed: () {
+                      Navigator.pushNamed(context, '/categories');
+                    },
+                    child: Text(
+                      localizations.viewAll,
+                      style: const TextStyle(
+                        color: AppColors.uranianBlue,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  );
                 },
-                child: const Text(
-                  'View All',
-                  style: TextStyle(
-                    color: AppColors.uranianBlue,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
               ),
             ],
           ),
@@ -83,28 +94,40 @@ class OffersSection extends StatelessWidget {
                   style: BorderStyle.solid,
                 ),
               ),
-              child: const Center(
+              child: Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.local_offer_outlined,
                       size: 32,
                       color: AppColors.textHint,
                     ),
-                    SizedBox(height: 8),
-                    Text(
-                      'No special offers available',
-                      style: TextStyle(
-                        color: AppColors.textHint,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      'Add offers in admin panel',
-                      style: TextStyle(color: AppColors.textHint, fontSize: 12),
+                    const SizedBox(height: 8),
+                    Builder(
+                      builder: (context) {
+                        final localizations = AppLocalizations.of(context);
+                        return Column(
+                          children: [
+                            Text(
+                              localizations.noSpecialOffersAvailable,
+                              style: const TextStyle(
+                                color: AppColors.textHint,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              localizations.addOffersInAdminPanel,
+                              style: const TextStyle(
+                                color: AppColors.textHint,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -141,8 +164,8 @@ class OffersSection extends StatelessWidget {
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: offer.gradientColors,
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+            begin: AlignmentDirectional.topStart,
+            end: AlignmentDirectional.bottomEnd,
           ),
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
@@ -189,23 +212,28 @@ class OffersSection extends StatelessWidget {
                         child: Icon(offer.icon, color: Colors.white, size: 14),
                       ),
                       if (offer.isLimitedTime)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 4,
-                            vertical: 1,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.error.withValues(alpha: 0.9),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: const Text(
-                            'LIMITED',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 7,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                        Builder(
+                          builder: (context) {
+                            final localizations = AppLocalizations.of(context);
+                            return Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 1,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.error.withValues(alpha: 0.9),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                localizations.limited,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 7,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            );
+                          },
                         ),
                     ],
                   ),
@@ -267,13 +295,18 @@ class OffersSection extends StatelessWidget {
                           ),
                         )
                       else if (offer.discountPercentage != null)
-                        Text(
-                          '${offer.discountPercentage}% OFF',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
+                        Builder(
+                          builder: (context) {
+                            final localizations = AppLocalizations.of(context);
+                            return Text(
+                              localizations.discountOff(offer.discountPercentage ?? 0),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            );
+                          },
                         ),
 
                       // Arrow Icon
@@ -323,9 +356,14 @@ class OffersSection extends StatelessWidget {
             Text(offer.description),
             const SizedBox(height: 16),
             if (offer.discountCode != null) ...[
-              const Text(
-                'Use this code:',
-                style: TextStyle(fontWeight: FontWeight.w600),
+              Builder(
+                builder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return Text(
+                    localizations.useThisCode,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  );
+                },
               ),
               const SizedBox(height: 8),
               Container(
@@ -349,12 +387,20 @@ class OffersSection extends StatelessWidget {
                         fontSize: 16,
                       ),
                     ),
-                    IconButton(
-                      onPressed: () {
-                        _showSnackBar(context, 'Code copied to clipboard!');
+                    Builder(
+                      builder: (context) {
+                        final localizations = AppLocalizations.of(context);
+                        return IconButton(
+                          onPressed: () {
+                            _showSnackBar(
+                              context,
+                              localizations.codeCopiedToClipboard,
+                            );
+                          },
+                          icon: const Icon(Icons.copy),
+                          iconSize: 18,
+                        );
                       },
-                      icon: const Icon(Icons.copy),
-                      iconSize: 18,
                     ),
                   ],
                 ),
@@ -370,13 +416,18 @@ class OffersSection extends StatelessWidget {
                     color: AppColors.warning,
                   ),
                   const SizedBox(width: 4),
-                  Text(
-                    'Valid until: ${offer.validUntil}',
-                    style: const TextStyle(
-                      color: AppColors.warning,
-                      fontWeight: FontWeight.w500,
-                      fontSize: 12,
-                    ),
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Text(
+                        '${localizations.validUntil} ${offer.validUntil}',
+                        style: const TextStyle(
+                          color: AppColors.warning,
+                          fontWeight: FontWeight.w500,
+                          fontSize: 12,
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -384,16 +435,26 @@ class OffersSection extends StatelessWidget {
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _showSnackBar(context, 'Applying offer...');
+          Builder(
+            builder: (context) {
+              final localizations = AppLocalizations.of(context);
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(localizations.close),
+                  ),
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _showSnackBar(context, localizations.applyingOffer);
+                    },
+                    child: Text(localizations.useOffer),
+                  ),
+                ],
+              );
             },
-            child: const Text('Use Offer'),
           ),
         ],
       ),

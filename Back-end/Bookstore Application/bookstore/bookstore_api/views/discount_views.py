@@ -9,7 +9,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
 import logging
 
-from ..models import DiscountCode, DiscountUsage, User, Cart, BookDiscount, BookDiscountUsage, Book
+from ..models import DiscountCode, DiscountUsage, User, Cart, BookDiscount, Book
 from ..serializers import (
     DiscountCodeSerializer,
     DiscountCodeCreateSerializer,
@@ -25,8 +25,6 @@ from ..serializers import (
     BookDiscountListSerializer,
     BookDiscountValidationSerializer,
     BookDiscountApplicationSerializer,
-    BookDiscountUsageSerializer,
-    CustomerBookDiscountUsageSerializer,
     AvailableBooksSerializer,
 )
 from ..services import (
@@ -823,7 +821,7 @@ class BookDiscountApplicationView(APIView):
             if success:
                 # Serialize the usage record for response
                 usage_record = result['usage_record']
-                result['usage_record'] = BookDiscountUsageSerializer(usage_record).data
+                result['usage_record'] = DiscountUsageSerializer(usage_record).data
                 return Response(result, status=status.HTTP_201_CREATED)
             else:
                 return Response(result, status=status.HTTP_400_BAD_REQUEST)
@@ -901,7 +899,7 @@ def get_user_available_book_discounts(request):
                     'discounted_price': float(discount.discounted_price) if discount.discounted_price else None,
                     'original_price': float(discount.book.price) if discount.book.price else None,
                     'final_price': float(discount.get_final_price(discount.book.price)) if discount.book.price else None,
-                    'remaining_uses': discount.usage_limit_per_customer - discount.usages.filter(customer=request.user).count(),
+                    'remaining_uses': discount.usage_limit_per_customer - DiscountUsage.objects.filter(book_discount=discount, customer=request.user).count(),
                     'start_date': discount.start_date,
                     'end_date': discount.end_date,
                 })

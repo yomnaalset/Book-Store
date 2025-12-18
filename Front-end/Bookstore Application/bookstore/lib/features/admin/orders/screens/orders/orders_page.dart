@@ -7,6 +7,7 @@ import '../../../widgets/library_manager/status_chip.dart';
 import '../../../widgets/library_manager/empty_state.dart';
 import '../../../../../routes/app_routes.dart';
 import '../../../../auth/providers/auth_provider.dart';
+import '../../../../../core/localization/app_localizations.dart';
 
 class OrdersPage extends StatefulWidget {
   const OrdersPage({super.key});
@@ -22,31 +23,26 @@ class _OrdersPageState extends State<OrdersPage> with TickerProviderStateMixin {
   late TabController _tabController;
   final TextEditingController _searchController = TextEditingController();
 
-  // Status tabs as per specification
-  final List<String> _statusTabs = [
-    'All',
-    'Pending',
-    'Approved',
-    'Delivering',
-    'Completed',
-    'Cancelled',
-  ];
+  // Status tabs - will be localized in build method
+  List<String> _getStatusTabs(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
+    return [
+      localizations.all,
+      localizations.statusPending,
+      localizations.statusApproved,
+      localizations.delivering,
+      localizations.statusCompleted,
+      localizations.cancelled,
+    ];
+  }
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: _statusTabs.length, vsync: this);
+    // Initialize with default length, will be updated in build
+    _tabController = TabController(length: 6, vsync: this);
 
-    // Add listener to TabController
-    _tabController.addListener(() {
-      debugPrint(
-        'DEBUG: TabController listener triggered with index: ${_tabController.index}, indexIsChanging: ${_tabController.indexIsChanging}',
-      );
-      // Always call _onTabChanged when the index changes
-      if (!_tabController.indexIsChanging) {
-        _onTabChanged(_tabController.index);
-      }
-    });
+    // Add listener to TabController - will be set up in build method
 
     // Defer loading until after the initial build is complete
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -62,31 +58,26 @@ class _OrdersPageState extends State<OrdersPage> with TickerProviderStateMixin {
     super.dispose();
   }
 
-  void _onTabChanged(int index) {
-    final selectedTab = _statusTabs[index];
+  void _onTabChanged(int index, BuildContext context) {
+    final statusTabs = _getStatusTabs(context);
+    final localizations = AppLocalizations.of(context);
+    final selectedTab = statusTabs[index];
     String? status;
 
     debugPrint('DEBUG: Tab changed to: $selectedTab (index: $index)');
 
-    switch (selectedTab) {
-      case 'All':
-        status = null;
-        break;
-      case 'Pending':
-        status = 'pending';
-        break;
-      case 'Approved':
-        status = 'confirmed';
-        break;
-      case 'Delivering':
-        status = 'in_delivery';
-        break;
-      case 'Completed':
-        status = 'delivered';
-        break;
-      case 'Cancelled':
-        status = 'cancelled';
-        break;
+    if (selectedTab == localizations.all) {
+      status = null;
+    } else if (selectedTab == localizations.statusPending) {
+      status = 'pending';
+    } else if (selectedTab == localizations.statusApproved) {
+      status = 'confirmed';
+    } else if (selectedTab == localizations.delivering) {
+      status = 'in_delivery';
+    } else if (selectedTab == localizations.statusCompleted) {
+      status = 'delivered';
+    } else if (selectedTab == localizations.cancelled) {
+      status = 'cancelled';
     }
 
     debugPrint('DEBUG: Selected status: $status');
@@ -163,9 +154,23 @@ class _OrdersPageState extends State<OrdersPage> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
+    final statusTabs = _getStatusTabs(context);
+
+    // Update TabController length if needed
+    if (_tabController.length != statusTabs.length) {
+      _tabController.dispose();
+      _tabController = TabController(length: statusTabs.length, vsync: this);
+      _tabController.addListener(() {
+        if (!_tabController.indexIsChanging) {
+          _onTabChanged(_tabController.index, context);
+        }
+      });
+    }
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Orders'),
+        title: Text(localizations.orders),
         backgroundColor: Theme.of(context).primaryColor,
         foregroundColor: Colors.white,
         actions: [
@@ -173,20 +178,20 @@ class _OrdersPageState extends State<OrdersPage> with TickerProviderStateMixin {
           IconButton(
             onPressed: () => _loadOrders(),
             icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh Orders',
+            tooltip: localizations.refreshOrders,
           ),
         ],
         bottom: TabBar(
           controller: _tabController,
           isScrollable: true,
-          tabs: _statusTabs.map((status) => Tab(text: status)).toList(),
+          tabs: statusTabs.map((status) => Tab(text: status)).toList(),
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white70,
           indicatorColor: Colors.white,
           onTap: (index) {
             debugPrint('DEBUG: TabBar onTap called with index: $index');
             // Update the selected status and reload orders
-            _onTabChanged(index);
+            _onTabChanged(index, context);
           },
         ),
       ),
@@ -205,7 +210,7 @@ class _OrdersPageState extends State<OrdersPage> with TickerProviderStateMixin {
               child: TextField(
                 controller: _searchController,
                 decoration: InputDecoration(
-                  hintText: 'Search orders...',
+                  hintText: localizations.searchOrders,
                   hintStyle: TextStyle(color: Colors.grey[600]),
                   prefixIcon: Icon(Icons.search, color: Colors.grey[600]),
                   border: InputBorder.none,
@@ -234,13 +239,13 @@ class _OrdersPageState extends State<OrdersPage> with TickerProviderStateMixin {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          'Error: ${provider.error}',
+                          '${localizations.error}: ${provider.error}',
                           style: const TextStyle(color: Colors.red),
                         ),
                         const SizedBox(height: 16),
                         ElevatedButton(
                           onPressed: _loadOrders,
-                          child: const Text('Retry'),
+                          child: Text(localizations.retry),
                         ),
                       ],
                     ),
@@ -249,8 +254,8 @@ class _OrdersPageState extends State<OrdersPage> with TickerProviderStateMixin {
 
                 if (provider.orders.isEmpty) {
                   return EmptyState(
-                    title: 'No Orders',
-                    message: _getEmptyMessage(),
+                    title: localizations.noOrders,
+                    message: _getEmptyMessage(context),
                     icon: Icons.shopping_cart,
                   );
                 }
@@ -276,6 +281,7 @@ class _OrdersPageState extends State<OrdersPage> with TickerProviderStateMixin {
   }
 
   Widget _buildOrderCard(Order order) {
+    final localizations = AppLocalizations.of(context);
     return Card(
       margin: const EdgeInsets.only(bottom: 12.0),
       elevation: 2,
@@ -314,52 +320,59 @@ class _OrdersPageState extends State<OrdersPage> with TickerProviderStateMixin {
                           break;
                       }
                     },
-                    itemBuilder: (context) => [
-                      const PopupMenuItem(
-                        value: 'view',
-                        child: Row(
-                          children: [
-                            Icon(Icons.visibility, size: 20),
-                            SizedBox(width: 8),
-                            Text('View Details'),
-                          ],
-                        ),
-                      ),
-                      if (order.status.toLowerCase() != 'cancelled' &&
-                          order.status.toLowerCase() != 'delivered')
-                        const PopupMenuItem(
-                          value: 'cancel',
+                    itemBuilder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return [
+                        PopupMenuItem(
+                          value: 'view',
                           child: Row(
                             children: [
-                              Icon(Icons.cancel, size: 20, color: Colors.red),
-                              SizedBox(width: 8),
-                              Text(
-                                'Cancel Order',
-                                style: TextStyle(color: Colors.red),
-                              ),
+                              const Icon(Icons.visibility, size: 20),
+                              const SizedBox(width: 8),
+                              Text(localizations.viewDetails),
                             ],
                           ),
                         ),
-                      if (order.status.toLowerCase() == 'in_delivery' ||
-                          order.status.toLowerCase() == 'delivering')
-                        const PopupMenuItem(
-                          value: 'track',
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.location_on,
-                                size: 20,
-                                color: Colors.green,
-                              ),
-                              SizedBox(width: 8),
-                              Text(
-                                'Track Delivery',
-                                style: TextStyle(color: Colors.green),
-                              ),
-                            ],
+                        if (order.status.toLowerCase() != 'cancelled' &&
+                            order.status.toLowerCase() != 'delivered')
+                          PopupMenuItem(
+                            value: 'cancel',
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.cancel,
+                                  size: 20,
+                                  color: Colors.red,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  localizations.cancelOrder,
+                                  style: const TextStyle(color: Colors.red),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                    ],
+                        if (order.status.toLowerCase() == 'in_delivery' ||
+                            order.status.toLowerCase() == 'delivering')
+                          PopupMenuItem(
+                            value: 'track',
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.location_on,
+                                  size: 20,
+                                  color: Colors.green,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  localizations.trackDelivery,
+                                  style: const TextStyle(color: Colors.green),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ];
+                    },
                     child: const Icon(Icons.more_vert),
                   ),
                 ],
@@ -371,7 +384,7 @@ class _OrdersPageState extends State<OrdersPage> with TickerProviderStateMixin {
                 children: [
                   Expanded(
                     child: Text(
-                      'Customer: ${order.customerName}',
+                      '${localizations.customerLabel}: ${order.customerName}',
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
@@ -411,7 +424,7 @@ class _OrdersPageState extends State<OrdersPage> with TickerProviderStateMixin {
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    'Ordered: ${_formatDate(order.createdAt)}',
+                    '${localizations.orderedLabel}: ${_formatDate(order.createdAt)}',
                     style: const TextStyle(fontSize: 14, color: Colors.grey),
                   ),
                 ],
@@ -423,7 +436,7 @@ class _OrdersPageState extends State<OrdersPage> with TickerProviderStateMixin {
                     const Icon(Icons.inventory, size: 16, color: Colors.grey),
                     const SizedBox(width: 4),
                     Text(
-                      '${order.items.length} item${order.items.length == 1 ? '' : 's'}',
+                      '${order.items.length} ${order.items.length == 1 ? localizations.itemsLabel : localizations.itemsLabelPlural}',
                       style: const TextStyle(fontSize: 14, color: Colors.grey),
                     ),
                   ],
@@ -436,41 +449,43 @@ class _OrdersPageState extends State<OrdersPage> with TickerProviderStateMixin {
     );
   }
 
-  String _getEmptyMessage() {
+  String _getEmptyMessage(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     switch (_selectedStatus) {
       case 'pending':
-        return 'No pending orders found';
+        return localizations.noPendingOrders;
       case 'confirmed':
-        return 'No approved orders found';
+        return localizations.noConfirmedOrders;
       case 'in_delivery':
-        return 'No orders in delivery found';
+        return localizations.noOrdersInDelivery;
       case 'delivered':
-        return 'No completed orders found';
+        return localizations.noDeliveredOrders;
       case 'cancelled':
-        return 'No cancelled orders found';
+        return localizations.noCancelledOrders;
       default:
-        return 'No orders found';
+        return localizations.noOrdersFound;
     }
   }
 
   void _showCancelOrderDialog(Order order) {
+    final localizations = AppLocalizations.of(context);
     final TextEditingController reasonController = TextEditingController();
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Reject Order'),
+        title: Text(localizations.rejectOrder),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Please provide a reason for rejecting this order:'),
+            Text(localizations.pleaseProvideReasonForRejecting),
             const SizedBox(height: 16),
             TextField(
               controller: reasonController,
-              decoration: const InputDecoration(
-                labelText: 'Rejection Reason',
-                hintText: 'Enter reason for rejection...',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: localizations.rejectionReason,
+                hintText: localizations.enterReasonForRejection,
+                border: const OutlineInputBorder(),
               ),
               maxLines: 3,
             ),
@@ -479,7 +494,7 @@ class _OrdersPageState extends State<OrdersPage> with TickerProviderStateMixin {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(localizations.cancel),
           ),
           ElevatedButton(
             onPressed: () {
@@ -488,8 +503,8 @@ class _OrdersPageState extends State<OrdersPage> with TickerProviderStateMixin {
                 _cancelOrder(order, reasonController.text.trim());
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Please provide a reason for rejection'),
+                  SnackBar(
+                    content: Text(localizations.pleaseProvideRejectionReason),
                     backgroundColor: Colors.orange,
                   ),
                 );
@@ -499,7 +514,7 @@ class _OrdersPageState extends State<OrdersPage> with TickerProviderStateMixin {
               backgroundColor: Colors.red,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Reject Order'),
+            child: Text(localizations.rejectOrder),
           ),
         ],
       ),
@@ -507,17 +522,16 @@ class _OrdersPageState extends State<OrdersPage> with TickerProviderStateMixin {
   }
 
   void _showTrackDeliveryDialog(Order order) {
+    final localizations = AppLocalizations.of(context);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Track Delivery'),
-        content: const Text(
-          'Delivery tracking feature will be implemented with Google Maps integration.',
-        ),
+        title: Text(localizations.trackDelivery),
+        content: Text(localizations.deliveryTrackingFeatureComingSoon),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
+            child: Text(localizations.ok),
           ),
         ],
       ),
@@ -525,6 +539,7 @@ class _OrdersPageState extends State<OrdersPage> with TickerProviderStateMixin {
   }
 
   Future<void> _cancelOrder(Order order, String rejectionReason) async {
+    final localizations = AppLocalizations.of(context);
     try {
       final provider = context.read<admin_orders_provider.OrdersProvider>();
       final success = await provider.rejectOrder(
@@ -535,16 +550,16 @@ class _OrdersPageState extends State<OrdersPage> with TickerProviderStateMixin {
       if (mounted) {
         if (success) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Order cancelled successfully'),
+            SnackBar(
+              content: Text(localizations.orderCancelledSuccessfully),
               backgroundColor: Colors.red,
             ),
           );
           _loadOrders(); // Refresh the orders list
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Failed to cancel order'),
+            SnackBar(
+              content: Text(localizations.failedToCancelOrder),
               backgroundColor: Colors.red,
             ),
           );
@@ -553,7 +568,9 @@ class _OrdersPageState extends State<OrdersPage> with TickerProviderStateMixin {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error cancelling order: ${e.toString()}')),
+          SnackBar(
+            content: Text(localizations.errorCancellingOrder(e.toString())),
+          ),
         );
       }
     }

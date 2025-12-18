@@ -209,7 +209,9 @@ class CartService {
         return discount;
       } else {
         final data = json.decode(response.body);
-        _setError(data['message'] ?? 'Invalid discount code');
+        final errorMessage = data['message'];
+        // Error translation is handled in the UI layer
+        _setError(errorMessage ?? 'Invalid discount code');
         return 0.0;
       }
     } catch (e) {

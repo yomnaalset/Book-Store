@@ -18,11 +18,13 @@ from ..views.delivery_views import (
     DeliveryActivityView,
     OrderActivitiesView,
     StartDeliveryView,
+    CompleteDeliveryView,
     
     # Delivery assignment views
     DeliveryAssignmentListView,
     DeliveryAssignmentDetailView,
     DeliveryAssignmentCreateView,
+    AcceptDeliveryAssignmentView,
     DeliveryAssignmentStatusUpdateView,
     MyDeliveryAssignmentsView,
     
@@ -105,6 +107,7 @@ urlpatterns = [
     path('assignments/', DeliveryAssignmentListView.as_view(), name='assignment-list'),
     path('assignments/<int:pk>/', DeliveryAssignmentDetailView.as_view(), name='assignment-detail'),
     path('assignments/create/', DeliveryAssignmentCreateView.as_view(), name='assignment-create'),
+    path('assignments/<int:pk>/accept/', AcceptDeliveryAssignmentView.as_view(), name='assignment-accept'),
     path('assignments/<int:pk>/update-status/', DeliveryAssignmentStatusUpdateView.as_view(), name='assignment-update-status'),
     path('assignments/my-assignments/', MyDeliveryAssignmentsView.as_view(), name='my-assignments'),
     path('assignments/bulk-assign/', bulk_assign_orders_view, name='bulk-assign-orders'),
@@ -171,7 +174,8 @@ urlpatterns = [
     path('tasks/<int:task_id>/eta/', TaskETAUpdateView.as_view(), name='task-update-eta'),
     
     # ---------------------------------------
-    # 🚀 Start Delivery Endpoint (Automatic Status Update)
+    # 🚀 Unified Delivery Endpoints (Backend-Driven)
     # ---------------------------------------
-    path('start_delivery/', StartDeliveryView.as_view(), name='start-delivery'),
+    path('start-delivery/', StartDeliveryView.as_view(), name='start-delivery'),
+    path('complete-delivery/', CompleteDeliveryView.as_view(), name='complete-delivery'),
 ]

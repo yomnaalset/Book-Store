@@ -184,7 +184,8 @@ class OrdersProvider with ChangeNotifier {
   }
 
   // Start delivery (for delivery managers)
-  Future<bool> startDelivery(int orderId) async {
+  // Returns the response data containing updated order and manager status
+  Future<Map<String, dynamic>?> startDelivery(int orderId) async {
     _clearError();
     debugPrint('DEBUG: OrdersProvider.startDelivery called for order $orderId');
 
@@ -192,14 +193,39 @@ class OrdersProvider with ChangeNotifier {
       final result = await _apiService.startDelivery(orderId);
       debugPrint('DEBUG: Start delivery result: $result');
 
-      // Refresh order data
-      await loadOrders();
+      // Update local cache with fresh data from server response
+      if (result['success'] == true) {
+        // If order data is in response, update immediately
+        if (result['order'] != null) {
+          try {
+            final orderData = result['order'] as Map<String, dynamic>;
+            final updatedOrder = Order.fromJson(orderData);
+            final index = _orders.indexWhere(
+              (order) => order.id == orderId.toString(),
+            );
+            if (index != -1) {
+              _orders[index] = updatedOrder;
+            } else {
+              _orders.add(updatedOrder);
+            }
+            notifyListeners();
+            debugPrint(
+              'DEBUG: Local order data updated from start delivery response',
+            );
+          } catch (e) {
+            debugPrint('DEBUG: Error parsing order from response: $e');
+          }
+        }
 
-      return true;
+        // Refresh order data from server to ensure we have latest
+        await loadOrders();
+      }
+
+      return result;
     } catch (e) {
       debugPrint('DEBUG: Error starting delivery: $e');
       _setError('Failed to start delivery: $e');
-      return false;
+      return null;
     }
   }
 
@@ -226,7 +252,11 @@ class OrdersProvider with ChangeNotifier {
   }
 
   // Approve order with delivery manager
-  Future<bool> approveOrder(int orderId, int deliveryManagerId) async {
+  // Returns the updated order data from the response
+  Future<Map<String, dynamic>?> approveOrder(
+    int orderId,
+    int deliveryManagerId,
+  ) async {
     _clearError();
     debugPrint(
       'DEBUG: Approving order $orderId with delivery manager $deliveryManagerId',
@@ -236,24 +266,36 @@ class OrdersProvider with ChangeNotifier {
       final result = await _apiService.approveOrder(orderId, deliveryManagerId);
       debugPrint('DEBUG: Order approval result: $result');
 
-      // Update local data
-      final index = _orders.indexWhere(
-        (order) => order.id == orderId.toString(),
-      );
-      if (index != -1) {
-        _orders[index] = _orders[index].copyWith(
-          status: 'confirmed',
-          updatedAt: DateTime.now(),
-        );
-        notifyListeners();
-        debugPrint('DEBUG: Local order data updated');
+      // Return the order data from the response immediately
+      // This ensures the UI can update with fresh data from server
+      if (result['success'] == true && result['order'] != null) {
+        final orderData = result['order'] as Map<String, dynamic>;
+
+        // Update local cache with fresh data from server
+        try {
+          final updatedOrder = Order.fromJson(orderData);
+          final index = _orders.indexWhere(
+            (order) => order.id == orderId.toString(),
+          );
+          if (index != -1) {
+            _orders[index] = updatedOrder;
+          } else {
+            _orders.add(updatedOrder);
+          }
+          notifyListeners();
+          debugPrint('DEBUG: Local order data updated from server response');
+        } catch (e) {
+          debugPrint('DEBUG: Error parsing order from response: $e');
+        }
+
+        return result;
       }
 
-      return true;
+      return result;
     } catch (e) {
       debugPrint('DEBUG: Error approving order: $e');
       _setError('Failed to approve order: $e');
-      return false;
+      return null;
     }
   }
 
@@ -409,7 +451,11 @@ class OrdersProvider with ChangeNotifier {
   }
 
   // Edit notes for an order
-  Future<bool> editOrderNotes(String orderId, String notes, {int? noteId}) async {
+  Future<bool> editOrderNotes(
+    String orderId,
+    String notes, {
+    int? noteId,
+  }) async {
     _setLoading(true);
     _clearError();
 

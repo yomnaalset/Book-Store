@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../../../providers/library_manager/authors_provider.dart';
 import '../../../models/author.dart';
+import '../../../../../../core/localization/app_localizations.dart';
 import '../../../../auth/providers/auth_provider.dart';
 
 class AuthorFormScreen extends StatefulWidget {
@@ -140,9 +141,10 @@ class _AuthorFormScreenState extends State<AuthorFormScreen> {
         );
       } else {
         debugPrint('DEBUG: Author form - No token available from AuthProvider');
+        final localizations = AppLocalizations.of(context);
         scaffoldMessenger.showSnackBar(
-          const SnackBar(
-            content: Text('Authentication required. Please log in again.'),
+          SnackBar(
+            content: Text(localizations.authenticationRequired),
             backgroundColor: Colors.red,
           ),
         );
@@ -170,11 +172,12 @@ class _AuthorFormScreenState extends State<AuthorFormScreen> {
         updatedAt: DateTime.now(),
       );
 
+      final localizations = AppLocalizations.of(context);
       if (widget.author == null) {
         await provider.createAuthor(authorData);
         if (mounted) {
           scaffoldMessenger.showSnackBar(
-            const SnackBar(content: Text('Author created successfully')),
+            SnackBar(content: Text(localizations.authorCreatedSuccessfully)),
           );
         }
       } else {
@@ -186,7 +189,7 @@ class _AuthorFormScreenState extends State<AuthorFormScreen> {
           if (updatedAuthor != null) {
             debugPrint('DEBUG: Author form - Author updated successfully');
             scaffoldMessenger.showSnackBar(
-              const SnackBar(content: Text('Author updated successfully')),
+              SnackBar(content: Text(localizations.authorUpdatedSuccessfully)),
             );
           } else {
             debugPrint(
@@ -194,7 +197,9 @@ class _AuthorFormScreenState extends State<AuthorFormScreen> {
             );
             scaffoldMessenger.showSnackBar(
               SnackBar(
-                content: Text(provider.error ?? 'Failed to update author'),
+                content: Text(
+                  provider.error ?? localizations.failedToUpdateAuthor,
+                ),
                 backgroundColor: Colors.red,
               ),
             );
@@ -208,15 +213,16 @@ class _AuthorFormScreenState extends State<AuthorFormScreen> {
       }
     } catch (e) {
       if (mounted) {
-        String errorMessage = 'Failed to save author';
+        final localizations = AppLocalizations.of(context);
+        String errorMessage = localizations.failedToSaveAuthor;
         if (e.toString().contains('401')) {
-          errorMessage = 'Authentication failed. Please log in again.';
+          errorMessage = localizations.authenticationRequiredPleaseLogInAgain;
         } else if (e.toString().contains('400')) {
-          errorMessage = 'Invalid data. Please check your input.';
+          errorMessage = localizations.invalidDataPleaseCheckInput;
         } else if (e.toString().contains('500')) {
-          errorMessage = 'Server error. Please try again later.';
+          errorMessage = localizations.serverError;
         } else {
-          errorMessage = 'Error: ${e.toString()}';
+          errorMessage = '${localizations.error}: ${e.toString()}';
         }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -237,9 +243,14 @@ class _AuthorFormScreenState extends State<AuthorFormScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.author == null ? 'Add Author' : 'Edit Author'),
+        title: Text(
+          widget.author == null
+              ? localizations.addAuthor
+              : localizations.editAuthor,
+        ),
         actions: [
           if (widget.author != null)
             IconButton(
@@ -265,13 +276,13 @@ class _AuthorFormScreenState extends State<AuthorFormScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Row(
+                            Row(
                               children: [
-                                Icon(Icons.person, color: Colors.purple),
-                                SizedBox(width: 12),
+                                const Icon(Icons.person, color: Colors.purple),
+                                const SizedBox(width: 12),
                                 Text(
-                                  'Author Information',
-                                  style: TextStyle(
+                                  localizations.authorInformation,
+                                  style: const TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -283,18 +294,18 @@ class _AuthorFormScreenState extends State<AuthorFormScreen> {
                             // Name Field
                             TextFormField(
                               controller: _nameController,
-                              decoration: const InputDecoration(
-                                labelText: 'Author Name *',
-                                border: OutlineInputBorder(),
-                                hintText: 'Enter author name',
-                                prefixIcon: Icon(Icons.person),
+                              decoration: InputDecoration(
+                                labelText: '${localizations.authorName} *',
+                                border: const OutlineInputBorder(),
+                                hintText: localizations.enterAuthorName,
+                                prefixIcon: const Icon(Icons.person),
                               ),
                               validator: (value) {
                                 if (value == null || value.trim().isEmpty) {
-                                  return 'Author name is required';
+                                  return localizations.authorNameRequired;
                                 }
                                 if (value.trim().length < 2) {
-                                  return 'Author name must be at least 2 characters';
+                                  return localizations.authorNameMinLength;
                                 }
                                 return null;
                               },
@@ -304,11 +315,11 @@ class _AuthorFormScreenState extends State<AuthorFormScreen> {
                             // Biography Field
                             TextFormField(
                               controller: _biographyController,
-                              decoration: const InputDecoration(
-                                labelText: 'Biography',
-                                border: OutlineInputBorder(),
-                                hintText: 'Enter author biography (optional)',
-                                prefixIcon: Icon(Icons.description),
+                              decoration: InputDecoration(
+                                labelText: localizations.biography,
+                                border: const OutlineInputBorder(),
+                                hintText: localizations.enterAuthorBiography,
+                                prefixIcon: const Icon(Icons.description),
                                 alignLabelWithHint: true,
                               ),
                               maxLines: 4,
@@ -318,11 +329,11 @@ class _AuthorFormScreenState extends State<AuthorFormScreen> {
                             // Nationality Field
                             TextFormField(
                               controller: _nationalityController,
-                              decoration: const InputDecoration(
-                                labelText: 'Nationality',
-                                border: OutlineInputBorder(),
-                                hintText: 'Enter author nationality (optional)',
-                                prefixIcon: Icon(Icons.public),
+                              decoration: InputDecoration(
+                                labelText: localizations.nationality,
+                                border: const OutlineInputBorder(),
+                                hintText: localizations.enterAuthorNationality,
+                                prefixIcon: const Icon(Icons.public),
                               ),
                             ),
                             const SizedBox(height: 16),
@@ -331,9 +342,9 @@ class _AuthorFormScreenState extends State<AuthorFormScreen> {
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text(
-                                  'Author Photo',
-                                  style: TextStyle(
+                                Text(
+                                  localizations.authorPhoto,
+                                  style: const TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.w500,
                                   ),
@@ -367,7 +378,7 @@ class _AuthorFormScreenState extends State<AuthorFormScreen> {
                                       child: OutlinedButton.icon(
                                         onPressed: _pickImage,
                                         icon: const Icon(Icons.photo_library),
-                                        label: const Text('Gallery'),
+                                        label: Text(localizations.gallery),
                                       ),
                                     ),
                                     const SizedBox(width: 8),
@@ -375,7 +386,7 @@ class _AuthorFormScreenState extends State<AuthorFormScreen> {
                                       child: OutlinedButton.icon(
                                         onPressed: _takePhoto,
                                         icon: const Icon(Icons.camera_alt),
-                                        label: const Text('Camera'),
+                                        label: Text(localizations.camera),
                                       ),
                                     ),
                                   ],
@@ -385,11 +396,11 @@ class _AuthorFormScreenState extends State<AuthorFormScreen> {
                                 // Image URL Field (Alternative)
                                 TextFormField(
                                   controller: _imageUrlController,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Or enter image URL',
-                                    border: OutlineInputBorder(),
-                                    hintText: 'Enter image URL (optional)',
-                                    prefixIcon: Icon(Icons.link),
+                                  decoration: InputDecoration(
+                                    labelText: localizations.orEnterImageUrl,
+                                    border: const OutlineInputBorder(),
+                                    hintText: localizations.enterImageUrl,
+                                    prefixIcon: const Icon(Icons.link),
                                   ),
                                   onChanged: (value) {
                                     if (value.isNotEmpty) {
@@ -408,15 +419,15 @@ class _AuthorFormScreenState extends State<AuthorFormScreen> {
                             InkWell(
                               onTap: _selectBirthDate,
                               child: InputDecorator(
-                                decoration: const InputDecoration(
-                                  labelText: 'Birth Date',
-                                  border: OutlineInputBorder(),
-                                  prefixIcon: Icon(Icons.calendar_today),
+                                decoration: InputDecoration(
+                                  labelText: localizations.birthDate,
+                                  border: const OutlineInputBorder(),
+                                  prefixIcon: const Icon(Icons.calendar_today),
                                 ),
                                 child: Text(
                                   _birthDate != null
                                       ? '${_birthDate!.day}/${_birthDate!.month}/${_birthDate!.year}'
-                                      : 'Select birth date (optional)',
+                                      : localizations.selectBirthDate,
                                   style: TextStyle(
                                     color: _birthDate != null
                                         ? Theme.of(
@@ -440,7 +451,7 @@ class _AuthorFormScreenState extends State<AuthorFormScreen> {
                                   });
                                 },
                                 icon: const Icon(Icons.clear, size: 16),
-                                label: const Text('Clear birth date'),
+                                label: Text(localizations.clearBirthDate),
                                 style: TextButton.styleFrom(
                                   foregroundColor: Colors.red,
                                 ),
@@ -452,15 +463,15 @@ class _AuthorFormScreenState extends State<AuthorFormScreen> {
                             InkWell(
                               onTap: _selectDeathDate,
                               child: InputDecorator(
-                                decoration: const InputDecoration(
-                                  labelText: 'Death Date (Optional)',
-                                  border: OutlineInputBorder(),
-                                  prefixIcon: Icon(Icons.event),
+                                decoration: InputDecoration(
+                                  labelText: localizations.deathDate,
+                                  border: const OutlineInputBorder(),
+                                  prefixIcon: const Icon(Icons.event),
                                 ),
                                 child: Text(
                                   _deathDate != null
                                       ? '${_deathDate!.day}/${_deathDate!.month}/${_deathDate!.year}'
-                                      : 'Select death date (optional)',
+                                      : localizations.selectDeathDate,
                                   style: TextStyle(
                                     color: _deathDate != null
                                         ? Theme.of(
@@ -484,7 +495,7 @@ class _AuthorFormScreenState extends State<AuthorFormScreen> {
                                   });
                                 },
                                 icon: const Icon(Icons.clear, size: 16),
-                                label: const Text('Clear death date'),
+                                label: Text(localizations.clearDeathDate),
                                 style: TextButton.styleFrom(
                                   foregroundColor: Colors.red,
                                 ),
@@ -506,8 +517,8 @@ class _AuthorFormScreenState extends State<AuthorFormScreen> {
                             ? const CircularProgressIndicator()
                             : Text(
                                 widget.author == null
-                                    ? 'Add Author'
-                                    : 'Update Author',
+                                    ? localizations.addAuthor
+                                    : localizations.updateAuthor,
                               ),
                       ),
                     ),
@@ -521,23 +532,26 @@ class _AuthorFormScreenState extends State<AuthorFormScreen> {
   Future<void> _deleteAuthor() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Author'),
+      builder: (context) {
+        final localizations = AppLocalizations.of(context);
+        return AlertDialog(
+          title: Text(localizations.deleteAuthor),
         content: Text(
-          'Are you sure you want to delete "${widget.author!.name}"? This action cannot be undone.',
+            localizations.deleteAuthorConfirmation(widget.author!.name),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+              child: Text(localizations.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
+              child: Text(localizations.delete),
           ),
         ],
-      ),
+        );
+      },
     );
 
     if (confirmed == true) {
@@ -560,21 +574,22 @@ class _AuthorFormScreenState extends State<AuthorFormScreen> {
         await provider.deleteAuthor(int.parse(widget.author!.id));
 
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           scaffoldMessenger.showSnackBar(
-            const SnackBar(content: Text('Author deleted successfully')),
+            SnackBar(content: Text(localizations.authorDeletedSuccessfully)),
           );
           navigator.pop();
         }
       } catch (e) {
         if (mounted) {
-          String errorMessage = 'Failed to delete author';
+          final localizations = AppLocalizations.of(context);
+          String errorMessage = localizations.failedToDeleteAuthor;
           if (e.toString().contains('401')) {
-            errorMessage = 'Authentication failed. Please log in again.';
+            errorMessage = localizations.authenticationRequiredPleaseLogInAgain;
           } else if (e.toString().contains('book(s) assigned to it')) {
-            errorMessage =
-                'Cannot delete author because they have books assigned. Please reassign or remove these books first.';
+            errorMessage = localizations.cannotDeleteAuthorWithBooks;
           } else {
-            errorMessage = 'Error: ${e.toString()}';
+            errorMessage = '${localizations.error}: ${e.toString()}';
           }
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(

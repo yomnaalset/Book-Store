@@ -7,6 +7,8 @@ from ..views.complaint_views import (
     ComplaintResponseCreateView,
     ComplaintResponseListView,
     ComplaintResolveView,
+    ComplaintUpdateStatusView,
+    ComplaintReplyView,
     ComplaintStatsView,
 )
 
@@ -29,6 +31,12 @@ complaint_urls = [
     
     # Resolve complaint
     path('<int:pk>/resolve/', ComplaintResolveView.as_view(), name='complaint_resolve'),
+    
+    # Update complaint status (for status menu)
+    path('<int:pk>/update_status/', ComplaintUpdateStatusView.as_view(), name='complaint_update_status'),
+    
+    # Send reply to complaint
+    path('<int:pk>/reply/', ComplaintReplyView.as_view(), name='complaint_reply'),
     
     # =====================================
     # COMPLAINT RESPONSE ENDPOINTS

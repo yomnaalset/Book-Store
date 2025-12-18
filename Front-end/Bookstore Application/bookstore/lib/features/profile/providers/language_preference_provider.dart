@@ -36,7 +36,21 @@ class LanguagePreferenceProvider extends ChangeNotifier {
         _availableLanguages = List<Map<String, dynamic>>.from(
           data['languages'],
         );
-        _currentLanguage = data['current_language'];
+        // Only set current language from API if it's not already synced with translations provider
+        // This prevents overwriting the user's local language preference
+        final apiCurrentLanguage = data['current_language'];
+        final translationsLanguage =
+            _translationsProvider.currentLocale.languageCode;
+
+        // If current language is already synced with translations provider, keep it
+        // Otherwise, use the API value (for authenticated users)
+        if (_currentLanguage == null ||
+            _currentLanguage != translationsLanguage) {
+          _currentLanguage = apiCurrentLanguage;
+        }
+
+        // Always sync with translations provider to ensure consistency
+        syncWithTranslationsProvider();
         notifyListeners();
       } else {
         _setError(response['message'] ?? 'Failed to load language options');
@@ -61,6 +75,8 @@ class LanguagePreferenceProvider extends ChangeNotifier {
       if (response['success'] == true) {
         final data = response['data'];
         _currentLanguage = data['preferred_language'];
+        // Sync with translations provider to ensure consistency
+        syncWithTranslationsProvider();
         notifyListeners();
       } else {
         _setError(response['message'] ?? 'Failed to load language preference');
@@ -131,6 +147,16 @@ class LanguagePreferenceProvider extends ChangeNotifier {
   // Check if current language is RTL
   bool get isCurrentLanguageRTL {
     return _currentLanguage != null && isRTL(_currentLanguage!);
+  }
+
+  // Sync current language with TranslationsProvider
+  // This is useful when language is changed without a token
+  void syncWithTranslationsProvider() {
+    final locale = _translationsProvider.currentLocale;
+    if (_currentLanguage != locale.languageCode) {
+      _currentLanguage = locale.languageCode;
+      notifyListeners();
+    }
   }
 
   // Private helper methods

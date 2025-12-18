@@ -5,6 +5,10 @@ import 'api_config.dart';
 
 /// Centralized API client for handling base URL and common headers
 class ApiClient {
+  /// Callback function to refresh token when 401 is received
+  /// Should return the new access token, or null if refresh failed
+  static Future<String?> Function()? onTokenRefresh;
+
   /// Get the base URL for API calls
   static String get baseUrl => ApiConfig.getBaseUrl();
 
@@ -28,10 +32,22 @@ class ApiClient {
         uri = uri.replace(queryParameters: queryParams);
       }
 
-      final response = await http.get(
+      var response = await http.get(
         uri,
         headers: token != null ? getHeadersWithAuth(token) : headers,
       );
+
+      // Handle 401 Unauthorized - try to refresh token
+      if (response.statusCode == 401 &&
+          token != null &&
+          onTokenRefresh != null) {
+        debugPrint('ApiClient: Received 401, attempting token refresh...');
+        final newToken = await onTokenRefresh!();
+        if (newToken != null) {
+          debugPrint('ApiClient: Token refreshed, retrying request...');
+          response = await http.get(uri, headers: getHeadersWithAuth(newToken));
+        }
+      }
 
       _logRequest('GET', uri.toString(), response);
       return response;
@@ -61,11 +77,27 @@ class ApiClient {
       );
       debugPrint('=== END API CLIENT POST REQUEST ===');
 
-      final response = await http.post(
+      var response = await http.post(
         Uri.parse(url),
         headers: token != null ? getHeadersWithAuth(token) : headers,
         body: body != null ? json.encode(body) : null,
       );
+
+      // Handle 401 Unauthorized - try to refresh token
+      if (response.statusCode == 401 &&
+          token != null &&
+          onTokenRefresh != null) {
+        debugPrint('ApiClient: Received 401, attempting token refresh...');
+        final newToken = await onTokenRefresh!();
+        if (newToken != null) {
+          debugPrint('ApiClient: Token refreshed, retrying request...');
+          response = await http.post(
+            Uri.parse(url),
+            headers: getHeadersWithAuth(newToken),
+            body: body != null ? json.encode(body) : null,
+          );
+        }
+      }
 
       debugPrint(
         'ApiClient: Response received - Status: ${response.statusCode}',
@@ -88,11 +120,27 @@ class ApiClient {
     String? token,
   }) async {
     try {
-      final response = await http.put(
+      var response = await http.put(
         Uri.parse('$baseUrl$endpoint'),
         headers: token != null ? getHeadersWithAuth(token) : headers,
         body: body != null ? json.encode(body) : null,
       );
+
+      // Handle 401 Unauthorized - try to refresh token
+      if (response.statusCode == 401 &&
+          token != null &&
+          onTokenRefresh != null) {
+        debugPrint('ApiClient: Received 401, attempting token refresh...');
+        final newToken = await onTokenRefresh!();
+        if (newToken != null) {
+          debugPrint('ApiClient: Token refreshed, retrying request...');
+          response = await http.put(
+            Uri.parse('$baseUrl$endpoint'),
+            headers: getHeadersWithAuth(newToken),
+            body: body != null ? json.encode(body) : null,
+          );
+        }
+      }
 
       _logRequest('PUT', '$baseUrl$endpoint', response, body: body);
       return response;
@@ -109,11 +157,27 @@ class ApiClient {
     String? token,
   }) async {
     try {
-      final response = await http.patch(
+      var response = await http.patch(
         Uri.parse('$baseUrl$endpoint'),
         headers: token != null ? getHeadersWithAuth(token) : headers,
         body: body != null ? json.encode(body) : null,
       );
+
+      // Handle 401 Unauthorized - try to refresh token
+      if (response.statusCode == 401 &&
+          token != null &&
+          onTokenRefresh != null) {
+        debugPrint('ApiClient: Received 401, attempting token refresh...');
+        final newToken = await onTokenRefresh!();
+        if (newToken != null) {
+          debugPrint('ApiClient: Token refreshed, retrying request...');
+          response = await http.patch(
+            Uri.parse('$baseUrl$endpoint'),
+            headers: getHeadersWithAuth(newToken),
+            body: body != null ? json.encode(body) : null,
+          );
+        }
+      }
 
       _logRequest('PATCH', '$baseUrl$endpoint', response);
       return response;
@@ -126,10 +190,25 @@ class ApiClient {
   /// Make a DELETE request
   static Future<http.Response> delete(String endpoint, {String? token}) async {
     try {
-      final response = await http.delete(
+      var response = await http.delete(
         Uri.parse('$baseUrl$endpoint'),
         headers: token != null ? getHeadersWithAuth(token) : headers,
       );
+
+      // Handle 401 Unauthorized - try to refresh token
+      if (response.statusCode == 401 &&
+          token != null &&
+          onTokenRefresh != null) {
+        debugPrint('ApiClient: Received 401, attempting token refresh...');
+        final newToken = await onTokenRefresh!();
+        if (newToken != null) {
+          debugPrint('ApiClient: Token refreshed, retrying request...');
+          response = await http.delete(
+            Uri.parse('$baseUrl$endpoint'),
+            headers: getHeadersWithAuth(newToken),
+          );
+        }
+      }
 
       _logRequest('DELETE', '$baseUrl$endpoint', response);
       return response;

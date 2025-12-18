@@ -3,6 +3,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'loading_indicator.dart';
 import '../../constants/app_colors.dart';
 import '../../constants/app_dimensions.dart';
+import '../../services/api_config.dart';
 
 class OptimizedImage extends StatelessWidget {
   final String imageUrl;
@@ -93,8 +94,11 @@ class OptimizedImage extends StatelessWidget {
       );
     }
 
+    // Build full URL from relative path if needed
+    final fullImageUrl = ApiConfig.buildImageUrl(imageUrl) ?? imageUrl;
+
     final imageWidget = CachedNetworkImage(
-      imageUrl: imageUrl,
+      imageUrl: fullImageUrl,
       width: width,
       height: height,
       fit: fit,

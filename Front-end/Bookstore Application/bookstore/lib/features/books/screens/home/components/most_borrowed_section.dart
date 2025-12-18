@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../../../core/constants/app_colors.dart';
+import '../../../../../../core/localization/app_localizations.dart';
 import '../../../models/book.dart';
 import '../../../../cart/providers/cart_provider.dart';
 import '../../../../favorites/providers/favorites_provider.dart';
@@ -149,13 +150,20 @@ class _MostBorrowedSectionState extends State<MostBorrowedSection> {
                         ],
                       ),
                     ),
-                    const PopupMenuItem(
+                    PopupMenuItem(
                       value: 'rating',
                       child: Row(
                         children: [
-                          Icon(Icons.star, size: 18),
-                          SizedBox(width: 8),
-                          Text('Highest Rated'),
+                          const Icon(Icons.star, size: 18),
+                          const SizedBox(width: 8),
+                          Builder(
+                            builder: (context) {
+                              final localizations = AppLocalizations.of(
+                                context,
+                              );
+                              return Text(localizations.highestRated);
+                            },
+                          ),
                         ],
                       ),
                     ),
@@ -292,13 +300,18 @@ class _MostBorrowedSectionState extends State<MostBorrowedSection> {
                       ],
                     ),
                   ),
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'rating',
                     child: Row(
                       children: [
-                        Icon(Icons.star, size: 18),
-                        SizedBox(width: 8),
-                        Text('Highest Rated'),
+                        const Icon(Icons.star, size: 18),
+                        const SizedBox(width: 8),
+                        Builder(
+                          builder: (context) {
+                            final localizations = AppLocalizations.of(context);
+                            return Text(localizations.highestRated);
+                          },
+                        ),
                       ],
                     ),
                   ),

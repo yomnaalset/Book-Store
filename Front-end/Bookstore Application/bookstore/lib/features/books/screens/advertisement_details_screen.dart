@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/extensions/theme_extensions.dart';
+import '../../../../core/localization/app_localizations.dart';
 import '../../admin/ads/models/ad.dart';
 import '../../admin/ads/services/ads_service.dart';
 import '../../../../core/services/api_config.dart';
@@ -57,7 +58,10 @@ class _AdvertisementDetailsScreenState
     } catch (e) {
       debugPrint('Error loading detailed advertisement: $e');
       setState(() {
-        _errorMessage = 'Failed to load advertisement details';
+        if (mounted) {
+          final localizations = AppLocalizations.of(context);
+          _errorMessage = localizations.failedToLoadAdvertisementDetails;
+        }
         _isLoading = false;
       });
     }
@@ -65,35 +69,33 @@ class _AdvertisementDetailsScreenState
 
   Future<void> _copyDiscountCode(String discountCode) async {
     if (!mounted) return;
-    
+
     try {
       await Clipboard.setData(ClipboardData(text: discountCode));
 
       // Show success message
       if (!mounted) return;
+      final localizations = AppLocalizations.of(context);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Discount code "$discountCode" copied to clipboard!'),
+          content: Text(localizations.discountCodeCopied(discountCode)),
           backgroundColor: AppColors.uranianBlue,
           duration: const Duration(seconds: 2),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
       );
     } catch (e) {
       debugPrint('Error copying discount code: $e');
       if (!mounted) return;
+      final localizations = AppLocalizations.of(context);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Failed to copy discount code'),
+          content: Text(localizations.failedToCopyDiscountCode),
           backgroundColor: Colors.red,
           duration: const Duration(seconds: 2),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
       );
     }
@@ -108,9 +110,17 @@ class _AdvertisementDetailsScreenState
       appBar: AppBar(
         backgroundColor: AppColors.uranianBlue,
         foregroundColor: Colors.white,
-        title: const Text(
-          'Advertisement Details',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        title: Builder(
+          builder: (context) {
+            final localizations = AppLocalizations.of(context);
+            return Text(
+              localizations.advertisementDetails,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            );
+          },
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
@@ -145,12 +155,18 @@ class _AdvertisementDetailsScreenState
                       backgroundColor: AppColors.uranianBlue,
                       foregroundColor: Colors.white,
                     ),
-                    child: const Text('Retry'),
+                    child: Builder(
+                      builder: (context) {
+                        final localizations = AppLocalizations.of(context);
+                        return Text(localizations.retry);
+                      },
+                    ),
                   ),
                 ],
               ),
             )
           : SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -245,14 +261,21 @@ class _AdvertisementDetailsScreenState
                                     width: 1,
                                   ),
                                 ),
-                                child: const Text(
-                                  'SPECIAL OFFER',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 0.5,
-                                  ),
+                                child: Builder(
+                                  builder: (context) {
+                                    final localizations = AppLocalizations.of(
+                                      context,
+                                    );
+                                    return Text(
+                                      localizations.specialOffer,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    );
+                                  },
                                 ),
                               ),
                               const SizedBox(height: 12),
@@ -299,14 +322,23 @@ class _AdvertisementDetailsScreenState
                                           crossAxisAlignment:
                                               CrossAxisAlignment.start,
                                           children: [
-                                            const Text(
-                                              'Discount Code',
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w500,
-                                                letterSpacing: 0.5,
-                                              ),
+                                            Builder(
+                                              builder: (context) {
+                                                final localizations =
+                                                    AppLocalizations.of(
+                                                      context,
+                                                    );
+                                                return Text(
+                                                  localizations
+                                                      .discountCodeLabel,
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w500,
+                                                    letterSpacing: 0.5,
+                                                  ),
+                                                );
+                                              },
                                             ),
                                             const SizedBox(height: 4),
                                             Text(
@@ -368,22 +400,35 @@ class _AdvertisementDetailsScreenState
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         // Description
-                        Text(
-                          'Description',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: context.textColor,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          displayAd.content ?? 'No description available.',
-                          style: TextStyle(
-                            fontSize: 16,
-                            height: 1.5,
-                            color: context.textColor.withValues(alpha: 0.8),
-                          ),
+                        Builder(
+                          builder: (context) {
+                            final localizations = AppLocalizations.of(context);
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  localizations.descriptionLabel,
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: context.textColor,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  displayAd.content ??
+                                      localizations.noDescriptionAvailable,
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    height: 1.5,
+                                    color: context.textColor.withValues(
+                                      alpha: 0.8,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
                         ),
 
                         const SizedBox(height: 24),
@@ -404,57 +449,68 @@ class _AdvertisementDetailsScreenState
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text(
-                                'Offer Details',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.uranianBlue,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Row(
-                                children: [
-                                  Icon(
-                                    Icons.schedule,
-                                    size: 16,
-                                    color: context.textColor.withValues(
-                                      alpha: 0.6,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Limited Time Offer',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color: context.textColor.withValues(
-                                        alpha: 0.7,
+                              Builder(
+                                builder: (context) {
+                                  final localizations = AppLocalizations.of(
+                                    context,
+                                  );
+                                  return Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        localizations.offerDetails,
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppColors.uranianBlue,
+                                        ),
                                       ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  Icon(
-                                    Icons.campaign,
-                                    size: 16,
-                                    color: context.textColor.withValues(
-                                      alpha: 0.6,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Active Advertisement',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color: context.textColor.withValues(
-                                        alpha: 0.7,
+                                      const SizedBox(height: 8),
+                                      Row(
+                                        children: [
+                                          Icon(
+                                            Icons.schedule,
+                                            size: 16,
+                                            color: context.textColor.withValues(
+                                              alpha: 0.6,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            localizations.limitedTimeOffer,
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              color: context.textColor
+                                                  .withValues(alpha: 0.7),
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                    ),
-                                  ),
-                                ],
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        children: [
+                                          Icon(
+                                            Icons.campaign,
+                                            size: 16,
+                                            color: context.textColor.withValues(
+                                              alpha: 0.6,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            localizations.activeAdvertisement,
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              color: context.textColor
+                                                  .withValues(alpha: 0.7),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  );
+                                },
                               ),
                             ],
                           ),

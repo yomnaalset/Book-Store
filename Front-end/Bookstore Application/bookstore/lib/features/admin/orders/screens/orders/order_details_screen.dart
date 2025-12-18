@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../providers/orders_provider.dart';
 import '../../../../orders/models/order.dart';
 import '../../../widgets/library_manager/status_chip.dart';
+import '../../../../../core/localization/app_localizations.dart';
 
 class OrderDetailsScreen extends StatefulWidget {
   final Order order;
@@ -447,55 +448,58 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
   void _showStatusUpdateDialog() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Order Action'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('What action would you like to take for this order?'),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      _showApprovalDialog();
-                    },
-                    icon: const Icon(Icons.check_circle, color: Colors.white),
-                    label: const Text('Approve'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
+      builder: (context) {
+        final localizations = AppLocalizations.of(context);
+        return AlertDialog(
+          title: Text(localizations.orderAction),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(localizations.whatActionForOrder),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _showApprovalDialog();
+                      },
+                      icon: const Icon(Icons.check_circle, color: Colors.white),
+                      label: Text(localizations.approve),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      _showRejectDialog();
-                    },
-                    icon: const Icon(Icons.cancel, color: Colors.white),
-                    label: const Text('Reject'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
-                      foregroundColor: Colors.white,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _showRejectDialog();
+                      },
+                      icon: const Icon(Icons.cancel, color: Colors.white),
+                      label: Text(localizations.reject),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        foregroundColor: Colors.white,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(localizations.cancel),
             ),
           ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -522,7 +526,9 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -594,7 +600,9 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                         color: Theme.of(context).colorScheme.outline,
                       ),
                       borderRadius: BorderRadius.circular(12),
-                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.surfaceContainerHighest,
                     ),
                     child: Row(
                       children: [
@@ -603,7 +611,9 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                               ? Text(
                                   'Choose a delivery manager',
                                   style: TextStyle(
-                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
                                     fontSize: 16,
                                   ),
                                 )
@@ -752,7 +762,9 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -809,7 +821,9 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                                     fontSize: 16,
                                     color: selectedId == manager['id']
                                         ? Colors.green[700]
-                                        : Theme.of(context).colorScheme.onSurface,
+                                        : Theme.of(
+                                            context,
+                                          ).colorScheme.onSurface,
                                   ),
                                 ),
                                 const SizedBox(height: 4),
@@ -817,7 +831,9 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                                   '${manager['status'] ?? 'Unknown'} • ${manager['phone'] ?? 'N/A'}',
                                   style: TextStyle(
                                     fontSize: 14,
-                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
                                   ),
                                 ),
                               ],
@@ -872,7 +888,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
       );
 
       if (mounted) {
-        if (success) {
+        if (success != null && success['success'] == true) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(

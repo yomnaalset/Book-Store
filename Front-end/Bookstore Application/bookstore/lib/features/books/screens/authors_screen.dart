@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_dimensions.dart';
+import '../../../../core/localization/app_localizations.dart';
 import '../providers/authors_provider.dart';
 import '../providers/books_provider.dart';
 import '../models/author.dart';
@@ -88,14 +89,19 @@ class _AuthorsScreenState extends State<AuthorsScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: Text(
-          _selectedAuthor != null
-              ? 'Books by ${_selectedAuthor!.name}'
-              : 'Browse by Author',
-          style: const TextStyle(
-            color: AppColors.white,
-            fontWeight: FontWeight.bold,
-          ),
+        title: Builder(
+          builder: (context) {
+            final localizations = AppLocalizations.of(context);
+            return Text(
+              _selectedAuthor != null
+                  ? localizations.booksByAuthor(_selectedAuthor!.name)
+                  : localizations.browseByAuthor,
+              style: const TextStyle(
+                color: AppColors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            );
+          },
         ),
         backgroundColor: AppColors.primary,
         elevation: 0,
@@ -139,30 +145,39 @@ class _AuthorsScreenState extends State<AuthorsScreen> {
                   color: AppColors.error.withValues(alpha: 0.5),
                 ),
                 const SizedBox(height: 16),
-                const Text(
-                  'Error loading authors',
-                  style: TextStyle(
-                    fontSize: AppDimensions.fontSizeL,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  authorsProvider.error!,
-                  style: const TextStyle(
-                    fontSize: AppDimensions.fontSizeM,
-                    color: AppColors.textHint,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: _loadAuthors,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: AppColors.white,
-                  ),
-                  child: const Text('Retry'),
+                Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return Column(
+                      children: [
+                        Text(
+                          localizations.errorLoadingAuthors,
+                          style: const TextStyle(
+                            fontSize: AppDimensions.fontSizeL,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          authorsProvider.error!,
+                          style: const TextStyle(
+                            fontSize: AppDimensions.fontSizeM,
+                            color: AppColors.textHint,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: _loadAuthors,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: AppColors.white,
+                          ),
+                          child: Text(localizations.retry),
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ],
             ),
@@ -182,21 +197,30 @@ class _AuthorsScreenState extends State<AuthorsScreen> {
                   color: AppColors.textHint.withValues(alpha: 0.5),
                 ),
                 const SizedBox(height: 16),
-                const Text(
-                  'No authors found',
-                  style: TextStyle(
-                    fontSize: AppDimensions.fontSizeL,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Authors will appear here once they are added to the library.',
-                  style: TextStyle(
-                    fontSize: AppDimensions.fontSizeM,
-                    color: AppColors.textHint,
-                  ),
-                  textAlign: TextAlign.center,
+                Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return Column(
+                      children: [
+                        Text(
+                          localizations.noAuthorsFound,
+                          style: const TextStyle(
+                            fontSize: AppDimensions.fontSizeL,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          localizations.authorsWillAppearHere,
+                          style: const TextStyle(
+                            fontSize: AppDimensions.fontSizeM,
+                            color: AppColors.textHint,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ],
             ),
@@ -212,7 +236,9 @@ class _AuthorsScreenState extends State<AuthorsScreen> {
               child: TextField(
                 controller: _searchController,
                 decoration: InputDecoration(
-                  hintText: 'Search authors...',
+                  hintText: AppLocalizations.of(
+                    context,
+                  ).searchAuthorsPlaceholder,
                   hintStyle: const TextStyle(color: AppColors.textHint),
                   prefixIcon: const Icon(
                     Icons.search,
@@ -408,7 +434,9 @@ class _AuthorsScreenState extends State<AuthorsScreen> {
           child: TextField(
             controller: _bookSearchController,
             decoration: InputDecoration(
-              hintText: 'Search books by ${_selectedAuthor!.name}...',
+              hintText: AppLocalizations.of(
+                context,
+              ).searchBooksByAuthor(_selectedAuthor!.name),
               hintStyle: const TextStyle(color: AppColors.textHint),
               prefixIcon: const Icon(Icons.search, color: AppColors.textHint),
               suffixIcon: _bookSearchQuery.isNotEmpty
@@ -797,17 +825,24 @@ class _AuthorsScreenState extends State<AuthorsScreen> {
                                   : AppColors.error.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: Text(
-                              (book.isAvailable ?? false)
-                                  ? 'Available'
-                                  : 'Unavailable',
-                              style: TextStyle(
-                                fontSize: AppDimensions.fontSizeS,
-                                color: (book.isAvailable ?? false)
-                                    ? AppColors.success
-                                    : AppColors.error,
-                                fontWeight: FontWeight.w600,
-                              ),
+                            child: Builder(
+                              builder: (context) {
+                                final localizations = AppLocalizations.of(
+                                  context,
+                                );
+                                return Text(
+                                  (book.isAvailable ?? false)
+                                      ? localizations.availableStatus
+                                      : localizations.unavailableStatus,
+                                  style: TextStyle(
+                                    fontSize: AppDimensions.fontSizeS,
+                                    color: (book.isAvailable ?? false)
+                                        ? AppColors.success
+                                        : AppColors.error,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                );
+                              },
                             ),
                           ),
                         ],
@@ -869,28 +904,33 @@ class _AuthorsScreenState extends State<AuthorsScreen> {
   void _showSearchDialog() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Search Books'),
-        content: TextField(
-          decoration: InputDecoration(
-            hintText: 'Search in books by ${_selectedAuthor!.name}...',
-            border: const OutlineInputBorder(),
+      builder: (context) {
+        final localizations = AppLocalizations.of(context);
+        return AlertDialog(
+          title: Text(localizations.searchBooks),
+          content: TextField(
+            decoration: InputDecoration(
+              hintText: localizations.searchInBooksByAuthor(
+                _selectedAuthor!.name,
+              ),
+              border: const OutlineInputBorder(),
+            ),
+            onChanged: (value) {
+              // Implement book search functionality
+            },
           ),
-          onChanged: (value) {
-            // Implement book search functionality
-          },
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Search'),
-          ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(localizations.cancel),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(localizations.search),
+            ),
+          ],
+        );
+      },
     );
   }
 }

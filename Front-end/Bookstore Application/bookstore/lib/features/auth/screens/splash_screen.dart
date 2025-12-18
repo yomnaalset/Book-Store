@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
+import '../../../web_ui/utils/platform_router.dart';
 import '../providers/auth_provider.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -78,22 +79,11 @@ class _SplashScreenState extends State<SplashScreen>
           debugPrint(
             'SplashScreen: User is authenticated, navigating to dashboard',
           );
-          // Navigate to appropriate dashboard based on user role
+          // Use PlatformRouter to get the appropriate route based on platform and role
           final userRole = authProvider.userRole;
-          if (userRole == 'admin') {
-            debugPrint('SplashScreen: Navigating to admin dashboard');
-            Navigator.pushReplacementNamed(context, '/admin/dashboard');
-          } else if (userRole == 'library_admin') {
-            debugPrint('SplashScreen: Navigating to library dashboard');
-            Navigator.pushReplacementNamed(context, '/library/dashboard');
-          } else if (userRole == 'delivery_admin') {
-            debugPrint('SplashScreen: Navigating to delivery dashboard');
-            Navigator.pushReplacementNamed(context, '/delivery/dashboard');
-          } else {
-            debugPrint('SplashScreen: Navigating to customer home');
-            // Default to customer home (for 'customer' or any other role)
-            Navigator.pushReplacementNamed(context, '/home');
-          }
+          final route = PlatformRouter.getRouteForUser(userRole);
+          debugPrint('SplashScreen: PlatformRouter determined route: $route');
+          Navigator.pushReplacementNamed(context, route);
         } else {
           debugPrint(
             'SplashScreen: User not authenticated, navigating to login',
@@ -192,7 +182,7 @@ class _SplashScreenState extends State<SplashScreen>
                     return FadeTransition(
                       opacity: _fadeAnimation,
                       child: const Text(
-                        'E-Library',
+                        'ReadGo',
                         style: TextStyle(
                           fontSize: AppDimensions.fontSizeXXXL,
                           fontWeight: FontWeight.bold,
@@ -213,7 +203,7 @@ class _SplashScreenState extends State<SplashScreen>
                     return FadeTransition(
                       opacity: _fadeAnimation,
                       child: const Text(
-                        'Your Digital Library Companion',
+                        'Your Gateway to Endless Stories',
                         style: TextStyle(
                           fontSize: AppDimensions.fontSizeL,
                           color: AppColors.white,

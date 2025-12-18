@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../orders/models/order.dart';
 import 'clean_order_item_card.dart';
 import 'order_details_shared.dart';
 import '../providers/orders_provider.dart';
-import 'delivery_location_map_widget.dart';
+import '../../../../core/localization/app_localizations.dart';
 
 class CustomerOrderDetailsWidget extends StatefulWidget {
   final Order order;
@@ -28,145 +29,157 @@ class _CustomerOrderDetailsWidgetState
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Section 1 - Order Details
-          widget.shared.buildSectionCard(
-            context: context,
-            title: 'Order Details',
-            icon: Icons.shopping_cart,
-            children: [
-              widget.shared.buildInfoRow(
-                'Order Number',
-                '#ORD-${widget.order.id.toString().padLeft(4, '0')}',
-              ),
-              widget.shared.buildInfoRow(
-                'Creation Date',
-                widget.shared.formatDate(widget.order.createdAt),
-              ),
-              widget.shared.buildInfoRow('Current Status', widget.order.statusDisplay),
-              widget.shared.buildInfoRow('Number of Books', '${widget.order.items.length}'),
-              widget.shared.buildInfoRow(
-                'Subtotal',
-                '\$${widget.order.subtotal.toStringAsFixed(2)}',
-              ),
-              if (widget.shared.hasEffectiveDiscount(widget.order)) ...[
-                widget.shared.buildInfoRow(
-                  'Discount',
-                  '-\$${(widget.order.subtotal - widget.order.totalAmount).toStringAsFixed(2)}',
-                  isHighlighted: true,
-                  textColor: Colors.red,
-                ),
-              ],
-              if (widget.order.shippingCost > 0) ...[
-                widget.shared.buildInfoRow(
-                  'Delivery Cost',
-                  '\$${widget.order.shippingCost.toStringAsFixed(2)}',
-                ),
-              ],
-              // Always show tax if it exists (even if 0, as it might be calculated)
-              widget.shared.buildInfoRow(
-                'Tax',
-                '\$${widget.order.taxAmount.toStringAsFixed(2)}',
-              ),
-              widget.shared.buildInfoRow(
-                'Total Amount',
-                '\$${widget.order.totalAmount.toStringAsFixed(2)}',
-                isHighlighted: true,
-                fontWeight: FontWeight.bold,
-              ),
-            ],
+          Builder(
+            builder: (context) {
+              final localizations = AppLocalizations.of(context);
+              return widget.shared.buildSectionCard(
+                context: context,
+                title: localizations.orderDetails,
+                icon: Icons.shopping_cart,
+                children: [
+                  widget.shared.buildInfoRow(
+                    'Order Number',
+                    '#ORD-${widget.order.id.toString().padLeft(4, '0')}',
+                  ),
+                  widget.shared.buildInfoRow(
+                    'Creation Date',
+                    widget.shared.formatDate(widget.order.createdAt),
+                  ),
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return widget.shared.buildInfoRow(
+                        'Current Status',
+                        localizations.getOrderStatusLabel(widget.order.status),
+                      );
+                    },
+                  ),
+                  widget.shared.buildInfoRow(
+                    'Number of Books',
+                    '${widget.order.items.fold(0, (sum, item) => sum + item.quantity)}',
+                  ),
+                  widget.shared.buildInfoRow(
+                    'Subtotal',
+                    '\$${widget.order.subtotal.toStringAsFixed(2)}',
+                  ),
+                  if (widget.shared.hasEffectiveDiscount(widget.order)) ...[
+                    widget.shared.buildInfoRow(
+                      'Discount',
+                      '-\$${(widget.order.subtotal - widget.order.totalAmount).toStringAsFixed(2)}',
+                      isHighlighted: true,
+                      textColor: Colors.red,
+                    ),
+                  ],
+                  if (widget.order.shippingCost > 0) ...[
+                    widget.shared.buildInfoRow(
+                      'Delivery Cost',
+                      '\$${widget.order.shippingCost.toStringAsFixed(2)}',
+                    ),
+                  ],
+                  // Always show tax if it exists (even if 0, as it might be calculated)
+                  widget.shared.buildInfoRow(
+                    'Tax',
+                    '\$${widget.order.taxAmount.toStringAsFixed(2)}',
+                  ),
+                  widget.shared.buildInfoRow(
+                    'Total Amount',
+                    '\$${widget.order.totalAmount.toStringAsFixed(2)}',
+                    isHighlighted: true,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 16),
 
-          // Section 2 - Customer Information
-          widget.shared.buildSectionCard(
-            context: context,
-            title: 'Customer Information',
-            icon: Icons.person,
-            children: [
-              widget.shared.buildInfoRow('Full Name', widget.order.customerName),
-              widget.shared.buildInfoRow(
-                'Phone Number',
-                widget.order.customerPhone.isNotEmpty
-                    ? widget.order.customerPhone
-                    : 'Not provided',
-              ),
-              widget.shared.buildInfoRow('Email', widget.order.customerEmail),
-              if (widget.order.shippingAddress != null) ...[
-                widget.shared.buildInfoRow(
-                  'Address',
-                  widget.order.shippingAddressText ?? 'No address',
-                ),
-              ],
-              if (widget.order.deliveryCity != null) ...[
-                widget.shared.buildInfoRow('City', widget.order.deliveryCity!),
-              ],
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // Section 3 - Payment Information
-          widget.shared.buildSectionCard(
-            context: context,
-            title: 'Payment Information',
-            icon: Icons.payment,
-            children: [
-              widget.shared.buildInfoRow(
-                'Payment Method',
-                widget.shared.getPaymentMethodDisplay(widget.order.paymentMethod),
-              ),
-              widget.shared.buildInfoRow(
-                'Payment Status',
-                widget.shared.getPaymentStatusDisplay(widget.order.paymentStatus),
-              ),
-              widget.shared.buildInfoRow(
-                'Discount Applied',
-                widget.shared.hasEffectiveDiscount(widget.order) ? 'Yes' : 'No',
-                isHighlighted: widget.shared.hasEffectiveDiscount(widget.order),
-                textColor: widget.shared.hasEffectiveDiscount(widget.order)
-                    ? Colors.green
-                    : null,
-              ),
-              if (widget.shared.hasEffectiveDiscount(widget.order)) ...[
-                if (widget.order.discountCode != null &&
-                    widget.order.discountCode!.isNotEmpty) ...[
+          // Section 2 - Payment Information
+          Builder(
+            builder: (context) {
+              final localizations = AppLocalizations.of(context);
+              return widget.shared.buildSectionCard(
+                context: context,
+                title: localizations.paymentInformation,
+                icon: Icons.payment,
+                children: [
                   widget.shared.buildInfoRow(
-                    'Discount Code',
-                    widget.order.discountCode!,
-                    isHighlighted: true,
-                    textColor: Colors.green,
+                    'Payment Method',
+                    widget.shared.getPaymentMethodDisplay(
+                      widget.order.paymentMethod,
+                      context,
+                    ),
                   ),
-                ],
-                widget.shared.buildInfoRow(
-                  'Discount Amount',
-                  '\$${(widget.order.subtotal - widget.order.totalAmount).toStringAsFixed(2)}',
-                  isHighlighted: true,
-                  textColor: Colors.green,
-                ),
-                if (widget.order.subtotal > 0) ...[
                   widget.shared.buildInfoRow(
-                    'Savings Percentage',
-                    '${(((widget.order.subtotal - widget.order.totalAmount) / widget.order.subtotal) * 100).toStringAsFixed(1)}%',
-                    isHighlighted: true,
-                    textColor: Colors.green,
+                    'Payment Status',
+                    widget.shared.getPaymentStatusDisplay(
+                      widget.order.paymentStatus,
+                      context,
+                    ),
                   ),
+                  widget.shared.buildInfoRow(
+                    'Discount Applied',
+                    widget.shared.hasEffectiveDiscount(widget.order)
+                        ? 'Yes'
+                        : 'No',
+                    isHighlighted: widget.shared.hasEffectiveDiscount(
+                      widget.order,
+                    ),
+                    textColor: widget.shared.hasEffectiveDiscount(widget.order)
+                        ? Colors.green
+                        : null,
+                  ),
+                  if (widget.shared.hasEffectiveDiscount(widget.order)) ...[
+                    if (widget.order.discountCode != null &&
+                        widget.order.discountCode!.isNotEmpty) ...[
+                      widget.shared.buildInfoRow(
+                        'Discount Code',
+                        widget.order.discountCode!,
+                        isHighlighted: true,
+                        textColor: Colors.green,
+                      ),
+                    ],
+                    widget.shared.buildInfoRow(
+                      'Discount Amount',
+                      '\$${(widget.order.subtotal - widget.order.totalAmount).toStringAsFixed(2)}',
+                      isHighlighted: true,
+                      textColor: Colors.green,
+                    ),
+                    if (widget.order.subtotal > 0) ...[
+                      widget.shared.buildInfoRow(
+                        'Savings Percentage',
+                        '${(((widget.order.subtotal - widget.order.totalAmount) / widget.order.subtotal) * 100).toStringAsFixed(1)}%',
+                        isHighlighted: true,
+                        textColor: Colors.green,
+                      ),
+                    ],
+                  ],
                 ],
-              ],
-            ],
+              );
+            },
           ),
           const SizedBox(height: 16),
 
           // Order Items Section
-          widget.shared.buildSectionCard(
-            context: context,
-            title: 'Order Items',
-            icon: Icons.inventory,
-            children: [
-              ...widget.order.items.map((item) => CleanOrderItemCard(item: item)),
-            ],
+          Builder(
+            builder: (context) {
+              final localizations = AppLocalizations.of(context);
+              return widget.shared.buildSectionCard(
+                context: context,
+                title: localizations.orderItems,
+                icon: Icons.inventory,
+                children: [
+                  ...widget.order.items.map(
+                    (item) => CleanOrderItemCard(item: item),
+                  ),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 16),
 
@@ -198,7 +211,12 @@ class _CustomerOrderDetailsWidgetState
                     ),
                   )
                 : const Icon(Icons.map, color: Colors.white),
-            label: const Text('View Delivery Location'),
+            label: Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Text(localizations.viewDeliveryLocation);
+              },
+            ),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.blue,
               foregroundColor: Colors.white,
@@ -226,19 +244,28 @@ class _CustomerOrderDetailsWidgetState
 
       if (mounted) {
         if (locationData != null) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => DeliveryLocationMapWidget(
-                order: widget.order,
-                locationData: locationData,
+          final location = locationData['location'] as Map<String, dynamic>?;
+          final latitude = location?['latitude'] as double?;
+          final longitude = location?['longitude'] as double?;
+
+          if (latitude != null && longitude != null) {
+            await _launchGoogleMaps(latitude, longitude);
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Delivery manager location is not available at the moment.',
+                ),
+                backgroundColor: Colors.orange,
               ),
-            ),
-          );
+            );
+          }
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(provider.error ?? 'Failed to get delivery location'),
+              content: Text(
+                provider.error ?? 'Failed to get delivery location',
+              ),
               backgroundColor: Colors.red,
             ),
           );
@@ -246,15 +273,68 @@ class _CustomerOrderDetailsWidgetState
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${e.toString()}')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
       }
     } finally {
       if (mounted) {
         setState(() {
           _isLoading = false;
         });
+      }
+    }
+  }
+
+  /// Launch Google Maps with the given coordinates
+  Future<void> _launchGoogleMaps(double latitude, double longitude) async {
+    try {
+      // Try multiple URL schemes in order of preference
+      final urls = [
+        // Google Maps app (Android) - navigation mode
+        Uri.parse('google.navigation:q=$latitude,$longitude'),
+        // Google Maps app (Android/iOS) - search mode
+        Uri.parse('comgooglemaps://?q=$latitude,$longitude'),
+        // Geo scheme (Android) - opens default maps app
+        Uri.parse('geo:$latitude,$longitude'),
+        // Google Maps web URL (always works as fallback)
+        Uri.parse(
+          'https://www.google.com/maps/search/?api=1&query=$latitude,$longitude',
+        ),
+      ];
+
+      bool launched = false;
+      for (final url in urls) {
+        try {
+          // Try to launch directly - canLaunchUrl can be unreliable
+          await launchUrl(url, mode: LaunchMode.externalApplication);
+          launched = true;
+          break;
+        } catch (e) {
+          // Try next URL if this one fails
+          debugPrint('Failed to launch URL $url: $e');
+          continue;
+        }
+      }
+
+      if (!launched) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Unable to open maps application.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error opening maps: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }

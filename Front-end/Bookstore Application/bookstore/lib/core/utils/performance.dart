@@ -52,10 +52,7 @@ class Performance {
   static Future<void> precacheAppImages(BuildContext context) async {
     // List of important app images to precache
     final List<String> imagePaths = [
-      'assets/images/welcome/welcome_bg.jpg',
-      'assets/images/welcome/welcome_1.jpg',
-      'assets/images/welcome/welcome_2.jpg',
-      'assets/images/welcome/welcome_3.jpg',
+      // Add paths to important app images here
     ];
 
     // Precache images to avoid jank when they're first displayed

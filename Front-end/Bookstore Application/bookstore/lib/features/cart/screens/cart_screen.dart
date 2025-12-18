@@ -5,9 +5,11 @@ import '../../../core/constants/app_dimensions.dart';
 import '../../../core/widgets/common/custom_button.dart';
 import '../../../core/widgets/common/loading_indicator.dart';
 import '../../../core/services/api_config.dart';
+import '../../../core/localization/app_localizations.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/cart_provider.dart';
 import '../models/cart_item.dart';
+import '../utils/discount_error_translator.dart';
 
 class CartScreen extends StatefulWidget {
   const CartScreen({super.key});
@@ -55,9 +57,10 @@ class _CartScreenState extends State<CartScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Shopping Cart'),
+        title: Text(localizations.shoppingCart),
         actions: [
           Consumer<CartProvider>(
             builder: (context, cartProvider, child) {
@@ -65,7 +68,7 @@ class _CartScreenState extends State<CartScreen> {
                 return TextButton(
                   onPressed: () => _showClearCartDialog(),
                   child: Text(
-                    'Clear All',
+                    localizations.clearAll,
                     style: TextStyle(
                       color: Theme.of(context).colorScheme.onPrimary,
                     ),
@@ -108,6 +111,7 @@ class _CartScreenState extends State<CartScreen> {
   }
 
   Widget _buildEmptyCart() {
+    final localizations = AppLocalizations.of(context);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(AppDimensions.paddingL),
@@ -123,7 +127,7 @@ class _CartScreenState extends State<CartScreen> {
             ),
             const SizedBox(height: AppDimensions.spacingL),
             Text(
-              'Your cart is empty',
+              localizations.emptyCart,
               style: TextStyle(
                 fontSize: AppDimensions.fontSizeXL,
                 fontWeight: FontWeight.w600,
@@ -132,7 +136,7 @@ class _CartScreenState extends State<CartScreen> {
             ),
             const SizedBox(height: AppDimensions.spacingM),
             Text(
-              'Add some books to your cart to get started',
+              localizations.emptyCartDescription,
               style: TextStyle(
                 fontSize: AppDimensions.fontSizeM,
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -141,7 +145,7 @@ class _CartScreenState extends State<CartScreen> {
             ),
             const SizedBox(height: AppDimensions.spacingXL),
             CustomButton(
-              text: 'Continue Shopping',
+              text: localizations.continueShopping,
               onPressed: () => Navigator.pop(context),
               type: ButtonType.primary,
               size: ButtonSize.large,
@@ -213,12 +217,22 @@ class _CartScreenState extends State<CartScreen> {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: AppDimensions.spacingS),
-                    Text(
-                      'by ${item.book.author?.name ?? 'Unknown Author'}',
-                      style: TextStyle(
-                        fontSize: AppDimensions.fontSizeS,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
+                    Builder(
+                      builder: (context) {
+                        final localizations = AppLocalizations.of(context);
+                        return Text(
+                          localizations.byAuthorCart(
+                            item.book.author?.name ??
+                                localizations.unknownAuthor,
+                          ),
+                          style: TextStyle(
+                            fontSize: AppDimensions.fontSizeS,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
+                          ),
+                        );
+                      },
                     ),
                     const SizedBox(height: AppDimensions.spacingS),
 
@@ -311,8 +325,8 @@ class _CartScreenState extends State<CartScreen> {
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+          begin: AlignmentDirectional.topStart,
+          end: AlignmentDirectional.bottomEnd,
           colors: [
             AppColors.primary.withValues(alpha: 0.1),
             AppColors.uranianBlue.withValues(alpha: 0.1),
@@ -399,8 +413,9 @@ class _CartScreenState extends State<CartScreen> {
             // Checkout Button
             Consumer<AuthProvider>(
               builder: (context, authProvider, child) {
+                final localizations = AppLocalizations.of(context);
                 return CustomButton(
-                  text: 'Proceed to Checkout',
+                  text: localizations.proceedToCheckoutButton,
                   onPressed: authProvider.isAuthenticated
                       ? () => _proceedToCheckout(cartProvider)
                       : () => _showLoginRequired(),
@@ -456,13 +471,20 @@ class _CartScreenState extends State<CartScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Discount Applied',
-                        style: TextStyle(
-                          fontSize: AppDimensions.fontSizeS,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          fontWeight: FontWeight.w500,
-                        ),
+                      Builder(
+                        builder: (context) {
+                          final localizations = AppLocalizations.of(context);
+                          return Text(
+                            localizations.discountAppliedLabel,
+                            style: TextStyle(
+                              fontSize: AppDimensions.fontSizeS,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          );
+                        },
                       ),
                       const SizedBox(height: AppDimensions.spacingXS),
                       Text(
@@ -476,47 +498,54 @@ class _CartScreenState extends State<CartScreen> {
                     ],
                   ),
                 ),
-                Row(
-                  children: [
-                    IconButton(
-                      onPressed: () => _editDiscountCode(cartProvider),
-                      icon: const Icon(
-                        Icons.edit_outlined,
-                        color: AppColors.primary,
-                        size: 20,
-                      ),
-                      tooltip: 'Edit discount code',
-                      style: IconButton.styleFrom(
-                        backgroundColor: AppColors.primary.withValues(
-                          alpha: 0.1,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(
-                            AppDimensions.radiusS,
+                Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return Row(
+                      children: [
+                        IconButton(
+                          onPressed: () => _editDiscountCode(cartProvider),
+                          icon: const Icon(
+                            Icons.edit_outlined,
+                            color: AppColors.primary,
+                            size: 20,
+                          ),
+                          tooltip: localizations.editDiscountCodeTooltip,
+                          style: IconButton.styleFrom(
+                            backgroundColor: AppColors.primary.withValues(
+                              alpha: 0.1,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(
+                                AppDimensions.radiusS,
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                    ),
-                    const SizedBox(width: AppDimensions.spacingS),
-                    IconButton(
-                      onPressed: () =>
-                          cartProvider.removeDiscountCode(context: context),
-                      icon: const Icon(
-                        Icons.close,
-                        color: AppColors.error,
-                        size: 20,
-                      ),
-                      tooltip: 'Remove discount code',
-                      style: IconButton.styleFrom(
-                        backgroundColor: AppColors.error.withValues(alpha: 0.1),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(
-                            AppDimensions.radiusS,
+                        const SizedBox(width: AppDimensions.spacingS),
+                        IconButton(
+                          onPressed: () =>
+                              cartProvider.removeDiscountCode(context: context),
+                          icon: const Icon(
+                            Icons.close,
+                            color: AppColors.error,
+                            size: 20,
+                          ),
+                          tooltip: localizations.removeDiscountCodeTooltip,
+                          style: IconButton.styleFrom(
+                            backgroundColor: AppColors.error.withValues(
+                              alpha: 0.1,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(
+                                AppDimensions.radiusS,
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                    ),
-                  ],
+                      ],
+                    );
+                  },
                 ),
               ],
             ),
@@ -541,13 +570,20 @@ class _CartScreenState extends State<CartScreen> {
                     size: 16,
                   ),
                   const SizedBox(width: AppDimensions.spacingS),
-                  Text(
-                    'You saved \$${cartProvider.discountAmount.toStringAsFixed(2)}',
-                    style: const TextStyle(
-                      fontSize: AppDimensions.fontSizeM,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.success,
-                    ),
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Text(
+                        localizations.youSavedAmount(
+                          cartProvider.discountAmount.toStringAsFixed(2),
+                        ),
+                        style: const TextStyle(
+                          fontSize: AppDimensions.fontSizeM,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.success,
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -560,54 +596,65 @@ class _CartScreenState extends State<CartScreen> {
     return Row(
       children: [
         Expanded(
-          child: TextField(
-            controller: _discountController,
-            decoration: const InputDecoration(
-              hintText: 'Enter discount code',
-              border: OutlineInputBorder(),
-              contentPadding: EdgeInsets.symmetric(
-                horizontal: AppDimensions.paddingM,
-                vertical: AppDimensions.paddingS,
-              ),
-            ),
+          child: Builder(
+            builder: (context) {
+              final localizations = AppLocalizations.of(context);
+              return TextField(
+                controller: _discountController,
+                decoration: InputDecoration(
+                  hintText: localizations.enterDiscountCode,
+                  border: const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: AppDimensions.paddingM,
+                    vertical: AppDimensions.paddingS,
+                  ),
+                ),
+              );
+            },
           ),
         ),
         const SizedBox(width: AppDimensions.spacingM),
-        CustomButton(
-          text: 'Apply',
-          onPressed: () => _applyDiscountCode(cartProvider),
-          type: ButtonType.secondary,
+        Builder(
+          builder: (context) {
+            final localizations = AppLocalizations.of(context);
+            return CustomButton(
+              text: localizations.applyButton,
+              onPressed: () => _applyDiscountCode(cartProvider),
+              type: ButtonType.secondary,
+            );
+          },
         ),
       ],
     );
   }
 
   Widget _buildPriceBreakdown(CartProvider cartProvider) {
+    final localizations = AppLocalizations.of(context);
     return Column(
       children: [
         _buildPriceRow(
-          'Subtotal',
+          localizations.subtotalLabel,
           '\$${cartProvider.subtotal.toStringAsFixed(2)}',
         ),
         if (cartProvider.totalSavings > 0)
           _buildPriceRow(
-            'Savings',
+            localizations.savingsLabel,
             '-\$${cartProvider.totalSavings.toStringAsFixed(2)}',
             color: AppColors.success,
           ),
         if (cartProvider.taxAmount > 0)
           _buildPriceRow(
-            'Tax',
+            localizations.taxLabel,
             '\$${cartProvider.taxAmount.toStringAsFixed(2)}',
           ),
         if (cartProvider.deliveryCost > 0)
           _buildPriceRow(
-            'Delivery',
+            localizations.deliveryLabel,
             '\$${cartProvider.deliveryCost.toStringAsFixed(2)}',
           ),
         const Divider(),
         _buildPriceRow(
-          'Total',
+          localizations.totalLabel,
           '\$${cartProvider.total.toStringAsFixed(2)}',
           isTotal: true,
         ),
@@ -684,32 +731,31 @@ class _CartScreenState extends State<CartScreen> {
   }
 
   void _showClearCartDialog() {
+    final localizations = AppLocalizations.of(context);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Clear Cart'),
-        content: const Text(
-          'Are you sure you want to remove all items from your cart?',
-        ),
+        title: Text(localizations.clearAll),
+        content: Text(localizations.confirmClearCart),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(localizations.cancel),
           ),
           TextButton(
             onPressed: () {
               Navigator.pop(context);
               Provider.of<CartProvider>(context, listen: false).clearCart();
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Cart cleared'),
+                SnackBar(
+                  content: Text(localizations.cartCleared),
                   backgroundColor: AppColors.success,
                 ),
               );
             },
-            child: const Text(
-              'Clear',
-              style: TextStyle(color: AppColors.error),
+            child: Text(
+              localizations.clear,
+              style: const TextStyle(color: AppColors.error),
             ),
           ),
         ],
@@ -775,19 +821,27 @@ class _CartScreenState extends State<CartScreen> {
       final success = await cartProvider.applyDiscountCode(result, token);
 
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         if (success) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Discount code updated successfully!'),
+            SnackBar(
+              content: Text(localizations.discountCodeUpdatedSuccessfully),
               backgroundColor: AppColors.success,
             ),
           );
         } else {
+          final localizations = AppLocalizations.of(context);
+          final translatedError = DiscountErrorTranslator.translateError(
+            cartProvider.errorMessage,
+            null, // Error code not available in provider yet
+            localizations,
+          );
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                cartProvider.errorMessage ??
-                    'Failed to apply new discount code',
+                translatedError.isNotEmpty
+                    ? translatedError
+                    : localizations.failedToApplyDiscountCode,
               ),
               backgroundColor: AppColors.error,
             ),
@@ -799,13 +853,14 @@ class _CartScreenState extends State<CartScreen> {
 
   Future<void> _applyDiscountCode(CartProvider cartProvider) async {
     if (!mounted) return;
-    
+
     final discountCode = _discountController.text.trim();
     if (discountCode.isEmpty) {
       if (!mounted) return;
+      final localizations = AppLocalizations.of(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a discount code'),
+        SnackBar(
+          content: Text(localizations.pleaseEnterDiscountCode),
           backgroundColor: AppColors.warning,
         ),
       );
@@ -826,20 +881,29 @@ class _CartScreenState extends State<CartScreen> {
     );
 
     if (!mounted) return;
-    
+
     if (success) {
       _discountController.clear();
+      final localizations = AppLocalizations.of(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Discount code applied successfully!'),
+        SnackBar(
+          content: Text(localizations.discountCodeAppliedSuccessfully),
           backgroundColor: AppColors.success,
         ),
       );
     } else {
+      final localizations = AppLocalizations.of(context);
+      final translatedError = DiscountErrorTranslator.translateError(
+        cartProvider.errorMessage,
+        null, // Error code not available in provider yet
+        localizations,
+      );
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            cartProvider.errorMessage ?? 'Failed to apply discount code',
+            translatedError.isNotEmpty
+                ? translatedError
+                : localizations.failedToApplyDiscountCode,
           ),
           backgroundColor: AppColors.error,
         ),
@@ -850,10 +914,11 @@ class _CartScreenState extends State<CartScreen> {
   void _proceedToCheckout(CartProvider cartProvider) {
     final errors = cartProvider.validateCart();
     if (errors.isNotEmpty) {
+      final localizations = AppLocalizations.of(context);
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('Cart Issues'),
+          title: Text(localizations.cartIssues),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -869,7 +934,7 @@ class _CartScreenState extends State<CartScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('OK'),
+              child: Text(localizations.ok),
             ),
           ],
         ),

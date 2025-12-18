@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../models/ad.dart';
 import '../../providers/ads_provider.dart';
+import '../../../../../core/localization/app_localizations.dart';
 
 class AdDetailsScreen extends StatefulWidget {
   final Ad ad;
@@ -16,21 +17,22 @@ class AdDetailsScreen extends StatefulWidget {
 class _AdDetailsScreenState extends State<AdDetailsScreen> {
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Advertisement Details'),
+        title: Text(localizations.advertisementDetails),
         elevation: 0,
         actions: [
           IconButton(
             onPressed: () => _navigateToEdit(),
             icon: const Icon(Icons.edit),
-            tooltip: 'Edit Advertisement',
+            tooltip: localizations.editAdvertisement,
           ),
           IconButton(
             onPressed: () => _deleteAd(),
             icon: const Icon(Icons.delete),
             color: Theme.of(context).colorScheme.error,
-            tooltip: 'Delete Advertisement',
+            tooltip: localizations.deleteAdvertisement,
           ),
         ],
       ),
@@ -43,6 +45,7 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
         ad.endDate != null && ad.endDate!.isBefore(DateTime.now());
 
     return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -92,7 +95,9 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                   errorBuilder: (context, error, stackTrace) {
                     return Container(
                       height: 250,
-                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.surfaceContainerHighest,
                       child: Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -100,13 +105,17 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                             Icon(
                               Icons.broken_image,
                               size: 48,
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              'Image not available',
+                              AppLocalizations.of(context).imageNotAvailable,
                               style: TextStyle(
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
                               ),
                             ),
                           ],
@@ -128,13 +137,17 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Description',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  Text(
+                    AppLocalizations.of(context).descriptionLabel,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    ad.content ?? 'No description provided',
+                    ad.content ??
+                        AppLocalizations.of(context).noDescriptionProvided,
                     style: const TextStyle(fontSize: 16, height: 1.5),
                   ),
                 ],
@@ -180,11 +193,12 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                         ),
                         const SizedBox(width: 12),
                         Text(
-                          'Discount Code',
+                          AppLocalizations.of(context).discountCodeLabel,
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
-                            color: Theme.of(context).brightness == Brightness.dark
+                            color:
+                                Theme.of(context).brightness == Brightness.dark
                                 ? Colors.greenAccent[400]
                                 : Colors.green[700],
                           ),
@@ -195,7 +209,9 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.surfaceContainerHighest,
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
                           color: Theme.of(context).brightness == Brightness.dark
@@ -206,7 +222,7 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                       child: Row(
                         children: [
                           Text(
-                            'Code: ',
+                            '${AppLocalizations.of(context).codeLabel}: ',
                             style: TextStyle(
                               fontWeight: FontWeight.w500,
                               color: Theme.of(context).colorScheme.onSurface,
@@ -218,7 +234,9 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 16,
-                                color: Theme.of(context).brightness == Brightness.dark
+                                color:
+                                    Theme.of(context).brightness ==
+                                        Brightness.dark
                                     ? Colors.greenAccent[400]
                                     : Colors.green[700],
                               ),
@@ -230,11 +248,15 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                             },
                             icon: Icon(
                               Icons.copy,
-                              color: Theme.of(context).brightness == Brightness.dark
+                              color:
+                                  Theme.of(context).brightness ==
+                                      Brightness.dark
                                   ? Colors.greenAccent[400]
                                   : Colors.green[700],
                             ),
-                            tooltip: 'Copy discount code',
+                            tooltip: AppLocalizations.of(
+                              context,
+                            ).copyDiscountCode,
                           ),
                         ],
                       ),
@@ -254,16 +276,19 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Advertisement Information',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  Text(
+                    AppLocalizations.of(context).advertisementInformation,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 16),
 
                   // Start Date
                   _buildInfoRow(
                     icon: Icons.calendar_today,
-                    label: 'Start Date',
+                    label: AppLocalizations.of(context).startDateLabel,
                     value: _formatDate(ad.startDate ?? DateTime.now()),
                   ),
 
@@ -272,10 +297,10 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                   // End Date
                   _buildInfoRow(
                     icon: Icons.event,
-                    label: 'End Date',
+                    label: AppLocalizations.of(context).endDateLabel,
                     value: ad.endDate != null
                         ? _formatDate(ad.endDate!)
-                        : 'Not set',
+                        : AppLocalizations.of(context).notSet,
                     valueColor: isExpired ? Colors.red : null,
                   ),
 
@@ -284,8 +309,8 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                   // Ad Type
                   _buildInfoRow(
                     icon: Icons.category,
-                    label: 'Type',
-                    value: ad.adTypeDisplayName,
+                    label: AppLocalizations.of(context).typeLabel,
+                    value: _getAdTypeDisplayName(ad),
                   ),
 
                   const SizedBox(height: 8),
@@ -293,7 +318,7 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                   // Status
                   _buildInfoRow(
                     icon: Icons.info,
-                    label: 'Status',
+                    label: AppLocalizations.of(context).statusLabel,
                     value: _getStatusDisplayName(ad.status),
                   ),
 
@@ -302,7 +327,7 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                   // Created Date
                   _buildInfoRow(
                     icon: Icons.add_circle_outline,
-                    label: 'Created',
+                    label: AppLocalizations.of(context).createdLabel,
                     value: _formatDate(ad.createdAt ?? DateTime.now()),
                   ),
 
@@ -311,7 +336,7 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                   // Last Updated
                   _buildInfoRow(
                     icon: Icons.update,
-                    label: 'Last Updated',
+                    label: AppLocalizations.of(context).lastUpdatedLabel,
                     value: _formatDate(ad.updatedAt ?? DateTime.now()),
                   ),
                 ],
@@ -328,7 +353,7 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                 child: ElevatedButton.icon(
                   onPressed: () => _navigateToEdit(),
                   icon: const Icon(Icons.edit),
-                  label: const Text('Edit Advertisement'),
+                  label: Text(AppLocalizations.of(context).editAdvertisement),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Theme.of(context).colorScheme.primary,
                     foregroundColor: Theme.of(context).colorScheme.onPrimary,
@@ -341,10 +366,12 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                 child: OutlinedButton.icon(
                   onPressed: () => _deleteAd(),
                   icon: const Icon(Icons.delete),
-                  label: const Text('Delete'),
+                  label: Text(AppLocalizations.of(context).delete),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Theme.of(context).colorScheme.error,
-                    side: BorderSide(color: Theme.of(context).colorScheme.error),
+                    side: BorderSide(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
                 ),
@@ -361,9 +388,10 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
                   _copyToClipboard(ad.discountCode!);
                 },
                 icon: const Icon(Icons.copy),
-                label: const Text('Copy Discount Code'),
+                label: Text(AppLocalizations.of(context).copyDiscountCode),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).brightness == Brightness.dark
+                  backgroundColor:
+                      Theme.of(context).brightness == Brightness.dark
                       ? Colors.greenAccent[700]
                       : Colors.green[700],
                   foregroundColor: Colors.white,
@@ -378,21 +406,22 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
   }
 
   Widget _buildStatusChip(Ad ad, bool isExpired) {
+    final localizations = AppLocalizations.of(context);
     Color chipColor;
     String statusText;
 
     if (isExpired) {
       chipColor = Colors.red;
-      statusText = 'Expired';
+      statusText = localizations.advertisementStatusExpired;
     } else if (ad.status == 'active') {
       chipColor = Colors.green;
-      statusText = 'Active';
+      statusText = localizations.advertisementStatusActive;
     } else if (ad.status == 'scheduled') {
       chipColor = Colors.orange;
-      statusText = 'Scheduled';
+      statusText = localizations.advertisementStatusScheduled;
     } else {
       chipColor = Colors.grey;
-      statusText = 'Inactive';
+      statusText = localizations.advertisementStatusInactive;
     }
 
     return Container(
@@ -420,7 +449,7 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
         borderRadius: BorderRadius.circular(16),
       ),
       child: Text(
-        ad.adTypeDisplayName,
+        _getAdTypeDisplayName(ad),
         style: const TextStyle(
           color: Colors.white,
           fontSize: 12,
@@ -428,6 +457,14 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
         ),
       ),
     );
+  }
+
+  String _getAdTypeDisplayName(Ad ad) {
+    final localizations = AppLocalizations.of(context);
+    if (ad.isDiscountCodeAd) {
+      return localizations.discountCodeAdvertisement;
+    }
+    return localizations.generalAdvertisement;
   }
 
   Widget _buildInfoRow({
@@ -469,25 +506,27 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
   }
 
   String _getStatusDisplayName(String status) {
+    final localizations = AppLocalizations.of(context);
     switch (status.toLowerCase()) {
       case 'active':
-        return 'Active';
+        return localizations.advertisementStatusActive;
       case 'inactive':
-        return 'Inactive';
+        return localizations.advertisementStatusInactive;
       case 'scheduled':
-        return 'Scheduled';
+        return localizations.advertisementStatusScheduled;
       case 'expired':
-        return 'Expired';
+        return localizations.advertisementStatusExpired;
       default:
         return status;
     }
   }
 
   void _copyToClipboard(String text) {
+    final localizations = AppLocalizations.of(context);
     Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Copied: $text'),
+        content: Text('${localizations.copied}: $text'),
         backgroundColor: Colors.green,
         duration: const Duration(seconds: 2),
       ),
@@ -503,22 +542,21 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
   }
 
   Future<void> _deleteAd() async {
+    final localizations = AppLocalizations.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Advertisement'),
-        content: const Text(
-          'Are you sure you want to delete this advertisement? This action cannot be undone.',
-        ),
+        title: Text(localizations.deleteAdvertisement),
+        content: Text(localizations.deleteAdvertisementConfirmation),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(localizations.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
+            child: Text(localizations.delete),
           ),
         ],
       ),
@@ -530,9 +568,10 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
         await provider.deleteAd(widget.ad.id);
 
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Advertisement deleted successfully'),
+            SnackBar(
+              content: Text(localizations.advertisementDeletedSuccessfully),
               backgroundColor: Colors.green,
             ),
           );
@@ -540,9 +579,12 @@ class _AdDetailsScreenState extends State<AdDetailsScreen> {
         }
       } catch (e) {
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Failed to delete advertisement: $e'),
+              content: Text(
+                '${localizations.failedToDeleteAdvertisementColon}: $e',
+              ),
               backgroundColor: Colors.red,
             ),
           );

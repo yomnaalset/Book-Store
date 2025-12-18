@@ -12,7 +12,19 @@ class ReturnRequest {
   final String? deliveryManagerPhone;
   final double fineAmount;
   final String? fineInvoiceId;
+  final int? fineId; // Return fine ID
+  final int? fineDaysLate; // Days late for fine
+  final String? finePaymentMethod; // Payment method for fine
+  final String? finePaymentStatus; // Payment status for fine
   final String? returnNotes;
+  // Penalty and payment information
+  final double? penaltyAmount;
+  final int? overdueDays;
+  final bool? hasPenalty;
+  final String? paymentMethod;
+  final String? paymentStatus;
+  final DateTime? dueDate;
+  final bool? isFinalized;
   final DateTime requestedAt;
   final DateTime? acceptedAt;
   final DateTime? pickedUpAt;
@@ -29,12 +41,23 @@ class ReturnRequest {
     this.deliveryManagerPhone,
     required this.fineAmount,
     this.fineInvoiceId,
+    this.fineId,
+    this.fineDaysLate,
+    this.finePaymentMethod,
+    this.finePaymentStatus,
     this.returnNotes,
     required this.requestedAt,
     this.acceptedAt,
     this.pickedUpAt,
     this.completedAt,
     required this.updatedAt,
+    this.penaltyAmount,
+    this.overdueDays,
+    this.hasPenalty,
+    this.paymentMethod,
+    this.paymentStatus,
+    this.dueDate,
+    this.isFinalized,
   });
 
   /// Parse fine amount from JSON - handles both string and numeric values
@@ -244,6 +267,67 @@ class ReturnRequest {
       }
     }
 
+    // Parse fine information if available
+    int? fineId;
+    int? fineDaysLate;
+    String? finePaymentMethod;
+    String? finePaymentStatus;
+
+    if (json['fine'] != null && json['fine'] is Map) {
+      final fineData = json['fine'] as Map<String, dynamic>;
+      fineId = fineData['id'] is int
+          ? fineData['id']
+          : int.tryParse(fineData['id']?.toString() ?? '');
+      fineDaysLate = fineData['days_late'] is int
+          ? fineData['days_late']
+          : int.tryParse(fineData['days_late']?.toString() ?? '');
+      finePaymentMethod = fineData['payment_method']?.toString();
+      finePaymentStatus = fineData['payment_status']?.toString();
+    }
+
+    // Parse penalty and payment information
+    double? penaltyAmount;
+    if (json['penalty_amount'] != null) {
+      penaltyAmount = json['penalty_amount'] is double
+          ? json['penalty_amount']
+          : json['penalty_amount'] is int
+          ? json['penalty_amount'].toDouble()
+          : double.tryParse(json['penalty_amount'].toString());
+    }
+
+    int? overdueDays;
+    if (json['overdue_days'] != null) {
+      overdueDays = json['overdue_days'] is int
+          ? json['overdue_days']
+          : int.tryParse(json['overdue_days'].toString());
+    }
+
+    bool? hasPenalty;
+    if (json['has_penalty'] != null) {
+      hasPenalty = json['has_penalty'] is bool
+          ? json['has_penalty']
+          : json['has_penalty'].toString().toLowerCase() == 'true';
+    }
+
+    String? paymentMethod = json['payment_method']?.toString();
+    String? paymentStatus = json['payment_status']?.toString();
+
+    DateTime? dueDate;
+    if (json['due_date'] != null) {
+      try {
+        dueDate = DateTime.parse(json['due_date']);
+      } catch (e) {
+        debugPrint('Error parsing due_date: $e');
+      }
+    }
+
+    bool? isFinalized;
+    if (json['is_finalized'] != null) {
+      isFinalized = json['is_finalized'] is bool
+          ? json['is_finalized']
+          : json['is_finalized'].toString().toLowerCase() == 'true';
+    }
+
     return ReturnRequest(
       id: json['id']?.toString() ?? '',
       borrowRequest: borrowReq,
@@ -254,6 +338,10 @@ class ReturnRequest {
       deliveryManagerPhone: json['delivery_manager_phone'],
       fineAmount: _parseFineAmount(json['fine_amount'] ?? 0),
       fineInvoiceId: json['fine_invoice_id'],
+      fineId: fineId,
+      fineDaysLate: fineDaysLate,
+      finePaymentMethod: finePaymentMethod,
+      finePaymentStatus: finePaymentStatus,
       returnNotes: json['return_notes'],
       requestedAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'])
@@ -272,6 +360,13 @@ class ReturnRequest {
       updatedAt: json['updated_at'] != null
           ? DateTime.parse(json['updated_at'])
           : DateTime.now(),
+      penaltyAmount: penaltyAmount,
+      overdueDays: overdueDays,
+      hasPenalty: hasPenalty,
+      paymentMethod: paymentMethod,
+      paymentStatus: paymentStatus,
+      dueDate: dueDate,
+      isFinalized: isFinalized,
     );
   }
 

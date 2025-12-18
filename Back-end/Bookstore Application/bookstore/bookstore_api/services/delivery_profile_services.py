@@ -336,6 +336,44 @@ class DeliveryProfileService:
             raise ValueError(f"Failed to get delivery manager stats: {str(e)}")
     
     @staticmethod
+    def record_status_history(delivery_profile, old_status, new_status, reason=None):
+        """
+        Record delivery profile status change in history for debugging and reporting.
+        Records: OFFLINE → ONLINE, ONLINE → BUSY, BUSY → ONLINE
+        
+        Args:
+            delivery_profile: DeliveryProfile instance
+            old_status: Previous status
+            new_status: New status
+            reason: Optional reason for the status change
+        """
+        try:
+            # Only record if status actually changed
+            if old_status == new_status:
+                return
+            
+            # Log to database for history tracking
+            # Using logger for now, but can be extended to use a dedicated model
+            logger.info(
+                f"Delivery Profile Status History - User {delivery_profile.user.id}: "
+                f"{old_status} → {new_status} "
+                f"(Reason: {reason or 'Automatic'}) at {timezone.now()}"
+            )
+            
+            # TODO: If a DeliveryProfileStatusHistory model is created, record here:
+            # DeliveryProfileStatusHistory.objects.create(
+            #     delivery_profile=delivery_profile,
+            #     old_status=old_status,
+            #     new_status=new_status,
+            #     reason=reason,
+            #     changed_at=timezone.now()
+            # )
+            
+        except Exception as e:
+            logger.error(f"Error recording status history: {str(e)}")
+            # Don't raise exception as this is not critical
+    
+    @staticmethod
     def notify_status_change(delivery_profile, old_status, new_status):
         """
         Send notification when delivery manager status changes.
@@ -349,6 +387,9 @@ class DeliveryProfileService:
             # Only notify if status actually changed
             if old_status == new_status:
                 return
+            
+            # Record status history first
+            DeliveryProfileService.record_status_history(delivery_profile, old_status, new_status)
             
             # Create notification for admins
             admin_users = User.objects.filter(
@@ -498,6 +539,102 @@ class DeliveryProfileService:
             raise ValueError(f"Failed to get delivery admin profiles: {str(e)}")
     
     @staticmethod
+    def has_active_deliveries(user, exclude_order_id=None, exclude_return_id=None):
+        """
+        UNIFIED FUNCTION: Check if a delivery manager has any active deliveries.
+        This is the SINGLE SOURCE OF TRUTH for determining active delivery status.
+        
+        Args:
+            user: User instance (must be a delivery administrator)
+            exclude_order_id: Optional order ID to exclude from check
+            exclude_return_id: Optional return request ID to exclude from check
+            
+        Returns:
+            bool: True if delivery manager has active deliveries, False otherwise
+        """
+        if not user.is_delivery_admin():
+            return False
+        
+        try:
+            from ..models import Order, DeliveryRequest
+            from ..models.borrowing_model import BorrowRequest, BorrowStatusChoices
+            from ..models.return_model import ReturnRequest, ReturnStatus
+            
+            # Check for active delivery requests (orders in delivery)
+            active_requests_query = DeliveryRequest.objects.filter(
+                delivery_manager=user,
+                status__in=['picked_up', 'in_transit', 'in_progress']
+            ).exclude(
+                status__in=['completed', 'delivered', 'cancelled']
+            ).exclude(
+                order__status__in=['completed', 'delivered', 'cancelled', 'rejected_by_admin', 'rejected_by_delivery_manager']
+            )
+            
+            if exclude_order_id:
+                active_requests_query = active_requests_query.exclude(order_id=exclude_order_id)
+            
+            if active_requests_query.exists():
+                return True
+            
+            # Check for active orders in delivery
+            active_orders_query = Order.objects.filter(
+                delivery_request__delivery_manager=user,
+                status__in=['in_delivery', 'in_progress', 'delivery_in_progress']
+            ).exclude(status__in=['completed', 'delivered', 'rejected_by_admin', 'rejected_by_delivery_manager', 'cancelled'])
+            
+            # For 'delivered' orders, only count them as active if they're borrow orders
+            # with borrow_request status OUT_FOR_DELIVERY (not ACTIVE)
+            active_orders_query = active_orders_query.exclude(
+                status='delivered',
+                order_type='borrowing',
+                borrow_request__status=BorrowStatusChoices.ACTIVE
+            )
+            
+            if exclude_order_id:
+                active_orders_query = active_orders_query.exclude(id=exclude_order_id)
+            
+            if active_orders_query.exists():
+                return True
+            
+            # Check for active borrow requests (OUT_FOR_DELIVERY means delivery started but not completed)
+            active_borrows = BorrowRequest.objects.filter(
+                delivery_person=user,
+                status__in=[
+                    BorrowStatusChoices.OUT_FOR_DELIVERY,
+                    'out_for_delivery'  # String version for compatibility
+                ]
+            ).exclude(status__in=[BorrowStatusChoices.ACTIVE, BorrowStatusChoices.DELIVERED])
+            
+            if active_borrows.exists():
+                return True
+            
+            # Check for active return requests (IN_PROGRESS means delivery started but not completed)
+            active_returns_query = ReturnRequest.objects.filter(
+                delivery_manager=user,
+                status=ReturnStatus.IN_PROGRESS
+            )
+            
+            if exclude_return_id:
+                active_returns_query = active_returns_query.exclude(id=exclude_return_id)
+            
+            if active_returns_query.exists():
+                return True
+            
+            # Check for active delivery requests
+            if DeliveryRequest.objects.filter(
+                delivery_manager=user,
+                status='in_operation'
+            ).exists():
+                return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error checking active deliveries for user {user.id}: {str(e)}")
+            # On error, assume there are active deliveries to be safe
+            return True
+    
+    @staticmethod
     def start_delivery_task(user):
         """
         Automatically change delivery manager status to busy when starting a delivery.
@@ -522,7 +659,13 @@ class DeliveryProfileService:
             
             if success:
                 logger.info(f"Automatically changed delivery status from '{old_status}' to 'busy' for user {user.id}")
-                # Send notification about automatic status change
+                # Record status history and send notification
+                DeliveryProfileService.record_status_history(
+                    delivery_profile, 
+                    old_status, 
+                    'busy',
+                    reason='Delivery started'
+                )
                 DeliveryProfileService.notify_status_change(delivery_profile, old_status, 'busy')
             else:
                 logger.warning(
@@ -546,7 +689,7 @@ class DeliveryProfileService:
             raise ValueError(f"Failed to start delivery task: {str(e)}")
     
     @staticmethod
-    def complete_delivery_task(user, completed_order_id=None):
+    def complete_delivery_task(user, completed_order_id=None, completed_return_id=None):
         """
         Automatically change delivery manager status from busy to online when completing a delivery.
         This is the ONLY automatic status change allowed in the system.
@@ -555,6 +698,7 @@ class DeliveryProfileService:
         Args:
             user: User instance (must be a delivery administrator)
             completed_order_id: Optional order ID to exclude from active deliveries check
+            completed_return_id: Optional return request ID to exclude from active returns check
             
         Returns:
             bool: True if status was changed, False if not busy or if other active deliveries exist
@@ -573,98 +717,15 @@ class DeliveryProfileService:
                 logger.info(f"Delivery manager {user.id} status is not 'busy' (current: {delivery_profile.delivery_status}), skipping status change")
                 return False
             
-            # Check for other active delivery assignments (excluding the one just completed)
-            from ..models import DeliveryAssignment, Order, DeliveryRequest
-            from ..models.borrowing_model import BorrowRequest
-            
-            # Only count assignments that are actually in delivery (not just assigned/accepted)
-            # Also exclude assignments for completed/delivered orders and assignments with completed/delivered status
-            active_assignments_query = DeliveryAssignment.objects.filter(
-                delivery_manager=user,
-                status__in=['picked_up', 'in_transit', 'in_progress']
-                # Removed 'assigned' and 'accepted' - these mean delivery hasn't started yet
-            ).exclude(
-                status__in=['completed', 'delivered', 'cancelled']
-            ).exclude(
-                order__status__in=['completed', 'delivered', 'cancelled', 'rejected_by_admin', 'rejected_by_delivery_manager']
+            # Use unified function to check for active deliveries
+            has_active = DeliveryProfileService.has_active_deliveries(
+                user,
+                exclude_order_id=completed_order_id,
+                exclude_return_id=completed_return_id
             )
             
-            # Exclude the current order if provided
-            if completed_order_id:
-                active_assignments_query = active_assignments_query.exclude(order_id=completed_order_id)
-            
-            active_assignments = active_assignments_query.count()
-            
-            # Check for active orders in delivery (excluding the current one)
-            # Only include statuses that indicate delivery is ACTUALLY in progress
-            # REMOVED 'waiting_for_delivery_manager' - this means delivery hasn't started yet
-            # REMOVED 'assigned_to_delivery' - this also means delivery hasn't started
-            # NOTE: 'delivered' status for borrow orders means delivery has started but not completed
-            # (borrow_request status will be OUT_FOR_DELIVERY, not ACTIVE)
-            active_orders_query = Order.objects.filter(
-                delivery_assignment__delivery_manager=user,
-                status__in=[
-                    'in_delivery',           # Actually in delivery
-                    'in_progress',           # Delivery in progress
-                    'delivery_in_progress',  # Delivery in progress
-                    'delivered',             # For borrow orders: delivery started but not completed
-                    # Removed 'waiting_for_delivery_manager' - delivery hasn't started
-                    # Removed 'assigned_to_delivery' - delivery hasn't started
-                    # Removed 'assigned', 'accepted', 'confirmed' - these don't mean delivery is active
-                ]
-            ).exclude(status__in=['completed', 'rejected_by_admin', 'rejected_by_delivery_manager', 'cancelled'])
-            
-            # For 'delivered' orders, only count them as active if they're borrow orders
-            # with borrow_request status OUT_FOR_DELIVERY (not ACTIVE)
-            # Exclude 'delivered' orders where borrow_request status is ACTIVE (actually completed)
-            from ..models.borrowing_model import BorrowRequest, BorrowStatusChoices
-            active_orders_query = active_orders_query.exclude(
-                status='delivered',
-                order_type='borrowing',
-                borrow_request__status=BorrowStatusChoices.ACTIVE
-            )
-            
-            # Exclude the current order if provided
-            if completed_order_id:
-                active_orders_query = active_orders_query.exclude(id=completed_order_id)
-            
-            active_orders = active_orders_query.count()
-            
-            # Check for active borrow requests
-            # Include OUT_FOR_DELIVERY status - this means delivery has started but not completed
-            active_borrows = BorrowRequest.objects.filter(
-                delivery_person=user,
-                status__in=[
-                    'assigned_to_delivery', 
-                    'pending_delivery', 
-                    'in_progress',
-                    BorrowStatusChoices.OUT_FOR_DELIVERY,  # Delivery started but not completed
-                    'out_for_delivery'  # String version for compatibility
-                ]
-            ).exclude(status=BorrowStatusChoices.ACTIVE).count()  # Exclude completed (ACTIVE) borrows
-            
-            # Check for active return requests (removed - using new return feature)
-            active_returns = 0
-            
-            # Check for active delivery requests
-            active_delivery_requests = DeliveryRequest.objects.filter(
-                delivery_manager=user,
-                status='in_operation'
-            ).count()
-            
-            # Count total active deliveries
-            total_active = active_assignments + active_orders + active_borrows + active_returns + active_delivery_requests
-            
-            # Log detailed information for debugging
-            logger.info(
-                f"Delivery manager {user.id} active deliveries check: "
-                f"assignments={active_assignments}, orders={active_orders}, "
-                f"borrows={active_borrows}, returns={active_returns}, "
-                f"delivery_requests={active_delivery_requests}, total={total_active}"
-            )
-            
-            if total_active > 0:
-                logger.info(f"Delivery manager {user.id} has {total_active} other active deliveries, keeping status as 'busy'")
+            if has_active:
+                logger.info(f"Delivery manager {user.id} has other active deliveries, keeping status as 'busy'")
                 return False
             
             # No other active deliveries, safe to change to online
@@ -679,8 +740,14 @@ class DeliveryProfileService:
             
             if delivery_profile.delivery_status == 'online':
                 logger.info(f"Automatically changed delivery status from '{old_status}' to 'online' for user {user.id}")
-                # Send notification about automatic status change
+                # Record status history and send notification
                 try:
+                    DeliveryProfileService.record_status_history(
+                        delivery_profile, 
+                        old_status, 
+                        'online',
+                        reason='Delivery completed, no other active deliveries'
+                    )
                     DeliveryProfileService.notify_status_change(delivery_profile, old_status, 'online')
                 except Exception as e:
                     logger.warning(f"Failed to send status change notification: {str(e)}")
@@ -694,6 +761,13 @@ class DeliveryProfileService:
                     delivery_profile.refresh_from_db()
                     if delivery_profile.delivery_status == 'online':
                         logger.info(f"Successfully changed status to 'online' on retry for user {user.id}")
+                        # Record status history
+                        DeliveryProfileService.record_status_history(
+                            delivery_profile, 
+                            old_status, 
+                            'online',
+                            reason='Delivery completed (retry)'
+                        )
                         return True
                 except Exception as retry_error:
                     logger.error(f"Retry also failed for user {user.id}: {str(retry_error)}")
@@ -770,68 +844,15 @@ class DeliveryProfileService:
             if not force_reset and delivery_profile.delivery_status != 'busy':
                 return False
             
-            # Check for active delivery assignments
-            from ..models import DeliveryAssignment, DeliveryRequest, Order
-            from ..models.borrowing_model import BorrowRequest
-            
-            # Only count assignments that are actually in delivery (not just assigned/accepted)
-            # Also exclude assignments for completed/delivered orders and assignments with completed/delivered status
-            active_assignments = DeliveryAssignment.objects.filter(
-                delivery_manager=user,
-                status__in=['picked_up', 'in_transit', 'in_progress']
-                # Removed 'assigned' and 'accepted' - these mean delivery hasn't started yet
-            ).exclude(
-                status__in=['completed', 'delivered', 'cancelled']
-            ).exclude(
-                order__status__in=['completed', 'delivered', 'cancelled', 'rejected_by_admin', 'rejected_by_delivery_manager']
-            )
-            
-            # Check for active borrow requests
-            active_borrows = BorrowRequest.objects.filter(
-                delivery_person=user,
-                status__in=['assigned_to_delivery', 'pending_delivery', 'in_progress']
-            )
-            
-            # Check for active return requests (removed - using new return feature)
-            active_returns = []
-            
-            # Check for active delivery requests
-            active_delivery_requests = DeliveryRequest.objects.filter(
-                delivery_manager=user,
-                status='in_operation'
-            )
-            
-            # Check for active orders
-            # Only include statuses that indicate delivery is ACTUALLY in progress
-            # REMOVED 'waiting_for_delivery_manager' - this means delivery hasn't started yet
-            # REMOVED 'assigned_to_delivery' - this also means delivery hasn't started
-            active_orders = Order.objects.filter(
-                delivery_assignment__delivery_manager=user,
-                status__in=[
-                    'in_delivery',           # Actually in delivery
-                    'in_progress',           # Delivery in progress
-                    'delivery_in_progress',  # Delivery in progress
-                    # Removed 'waiting_for_delivery_manager' - delivery hasn't started
-                    # Removed 'assigned_to_delivery' - delivery hasn't started
-                    # Removed 'assigned', 'accepted', 'confirmed' - these don't mean delivery is active
-                ]
-            ).exclude(status__in=['completed', 'delivered', 'rejected_by_admin', 'rejected_by_delivery_manager', 'cancelled'])
-            
-            # If no active deliveries found, reset to online
-            total_active = (
-                active_assignments.count() + 
-                active_borrows.count() + 
-                len(active_returns) +
-                active_delivery_requests.count() +
-                active_orders.count()
-            )
+            # Use unified function to check for active deliveries
+            has_active = DeliveryProfileService.has_active_deliveries(user)
             
             # If force_reset is True, bypass the active delivery check and reset anyway
             # This is used when the user explicitly requests a reset
             if force_reset:
-                total_active = 0  # Force reset by setting total_active to 0
+                has_active = False  # Force reset by ignoring active deliveries
             
-            if total_active == 0:
+            if not has_active:
                 old_status = delivery_profile.delivery_status
                 
                 try:
@@ -847,6 +868,13 @@ class DeliveryProfileService:
                                 f"Reset delivery status from '{old_status}' to '{delivery_profile.delivery_status}' "
                                 f"for user {user.id} - no active deliveries (confirmed: {delivery_profile.delivery_status == 'online'})"
                             )
+                            # Record status history
+                            DeliveryProfileService.record_status_history(
+                                delivery_profile, 
+                                old_status, 
+                                'online',
+                                reason='Status reset - no active deliveries'
+                            )
                             return True
                     
                     # Retry with direct save as fallback
@@ -856,6 +884,13 @@ class DeliveryProfileService:
                     delivery_profile.refresh_from_db()
                     if delivery_profile.delivery_status == 'online':
                         logger.info(f"Successfully reset status to 'online' on retry for user {user.id}")
+                        # Record status history
+                        DeliveryProfileService.record_status_history(
+                            delivery_profile, 
+                            old_status, 
+                            'online',
+                            reason='Status reset - no active deliveries (retry)'
+                        )
                         return True
                     else:
                         logger.error(f"Failed to reset status for user {user.id} - status is still: {delivery_profile.delivery_status}")

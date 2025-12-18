@@ -7,28 +7,16 @@ class Complaint(models.Model):
     """
     Model for managing customer complaints and feedback.
     """
-    COMPLAINT_TYPE_CHOICES = [
-        ('service', 'Service Issue'),
-        ('delivery', 'Delivery Problem'),
-        ('product', 'Product Issue'),
-        ('payment', 'Payment Problem'),
-        ('general', 'General Complaint'),
-        ('suggestion', 'Suggestion'),
-        ('other', 'Other'),
-    ]
-    
-    PRIORITY_CHOICES = [
-        ('low', 'Low'),
-        ('medium', 'Medium'),
-        ('high', 'High'),
-        ('urgent', 'Urgent'),
-    ]
-    
     STATUS_CHOICES = [
         ('open', 'Open'),
         ('in_progress', 'In Progress'),
         ('resolved', 'Resolved'),
         ('closed', 'Closed'),
+    ]
+    
+    COMPLAINT_TYPE_CHOICES = [
+        ('app', 'App-related'),
+        ('delivery', 'Delivery service-related'),
     ]
     
     # Complaint identification
@@ -60,14 +48,8 @@ class Complaint(models.Model):
     complaint_type = models.CharField(
         max_length=20,
         choices=COMPLAINT_TYPE_CHOICES,
-        help_text="Type of complaint"
-    )
-    
-    priority = models.CharField(
-        max_length=10,
-        choices=PRIORITY_CHOICES,
-        default='medium',
-        help_text="Priority level of the complaint"
+        default='app',
+        help_text="Type of complaint: app-related or delivery service-related"
     )
     
     status = models.CharField(
@@ -75,48 +57,6 @@ class Complaint(models.Model):
         choices=STATUS_CHOICES,
         default='open',
         help_text="Current status of the complaint"
-    )
-    
-    # Related objects (optional)
-    related_order = models.ForeignKey(
-        'bookstore_api.Order',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='complaints',
-        help_text="Related order if applicable"
-    )
-    
-    related_borrow_request = models.ForeignKey(
-        'bookstore_api.BorrowRequest',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='complaints',
-        help_text="Related borrow request if applicable"
-    )
-    
-    # Assignment and resolution
-    assigned_to = models.ForeignKey(
-        User,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='assigned_complaints',
-        limit_choices_to={'user_type__in': ['library_admin', 'delivery_admin', 'system_admin']},
-        help_text="Staff member assigned to handle this complaint"
-    )
-    
-    resolution = models.TextField(
-        blank=True,
-        null=True,
-        help_text="Resolution details"
-    )
-    
-    resolved_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="Date and time when complaint was resolved"
     )
     
     # Timestamps

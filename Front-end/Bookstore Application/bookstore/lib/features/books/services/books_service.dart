@@ -736,7 +736,19 @@ class BooksService {
 
       if (ApiClient.isSuccess(response)) {
         final data = json.decode(response.body);
-        return data['data'] ?? data['results'] ?? [];
+        // Handle both paginated and non-paginated responses
+        if (data['data'] != null) {
+          // Check if data is a list or contains nested data
+          if (data['data'] is List) {
+            return data['data'];
+          } else if (data['data']['data'] != null) {
+            // Paginated response with nested data
+            return data['data']['data'] is List ? data['data']['data'] : [];
+          }
+        } else if (data['results'] != null) {
+          return data['results'];
+        }
+        return [];
       } else {
         final data = json.decode(response.body);
         _setError(data['message'] ?? 'Failed to load authors');
@@ -834,8 +846,22 @@ class BooksService {
 
       if (ApiClient.isSuccess(response)) {
         final data = json.decode(response.body);
-        final List<dynamic> categoriesJson =
-            data['data'] ?? data['results'] ?? [];
+        // Handle both paginated and non-paginated responses
+        List<dynamic> categoriesJson = [];
+        if (data['data'] != null) {
+          // Check if data is a list or contains nested data
+          if (data['data'] is List) {
+            categoriesJson = data['data'];
+          } else if (data['data']['data'] != null) {
+            // Paginated response with nested data
+            categoriesJson = data['data']['data'] is List
+                ? data['data']['data']
+                : [];
+          }
+        } else if (data['results'] != null) {
+          categoriesJson = data['results'];
+        }
+
         return categoriesJson
             .map((json) => book_category.Category.fromJson(json))
             .toList();

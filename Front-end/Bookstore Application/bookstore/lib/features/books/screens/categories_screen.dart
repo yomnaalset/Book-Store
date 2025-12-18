@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 import '../../../core/extensions/theme_extensions.dart';
+import '../../../core/localization/app_localizations.dart';
 import '../../../core/widgets/common/error_message.dart';
 import '../../../core/widgets/common/loading_indicator.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -22,7 +23,8 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
   final TextEditingController _searchController = TextEditingController();
   int? _selectedCategoryId;
   bool _isLoadingBooks = false;
-  String _selectedFilter = 'All'; // New filter state
+  String _selectedFilter =
+      'all'; // New filter state - using keys instead of labels
 
   @override
   void initState() {
@@ -66,12 +68,13 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
   }
 
   String _getAppBarTitle() {
+    final localizations = AppLocalizations.of(context);
     if (_selectedCategoryId != null) {
-      return 'Books in Category';
+      return localizations.booksInCategory;
     } else if (_searchQuery.isNotEmpty) {
-      return 'Search Results';
+      return localizations.searchResultsTitle;
     } else {
-      return 'Purchase Books';
+      return localizations.purchaseBooks;
     }
   }
 
@@ -139,10 +142,15 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
           appBar: AppBar(
             title: Text(_getAppBarTitle()),
             actions: [
-              IconButton(
-                onPressed: _loadBooks,
-                icon: const Icon(Icons.refresh),
-                tooltip: 'Refresh',
+              Builder(
+                builder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return IconButton(
+                    onPressed: _loadBooks,
+                    icon: const Icon(Icons.refresh),
+                    tooltip: localizations.refresh,
+                  );
+                },
               ),
             ],
           ),
@@ -168,7 +176,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
           _applyFilters();
         },
         decoration: InputDecoration(
-          hintText: 'Search books...',
+          hintText: AppLocalizations.of(context).searchBooksHint,
           prefixIcon: const Icon(Icons.search),
           suffixIcon: _searchQuery.isNotEmpty
               ? IconButton(
@@ -194,24 +202,36 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
       child: ListView(
         scrollDirection: Axis.horizontal,
         children: [
-          _buildFilterChip('All'),
-          const SizedBox(width: 8),
-          _buildFilterChip('New Books'),
-          const SizedBox(width: 8),
-          _buildFilterChip('Highest Rated'),
+          Builder(
+            builder: (context) {
+              final localizations = AppLocalizations.of(context);
+              return Row(
+                children: [
+                  _buildFilterChip(localizations.filterAll, 'all'),
+                  const SizedBox(width: 8),
+                  _buildFilterChip(localizations.filterNewBooks, 'new_books'),
+                  const SizedBox(width: 8),
+                  _buildFilterChip(
+                    localizations.filterHighestRated,
+                    'highest_rated',
+                  ),
+                ],
+              );
+            },
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildFilterChip(String label) {
-    final isSelected = _selectedFilter == label;
+  Widget _buildFilterChip(String label, String filterKey) {
+    final isSelected = _selectedFilter == filterKey;
     return FilterChip(
       label: Text(label),
       selected: isSelected,
       onSelected: (selected) {
         setState(() {
-          _selectedFilter = label;
+          _selectedFilter = filterKey;
         });
         _applyFilters();
       },
@@ -233,9 +253,9 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
 
       // Determine sortBy parameter based on selected filter
       String? sortBy;
-      if (_selectedFilter == 'New Books') {
+      if (_selectedFilter == 'new_books') {
         sortBy = 'created_at';
-      } else if (_selectedFilter == 'Highest Rated') {
+      } else if (_selectedFilter == 'highest_rated') {
         sortBy = 'average_rating';
       }
 
@@ -274,29 +294,40 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
                 const SizedBox(height: 16),
-                Text(
-                  'Please log in to view books',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: Theme.of(context).textTheme.bodyLarge?.color,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'You need to be logged in to browse books in categories.',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Theme.of(context).textTheme.bodyMedium?.color,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 24),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.pushNamed(context, '/login');
+                Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return Column(
+                      children: [
+                        Text(
+                          localizations.pleaseLogInToViewBooks,
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: Theme.of(context).textTheme.bodyLarge?.color,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          localizations.needToBeLoggedIn,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Theme.of(
+                              context,
+                            ).textTheme.bodyMedium?.color,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 24),
+                        ElevatedButton(
+                          onPressed: () {
+                            Navigator.pushNamed(context, '/login');
+                          },
+                          child: Text(localizations.goToLogin),
+                        ),
+                      ],
+                    );
                   },
-                  child: const Text('Go to Login'),
                 ),
               ],
             ),
@@ -425,14 +456,19 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      book.author?.name ?? 'Unknown Author',
-                      style: TextStyle(
-                        fontSize: AppDimensions.fontSizeXS,
-                        color: context.secondaryTextColor,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    Builder(
+                      builder: (context) {
+                        final localizations = AppLocalizations.of(context);
+                        return Text(
+                          book.author?.name ?? localizations.unknownAuthor,
+                          style: TextStyle(
+                            fontSize: AppDimensions.fontSizeXS,
+                            color: context.secondaryTextColor,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        );
+                      },
                     ),
                     const Spacer(),
                     Row(
@@ -507,26 +543,35 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
               color: context.secondaryTextColor.withValues(alpha: 128),
             ),
             const SizedBox(height: AppDimensions.spacingL),
-            Text(
-              'No books found',
-              style: TextStyle(
-                fontSize: AppDimensions.fontSizeL,
-                fontWeight: FontWeight.w600,
-                color: Theme.of(context).textTheme.bodyLarge?.color,
-              ),
-            ),
-            const SizedBox(height: AppDimensions.spacingM),
-            Text(
-              _searchQuery.isNotEmpty
-                  ? 'No books match "$_searchQuery"'
-                  : _selectedCategoryId != null
-                  ? 'No books available in this category'
-                  : 'No books available',
-              style: TextStyle(
-                fontSize: AppDimensions.fontSizeM,
-                color: Theme.of(context).textTheme.bodyMedium?.color,
-              ),
-              textAlign: TextAlign.center,
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Column(
+                  children: [
+                    Text(
+                      localizations.noBooksFoundCategory,
+                      style: TextStyle(
+                        fontSize: AppDimensions.fontSizeL,
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(context).textTheme.bodyLarge?.color,
+                      ),
+                    ),
+                    const SizedBox(height: AppDimensions.spacingM),
+                    Text(
+                      _searchQuery.isNotEmpty
+                          ? localizations.noBooksMatchSearch(_searchQuery)
+                          : _selectedCategoryId != null
+                          ? localizations.noBooksInCategory
+                          : localizations.noBooksAvailable,
+                      style: TextStyle(
+                        fontSize: AppDimensions.fontSizeM,
+                        color: Theme.of(context).textTheme.bodyMedium?.color,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                );
+              },
             ),
           ],
         ),

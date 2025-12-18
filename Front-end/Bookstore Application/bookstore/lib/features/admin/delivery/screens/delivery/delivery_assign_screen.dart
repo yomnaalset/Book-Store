@@ -5,6 +5,7 @@ import '../../../models/delivery_order.dart';
 import '../../../models/delivery_agent.dart';
 import '../../../../../shared/widgets/status_chip.dart';
 import '../../../../../shared/widgets/empty_state.dart';
+import '../../../../../../core/localization/app_localizations.dart';
 
 class DeliveryAssignScreen extends StatefulWidget {
   const DeliveryAssignScreen({super.key});
@@ -40,8 +41,9 @@ class _DeliveryAssignScreenState extends State<DeliveryAssignScreen> {
       ]);
     } catch (e) {
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading data: ${e.toString()}')),
+          SnackBar(content: Text(localizations.errorLoadingData(e.toString()))),
         );
       }
     } finally {
@@ -55,13 +57,15 @@ class _DeliveryAssignScreenState extends State<DeliveryAssignScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Assign Delivery Agents'),
+        title: Text(localizations.assignDeliveryAgents),
         actions: [
           IconButton(
             onPressed: () => _loadData(),
             icon: const Icon(Icons.refresh),
+            tooltip: localizations.refresh,
           ),
         ],
       ),
@@ -75,13 +79,13 @@ class _DeliveryAssignScreenState extends State<DeliveryAssignScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          'Error: ${provider.error}',
+                          '${localizations.error}: ${provider.error}',
                           style: const TextStyle(color: Colors.red),
                         ),
                         const SizedBox(height: 16),
                         ElevatedButton(
                           onPressed: _loadData,
-                          child: const Text('Retry'),
+                          child: Text(localizations.retry),
                         ),
                       ],
                     ),
@@ -90,9 +94,9 @@ class _DeliveryAssignScreenState extends State<DeliveryAssignScreen> {
 
                 if (provider.orders.isEmpty) {
                   return EmptyState(
-                    message: 'No delivery orders found',
+                    message: localizations.noDeliveryOrdersFound,
                     icon: Icons.local_shipping,
-                    actionText: 'Refresh',
+                    actionText: localizations.refresh,
                     onAction: _loadData,
                   );
                 }
@@ -120,7 +124,7 @@ class _DeliveryAssignScreenState extends State<DeliveryAssignScreen> {
                                 const Icon(Icons.person, color: Colors.blue),
                                 const SizedBox(width: 8),
                                 Text(
-                                  'Available Agents',
+                                  localizations.availableAgents,
                                   style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
@@ -131,7 +135,9 @@ class _DeliveryAssignScreenState extends State<DeliveryAssignScreen> {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              '${provider.availableAgents.length} agent${provider.availableAgents.length == 1 ? '' : 's'} available for assignment',
+                              localizations.agentsAvailableForAssignment(
+                                provider.availableAgents.length,
+                              ),
                               style: TextStyle(color: Colors.blue[700]),
                             ),
                           ],
@@ -145,7 +151,11 @@ class _DeliveryAssignScreenState extends State<DeliveryAssignScreen> {
                         itemCount: provider.orders.length,
                         itemBuilder: (context, index) {
                           final order = provider.orders[index];
-                          return _buildDeliveryOrderCard(order, provider);
+                          return _buildDeliveryOrderCard(
+                            order,
+                            provider,
+                            context,
+                          );
                         },
                       ),
                     ),
@@ -159,7 +169,9 @@ class _DeliveryAssignScreenState extends State<DeliveryAssignScreen> {
   Widget _buildDeliveryOrderCard(
     DeliveryOrder order,
     DeliveryProvider provider,
+    BuildContext context,
   ) {
+    final localizations = AppLocalizations.of(context);
     final isAssigned = order.deliveryAgent != null;
     final assignedAgent = order.deliveryAgent?.name;
 
@@ -175,7 +187,7 @@ class _DeliveryAssignScreenState extends State<DeliveryAssignScreen> {
               children: [
                 Expanded(
                   child: Text(
-                    'Order #${order.id}',
+                    '${localizations.orders} #${order.id}',
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -220,7 +232,7 @@ class _DeliveryAssignScreenState extends State<DeliveryAssignScreen> {
                 const Icon(Icons.inventory, size: 20, color: Colors.grey),
                 const SizedBox(width: 8),
                 Text(
-                  '${order.order?.items.length ?? 0} item${(order.order?.items.length ?? 0) == 1 ? '' : 's'}',
+                  '${order.order?.items.length ?? 0} ${(order.order?.items.length ?? 0) == 1 ? localizations.itemsLabel : localizations.itemsLabelPlural}',
                   style: const TextStyle(fontSize: 14),
                 ),
               ],
@@ -252,8 +264,8 @@ class _DeliveryAssignScreenState extends State<DeliveryAssignScreen> {
                   Expanded(
                     child: Text(
                       isAssigned
-                          ? 'Assigned to: $assignedAgent'
-                          : 'No agent assigned',
+                          ? localizations.assignedTo(assignedAgent ?? '')
+                          : localizations.noAgentAssigned,
                       style: TextStyle(
                         color: isAssigned
                             ? Colors.green[700]
@@ -275,7 +287,7 @@ class _DeliveryAssignScreenState extends State<DeliveryAssignScreen> {
                     child: ElevatedButton.icon(
                       onPressed: () => _showAssignAgentDialog(order, provider),
                       icon: const Icon(Icons.person_add),
-                      label: const Text('Assign Agent'),
+                      label: Text(localizations.assignAgent),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.blue,
                         foregroundColor: Colors.white,
@@ -292,7 +304,7 @@ class _DeliveryAssignScreenState extends State<DeliveryAssignScreen> {
                       onPressed: () =>
                           _showReassignAgentDialog(order, provider),
                       icon: const Icon(Icons.swap_horiz),
-                      label: const Text('Reassign'),
+                      label: Text(localizations.reassign),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -300,7 +312,7 @@ class _DeliveryAssignScreenState extends State<DeliveryAssignScreen> {
                     child: OutlinedButton.icon(
                       onPressed: () => _unassignAgent(order, provider),
                       icon: const Icon(Icons.person_remove),
-                      label: const Text('Unassign'),
+                      label: Text(localizations.unassign),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.red,
                       ),
@@ -316,9 +328,10 @@ class _DeliveryAssignScreenState extends State<DeliveryAssignScreen> {
   }
 
   void _showAssignAgentDialog(DeliveryOrder order, DeliveryProvider provider) {
+    final localizations = AppLocalizations.of(context);
     if (provider.availableAgents.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No available agents to assign')),
+        SnackBar(content: Text(localizations.noAvailableAgentsToAssign)),
       );
       return;
     }
@@ -327,49 +340,52 @@ class _DeliveryAssignScreenState extends State<DeliveryAssignScreen> {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Assign Delivery Agent'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Select an agent to assign:'),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<DeliveryAgent>(
-              initialValue: selectedAgent,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                labelText: 'Agent',
+      builder: (context) {
+        final localizations = AppLocalizations.of(context);
+        return AlertDialog(
+          title: Text(localizations.assignDeliveryAgent),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(localizations.selectAgentToAssign),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<DeliveryAgent>(
+                initialValue: selectedAgent,
+                decoration: InputDecoration(
+                  border: const OutlineInputBorder(),
+                  labelText: localizations.agent,
+                ),
+                items: provider.availableAgents
+                    .map(
+                      (agent) => DropdownMenuItem(
+                        value: agent,
+                        child: Text('${agent.name} (${agent.phone})'),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  if (value != null) {
+                    selectedAgent = value;
+                  }
+                },
               ),
-              items: provider.availableAgents
-                  .map(
-                    (agent) => DropdownMenuItem(
-                      value: agent,
-                      child: Text('${agent.name} (${agent.phone})'),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (value) {
-                if (value != null) {
-                  selectedAgent = value;
-                }
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(localizations.cancel),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _assignAgent(order, selectedAgent!, provider);
               },
+              child: Text(localizations.assignAgent),
             ),
           ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _assignAgent(order, selectedAgent!, provider);
-            },
-            child: const Text('Assign'),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -381,53 +397,58 @@ class _DeliveryAssignScreenState extends State<DeliveryAssignScreen> {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Reassign Delivery Agent'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Currently assigned to: ${order.deliveryAgent?.name ?? 'No one'}',
-            ),
-            const SizedBox(height: 16),
-            const Text('Select new agent:'),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<DeliveryAgent>(
-              initialValue: selectedAgent,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                labelText: 'New Agent',
+      builder: (context) {
+        final localizations = AppLocalizations.of(context);
+        return AlertDialog(
+          title: Text(localizations.reassignDeliveryAgent),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                localizations.currentlyAssignedTo(
+                  order.deliveryAgent?.name ?? localizations.noOne,
+                ),
               ),
-              items: provider.availableAgents
-                  .map(
-                    (agent) => DropdownMenuItem(
-                      value: agent,
-                      child: Text('${agent.name} (${agent.phone})'),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (value) {
-                if (value != null) {
-                  selectedAgent = value;
-                }
+              const SizedBox(height: 16),
+              Text(localizations.selectNewAgent),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<DeliveryAgent>(
+                initialValue: selectedAgent,
+                decoration: InputDecoration(
+                  border: const OutlineInputBorder(),
+                  labelText: localizations.newAgent,
+                ),
+                items: provider.availableAgents
+                    .map(
+                      (agent) => DropdownMenuItem(
+                        value: agent,
+                        child: Text('${agent.name} (${agent.phone})'),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  if (value != null) {
+                    selectedAgent = value;
+                  }
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(localizations.cancel),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _assignAgent(order, selectedAgent!, provider);
               },
+              child: Text(localizations.reassign),
             ),
           ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _assignAgent(order, selectedAgent!, provider);
-            },
-            child: const Text('Reassign'),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -444,15 +465,21 @@ class _DeliveryAssignScreenState extends State<DeliveryAssignScreen> {
       await provider.assignAgent(int.parse(order.id), agent.id);
 
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Agent ${agent.name} assigned successfully')),
+          SnackBar(
+            content: Text(localizations.agentAssignedSuccessfully(agent.name)),
+          ),
         );
         _loadData();
       }
     } catch (e) {
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error assigning agent: ${e.toString()}')),
+          SnackBar(
+            content: Text(localizations.errorAssigningAgent(e.toString())),
+          ),
         );
       }
     } finally {
@@ -470,23 +497,28 @@ class _DeliveryAssignScreenState extends State<DeliveryAssignScreen> {
   ) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Unassign Agent'),
-        content: Text(
-          'Are you sure you want to unassign ${order.deliveryAgent?.name ?? 'the agent'} from this delivery order?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+      builder: (context) {
+        final localizations = AppLocalizations.of(context);
+        return AlertDialog(
+          title: Text(localizations.unassignAgent),
+          content: Text(
+            localizations.areYouSureUnassign(
+              order.deliveryAgent?.name ?? localizations.agent,
+            ),
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Unassign'),
-          ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(localizations.cancel),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: Text(localizations.unassign),
+            ),
+          ],
+        );
+      },
     );
 
     if (confirmed == true) {
@@ -498,15 +530,19 @@ class _DeliveryAssignScreenState extends State<DeliveryAssignScreen> {
         await provider.unassignAgent(int.parse(order.id));
 
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Agent unassigned successfully')),
+            SnackBar(content: Text(localizations.agentUnassignedSuccessfully)),
           );
           _loadData();
         }
       } catch (e) {
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error unassigning agent: ${e.toString()}')),
+            SnackBar(
+              content: Text(localizations.errorUnassigningAgent(e.toString())),
+            ),
           );
         }
       } finally {

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 import '../../../core/extensions/theme_extensions.dart';
+import '../../../core/localization/app_localizations.dart';
 import '../../../shared/widgets/loading_indicator.dart';
 import '../../../shared/widgets/error_message.dart';
 import '../models/borrowing.dart';
@@ -62,7 +63,8 @@ class _BorrowStatusScreenState extends State<BorrowStatusScreen> {
     }
   }
 
-  Widget _buildStatusChip(String status) {
+  Widget _buildStatusChip(String status, BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: AppDimensions.paddingS,
@@ -77,7 +79,7 @@ class _BorrowStatusScreenState extends State<BorrowStatusScreen> {
         ),
       ),
       child: Text(
-        status.toUpperCase(),
+        localizations.getBorrowStatusLabel(status).toUpperCase(),
         style: TextStyle(
           fontSize: AppDimensions.fontSizeXS,
           fontWeight: FontWeight.w600,
@@ -89,13 +91,21 @@ class _BorrowStatusScreenState extends State<BorrowStatusScreen> {
   }
 
   Widget _buildBorrowCard(BorrowRequest request) {
-    final daysRemaining =
-        request.dueDate?.difference(DateTime.now()).inDays ?? 0;
-    final isOverdue = daysRemaining < 0;
+    final now = DateTime.now();
+    final dueDate = request.dueDate;
+
+    // Calculate if the book is overdue (current date > due date)
+    final isOverdue = dueDate != null && now.isAfter(dueDate);
+
+    // Calculate days overdue (positive number when overdue)
+    final daysOverdue = dueDate != null && isOverdue
+        ? now.difference(dueDate).inDays
+        : 0;
+
+    final status = request.status.toLowerCase();
+
     final requestDate = _formatDate(request.requestDate);
-    final dueDate = request.dueDate != null
-        ? _formatDate(request.dueDate!)
-        : 'N/A';
+    final dueDateFormatted = dueDate != null ? _formatDate(dueDate) : 'N/A';
     final statusColor = _getStatusColor(request.status);
     final deliveryManager = request.deliveryPerson;
 
@@ -163,7 +173,8 @@ class _BorrowStatusScreenState extends State<BorrowStatusScreen> {
                           ),
                           const SizedBox(height: AppDimensions.spacingS),
                           Text(
-                            request.book?.title ?? 'Unknown Book',
+                            request.book?.title ??
+                                AppLocalizations.of(context).unknownBook,
                             style: TextStyle(
                               fontSize: AppDimensions.fontSizeXL,
                               fontWeight: FontWeight.bold,
@@ -200,7 +211,7 @@ class _BorrowStatusScreenState extends State<BorrowStatusScreen> {
                       ),
                     ),
                     const SizedBox(width: AppDimensions.spacingM),
-                    _buildStatusChip(request.status),
+                    _buildStatusChip(request.status, context),
                   ],
                 ),
 
@@ -265,29 +276,46 @@ class _BorrowStatusScreenState extends State<BorrowStatusScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildInfoItem(
-                            Icons.calendar_today_outlined,
-                            'Request Date',
-                            requestDate,
+                          Builder(
+                            builder: (context) {
+                              final localizations = AppLocalizations.of(
+                                context,
+                              );
+                              return Column(
+                                children: [
+                                  _buildInfoItem(
+                                    Icons.calendar_today_outlined,
+                                    localizations.requestDateLabel,
+                                    requestDate,
+                                  ),
+                                  const SizedBox(
+                                    height: AppDimensions.spacingM,
+                                  ),
+                                  if (dueDate != null)
+                                    _buildInfoItem(
+                                      isOverdue
+                                          ? Icons.warning_amber_rounded
+                                          : Icons.event_outlined,
+                                      localizations.dueDateLabel,
+                                      dueDateFormatted,
+                                      isWarning: isOverdue,
+                                    ),
+                                  const SizedBox(
+                                    height: AppDimensions.spacingM,
+                                  ),
+                                  _buildInfoItem(
+                                    Icons.access_time_outlined,
+                                    localizations.durationLabel,
+                                    '${request.durationDays} ${localizations.days}',
+                                  ),
+                                ],
+                              );
+                            },
                           ),
-                          const SizedBox(height: AppDimensions.spacingM),
-                          if (request.dueDate != null)
-                            _buildInfoItem(
-                              isOverdue
-                                  ? Icons.warning_amber_rounded
-                                  : Icons.event_outlined,
-                              'Due Date',
-                              dueDate,
-                              isWarning: isOverdue,
-                            ),
-                          const SizedBox(height: AppDimensions.spacingM),
-                          _buildInfoItem(
-                            Icons.access_time_outlined,
-                            'Duration',
-                            '${request.durationDays} days',
-                          ),
+                          // Show overdue indicator when overdue (for both active and delivered status)
                           if (isOverdue &&
-                              request.status.toLowerCase() == 'active') ...[
+                              (status == 'active' ||
+                                  status == 'delivered')) ...[
                             const SizedBox(height: AppDimensions.spacingM),
                             Container(
                               padding: const EdgeInsets.symmetric(
@@ -311,13 +339,22 @@ class _BorrowStatusScreenState extends State<BorrowStatusScreen> {
                                     size: 16,
                                   ),
                                   const SizedBox(width: 4),
-                                  Text(
-                                    '${daysRemaining.abs()} days overdue',
-                                    style: const TextStyle(
-                                      color: AppColors.error,
-                                      fontSize: AppDimensions.fontSizeXS,
-                                      fontWeight: FontWeight.w600,
-                                    ),
+                                  Builder(
+                                    builder: (context) {
+                                      final localizations = AppLocalizations.of(
+                                        context,
+                                      );
+                                      return Text(
+                                        localizations.overdueByDays(
+                                          daysOverdue,
+                                        ),
+                                        style: const TextStyle(
+                                          color: AppColors.error,
+                                          fontSize: AppDimensions.fontSizeXS,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      );
+                                    },
                                   ),
                                 ],
                               ),
@@ -361,35 +398,48 @@ class _BorrowStatusScreenState extends State<BorrowStatusScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                'Delivery Manager',
-                                style: TextStyle(
-                                  fontSize: AppDimensions.fontSizeXS,
-                                  color: context.secondaryTextColor,
-                                  fontWeight: FontWeight.w500,
-                                ),
+                              Builder(
+                                builder: (context) {
+                                  final localizations = AppLocalizations.of(
+                                    context,
+                                  );
+                                  return Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        localizations.deliveryManagerLabel,
+                                        style: TextStyle(
+                                          fontSize: AppDimensions.fontSizeXS,
+                                          color: context.secondaryTextColor,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        deliveryManager.fullName.isNotEmpty
+                                            ? deliveryManager.fullName
+                                            : localizations.assigned,
+                                        style: TextStyle(
+                                          fontSize: AppDimensions.fontSizeM,
+                                          color: context.textColor,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      if (deliveryManager.email.isNotEmpty) ...[
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          deliveryManager.email,
+                                          style: TextStyle(
+                                            fontSize: AppDimensions.fontSizeXS,
+                                            color: context.secondaryTextColor,
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  );
+                                },
                               ),
-                              const SizedBox(height: 2),
-                              Text(
-                                deliveryManager.fullName.isNotEmpty
-                                    ? deliveryManager.fullName
-                                    : 'Assigned',
-                                style: TextStyle(
-                                  fontSize: AppDimensions.fontSizeM,
-                                  color: context.textColor,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              if (deliveryManager.email.isNotEmpty) ...[
-                                const SizedBox(height: 2),
-                                Text(
-                                  deliveryManager.email,
-                                  style: TextStyle(
-                                    fontSize: AppDimensions.fontSizeXS,
-                                    color: context.secondaryTextColor,
-                                  ),
-                                ),
-                              ],
                             ],
                           ),
                         ),
@@ -410,33 +460,44 @@ class _BorrowStatusScreenState extends State<BorrowStatusScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.info_outline,
-                            size: 18,
-                            color: context.secondaryTextColor,
-                          ),
-                          const SizedBox(width: AppDimensions.spacingS),
-                          Text(
-                            'Order Status',
-                            style: TextStyle(
-                              fontSize: AppDimensions.fontSizeS,
-                              fontWeight: FontWeight.w600,
-                              color: context.textColor,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: AppDimensions.spacingS),
-                      Text(
-                        request.statusDisplay ??
-                            request.status.replaceAll('_', ' ').toUpperCase(),
-                        style: TextStyle(
-                          fontSize: AppDimensions.fontSizeM,
-                          fontWeight: FontWeight.bold,
-                          color: statusColor,
-                        ),
+                      Builder(
+                        builder: (context) {
+                          final localizations = AppLocalizations.of(context);
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.info_outline,
+                                    size: 18,
+                                    color: context.secondaryTextColor,
+                                  ),
+                                  const SizedBox(width: AppDimensions.spacingS),
+                                  Text(
+                                    localizations.orderStatusLabel,
+                                    style: TextStyle(
+                                      fontSize: AppDimensions.fontSizeS,
+                                      fontWeight: FontWeight.w600,
+                                      color: context.textColor,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: AppDimensions.spacingS),
+                              Text(
+                                localizations.getBorrowStatusLabel(
+                                  request.status,
+                                ),
+                                style: TextStyle(
+                                  fontSize: AppDimensions.fontSizeM,
+                                  fontWeight: FontWeight.bold,
+                                  color: statusColor,
+                                ),
+                              ),
+                            ],
+                          );
+                        },
                       ),
                       if (request.approvalDate != null ||
                           request.deliveryDate != null ||
@@ -444,29 +505,34 @@ class _BorrowStatusScreenState extends State<BorrowStatusScreen> {
                         const SizedBox(height: AppDimensions.spacingM),
                         const Divider(height: 1),
                         const SizedBox(height: AppDimensions.spacingM),
-                        Wrap(
-                          spacing: AppDimensions.spacingS,
-                          runSpacing: AppDimensions.spacingS,
-                          children: [
-                            if (request.approvalDate != null)
-                              _buildDetailChip(
-                                Icons.check_circle_outline,
-                                'Approved',
-                                _formatDate(request.approvalDate!),
-                              ),
-                            if (request.deliveryDate != null)
-                              _buildDetailChip(
-                                Icons.local_shipping_outlined,
-                                'Delivered',
-                                _formatDate(request.deliveryDate!),
-                              ),
-                            if (request.finalReturnDate != null)
-                              _buildDetailChip(
-                                Icons.assignment_returned_outlined,
-                                'Returned',
-                                _formatDate(request.finalReturnDate!),
-                              ),
-                          ],
+                        Builder(
+                          builder: (context) {
+                            final localizations = AppLocalizations.of(context);
+                            return Wrap(
+                              spacing: AppDimensions.spacingS,
+                              runSpacing: AppDimensions.spacingS,
+                              children: [
+                                if (request.approvalDate != null)
+                                  _buildDetailChip(
+                                    Icons.check_circle_outline,
+                                    localizations.approvedStatus,
+                                    _formatDate(request.approvalDate!),
+                                  ),
+                                if (request.deliveryDate != null)
+                                  _buildDetailChip(
+                                    Icons.local_shipping_outlined,
+                                    localizations.deliveredStatus,
+                                    _formatDate(request.deliveryDate!),
+                                  ),
+                                if (request.finalReturnDate != null)
+                                  _buildDetailChip(
+                                    Icons.assignment_returned_outlined,
+                                    localizations.returnedStatus,
+                                    _formatDate(request.finalReturnDate!),
+                                  ),
+                              ],
+                            );
+                          },
                         ),
                       ],
                     ],
@@ -568,7 +634,7 @@ class _BorrowStatusScreenState extends State<BorrowStatusScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Borrow Status'),
+        title: Text(AppLocalizations.of(context).borrowStatus),
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.white,
       ),
@@ -598,20 +664,29 @@ class _BorrowStatusScreenState extends State<BorrowStatusScreen> {
                     color: context.secondaryTextColor,
                   ),
                   const SizedBox(height: AppDimensions.spacingM),
-                  Text(
-                    'No borrow requests found',
-                    style: TextStyle(
-                      fontSize: AppDimensions.fontSizeL,
-                      color: context.textColor,
-                    ),
-                  ),
-                  const SizedBox(height: AppDimensions.spacingS),
-                  Text(
-                    'Your borrow history will appear here',
-                    style: TextStyle(
-                      fontSize: AppDimensions.fontSizeM,
-                      color: context.secondaryTextColor,
-                    ),
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Column(
+                        children: [
+                          Text(
+                            localizations.noBorrowRequestsFound,
+                            style: TextStyle(
+                              fontSize: AppDimensions.fontSizeL,
+                              color: context.textColor,
+                            ),
+                          ),
+                          const SizedBox(height: AppDimensions.spacingS),
+                          Text(
+                            localizations.borrowHistoryWillAppear,
+                            style: TextStyle(
+                              fontSize: AppDimensions.fontSizeM,
+                              color: context.secondaryTextColor,
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ],
               ),

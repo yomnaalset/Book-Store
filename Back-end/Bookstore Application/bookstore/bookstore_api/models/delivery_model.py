@@ -289,8 +289,8 @@ def reset_delivery_status_on_order_completion(sender, instance, created, **kwarg
     if instance.status in ['completed', 'delivered']:
         try:
             # Check if order has a delivery assignment
-            if hasattr(instance, 'delivery_assignment') and instance.delivery_assignment:
-                delivery_manager = instance.delivery_assignment.delivery_manager
+            if hasattr(instance, 'delivery_request') and instance.delivery_request:
+                delivery_manager = instance.delivery_request.delivery_manager
                 if delivery_manager and delivery_manager.is_delivery_admin():
                     from ..services.delivery_profile_services import DeliveryProfileService
                     DeliveryProfileService.complete_delivery_task(
@@ -354,194 +354,23 @@ class OrderItem(models.Model):
         super().save(*args, **kwargs)
 
 
+# NOTE: DeliveryAssignment model is temporarily kept for migration state resolution
+# It will be removed after all migrations are applied
 class DeliveryAssignment(models.Model):
     """
-    Assignment of delivery personnel to orders.
+    Temporary model for migration state resolution.
+    This model is managed=False and will be removed after migrations complete.
     """
-    order = models.OneToOneField(
-        Order,
-        on_delete=models.CASCADE,
-        related_name='delivery_assignment',
-        help_text="Order to be delivered"
-    )
-    
-    delivery_manager = models.ForeignKey(
-        User,
-        on_delete=models.PROTECT,
-        limit_choices_to={'user_type': 'delivery_admin'},
-        related_name='delivery_assignments',
-        help_text="Delivery personnel assigned to this order"
-    )
-    
-    assigned_at = models.DateTimeField(
-        auto_now_add=True,
-        help_text="When the assignment was made"    
-    )
-    
-    estimated_delivery_time = models.DateTimeField(
-        help_text="Estimated delivery time"
-    )
-    
-    actual_delivery_time = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="Actual delivery time"
-    )
-    
-    delivery_notes = models.TextField(
-        blank=True,
-        null=True,
-        help_text="Notes from delivery personnel"
-    )
-    
-    status = models.CharField(
-        max_length=20,
-        choices=[
-            ('assigned', 'Assigned'),
-            ('accepted', 'Accepted'),
-            ('picked_up', 'Picked Up'),
-            ('in_transit', 'In Transit'),
-            ('delivered', 'Delivered'),
-            ('completed', 'Completed'),
-            ('cancelled', 'Cancelled'),
-        ],
-        default='assigned',
-        help_text="Current status of the delivery assignment"
-    )
-    
-    assigned_by = models.ForeignKey(
-        User,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='assigned_deliveries',
-        help_text="User who assigned this delivery"
-    )
-    
-    accepted_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="When the delivery assignment was accepted"
-    )
-    
-    picked_up_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="When the items were picked up"
-    )
-    
-    delivered_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="When the delivery was completed"
-    )
-    
-    started_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="When the delivery was started"
-    )
-    
-    completed_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="When the delivery was completed"
-    )
-    
-    failure_reason = models.TextField(
-        null=True,
-        blank=True,
-        help_text="Reason for delivery failure"
-    )
-    
-    retry_count = models.PositiveIntegerField(
-        default=0,
-        help_text="Number of retry attempts"
-    )
-    
     class Meta:
         db_table = 'delivery_assignment'
         verbose_name = 'Delivery Assignment'
         verbose_name_plural = 'Delivery Assignments'
-        ordering = ['-assigned_at']
-    
-    def __str__(self):
-        return f"Delivery of {self.order} by {self.delivery_manager.get_full_name()}"
-    
-    def is_delivered(self):
-        """Check if the delivery is completed."""
-        return self.actual_delivery_time is not None
-    
-    def is_overdue(self):
-        """Check if the delivery is overdue."""
-        if not self.is_delivered():
-            return timezone.now() > self.estimated_delivery_time
-        return False
-    
-    def get_delivery_duration(self):
-        """Get delivery duration if completed."""
-        if self.actual_delivery_time and self.assigned_at:
-            return self.actual_delivery_time - self.assigned_at
-        return None
-    
-    def mark_as_delivered(self, notes=None):
-        """Mark the delivery as completed."""
-        self.actual_delivery_time = timezone.now()
-        if notes:
-            self.delivery_notes = notes
-        self.save()
-        
-        # Update order status
-        self.order.status = 'delivered'
-        self.order.save()
+        managed = False  # Don't manage this model - it's only for migration state
 
 
-class DeliveryStatusHistory(models.Model):
-    """
-    History of delivery status changes.
-    """
-    delivery_assignment = models.ForeignKey(
-        DeliveryAssignment,
-        on_delete=models.CASCADE,
-        related_name='status_history',
-        help_text="Delivery assignment this status belongs to"
-    )
-    
-    STATUS_CHOICES = [
-        ('assigned', 'Assigned'),
-        ('accepted', 'Accepted'),
-        ('picked_up', 'Picked Up'),
-        ('in_transit', 'In Transit'),
-        ('delivered', 'Delivered'),
-        ('completed', 'Completed'),
-        ('failed', 'Delivery Failed'),
-    ]
-    
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        help_text="Delivery status"
-    )
-    
-    notes = models.TextField(
-        blank=True,
-        null=True,
-        help_text="Additional notes about this status"
-    )
-    
-    timestamp = models.DateTimeField(
-        auto_now_add=True,
-        help_text="When this status was recorded"
-    )
-    
-    class Meta:
-        db_table = 'delivery_status_history'
-        verbose_name = 'Delivery Status History'
-        verbose_name_plural = 'Delivery Status Histories'
-        ordering = ['timestamp']
-    
-    def __str__(self):
-        return f"{self.delivery_assignment} - {self.get_status_display()} at {self.timestamp}"
+# NOTE: DeliveryStatusHistory model has been merged into DeliveryActivity.
+# The model definition is removed - migration 0013 handles the data migration and table deletion.
+# STATUS_CHOICES are now available in DeliveryActivity.STATUS_CHOICES
 
 
 class OrderNote(models.Model):
@@ -601,7 +430,8 @@ class OrderNote(models.Model):
 
 class DeliveryRequest(models.Model):
     """
-    Request for delivery service.
+    Unified model for delivery requests and assignments.
+    Merges delivery_request and delivery_assignment into a single source of truth.
     """
     customer = models.ForeignKey(
         User,
@@ -611,14 +441,15 @@ class DeliveryRequest(models.Model):
         help_text="Customer requesting delivery"
     )
     
-    # Optional order reference
-    order = models.ForeignKey(
+    # Order reference (OneToOne for order deliveries, nullable for standalone requests)
+    # Changed from ForeignKey to OneToOneField to match DeliveryAssignment structure
+    order = models.OneToOneField(
         Order,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='delivery_requests',
-        help_text="Associated order if this delivery request is for a specific order"
+        related_name='delivery_request',
+        help_text="Associated order if this delivery request is for a specific order (merged from DeliveryAssignment)"
     )
     
     REQUEST_TYPE_CHOICES = [
@@ -633,45 +464,28 @@ class DeliveryRequest(models.Model):
         help_text="Type of delivery request"
     )
     
-    delivery_address = models.TextField(
-        help_text="Address for delivery"
-    )
-    
-    delivery_city = models.CharField(
-        max_length=100,
-        help_text="City for delivery"
-    )
-    
-    preferred_pickup_time = models.DateTimeField(
-        help_text="Preferred pickup time"
-    )
-    
-    preferred_delivery_time = models.DateTimeField(
-        help_text="Preferred delivery time"
-    )
-    
     STATUS_CHOICES = [
+        # Request statuses
         ('pending', 'Pending'),
         ('assigned', 'Assigned'),
         ('in_progress', 'In Progress'),
         ('completed', 'Completed'),
         ('cancelled', 'Cancelled'),
+        # Assignment statuses (merged from DeliveryAssignment)
+        ('accepted', 'Accepted'),
+        ('picked_up', 'Picked Up'),
+        ('in_transit', 'In Transit'),
+        ('delivered', 'Delivered'),
     ]
     
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
         default='pending',
-        help_text="Current status of the request"
+        help_text="Current status of the request/assignment"
     )
     
-    notes = models.TextField(
-        blank=True,
-        null=True,
-        help_text="Additional notes about the request"
-    )
-    
-    # Delivery manager assignment
+    # Delivery manager assignment (merged from DeliveryAssignment)
     delivery_manager = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
@@ -679,29 +493,7 @@ class DeliveryRequest(models.Model):
         blank=True,
         related_name='assigned_requests',
         limit_choices_to={'user_type': 'delivery_admin'},
-        help_text="Delivery manager assigned to this request"
-    )
-    
-    # Assignment tracking
-    assigned_by = models.ForeignKey(
-        User,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='assigned_delivery_requests',
-        help_text="User who assigned the delivery manager"
-    )
-    
-    assigned_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="When the request was assigned to a delivery manager"
-    )
-    
-    delivered_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="When the delivery was completed"
+        help_text="Delivery manager assigned to this request/order"
     )
     
     created_at = models.DateTimeField(auto_now_add=True)
@@ -714,8 +506,10 @@ class DeliveryRequest(models.Model):
         ordering = ['-created_at']
         indexes = [
             models.Index(fields=['customer']),
+            models.Index(fields=['order']),
             models.Index(fields=['request_type']),
             models.Index(fields=['status']),
+            models.Index(fields=['delivery_manager']),
             models.Index(fields=['created_at']),
         ]
     
@@ -730,6 +524,18 @@ class DeliveryRequest(models.Model):
         """Check if the request can be cancelled."""
         return self.status in ['pending', 'assigned']
     
+    def is_delivered(self):
+        """Check if the delivery is completed."""
+        return self.status in ['delivered', 'completed']
+    
+    def mark_as_delivered(self):
+        """Mark the delivery as completed."""
+        self.status = 'completed'
+        if self.order:
+            self.order.status = 'completed'
+            self.order.save()
+        self.save()
+    
     @classmethod
     def get_pending_requests(cls):
         """Get all pending delivery requests."""
@@ -742,8 +548,8 @@ class DeliveryRequest(models.Model):
         """
         total_requests = cls.objects.count()
         pending_requests = cls.objects.filter(status='pending').count()
-        in_progress_requests = cls.objects.filter(status='in_progress').count()
-        completed_requests = cls.objects.filter(status='completed').count()
+        in_progress_requests = cls.objects.filter(status__in=['in_progress', 'in_transit']).count()
+        completed_requests = cls.objects.filter(status__in=['completed', 'delivered']).count()
         
         return {
             'total_requests': total_requests,
@@ -827,14 +633,14 @@ class LocationHistory(models.Model):
         help_text="When this location was recorded"
     )
     
-    # Related delivery assignment (if applicable)
-    delivery_assignment = models.ForeignKey(
-        'DeliveryAssignment',
+    # Related delivery request (if applicable) - merged from DeliveryAssignment
+    delivery_request = models.ForeignKey(
+        'DeliveryRequest',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name='location_updates',
-        help_text="Delivery assignment this location update is related to"
+        help_text="Delivery request this location update is related to (merged from DeliveryAssignment)"
     )
     
     # Additional metadata
@@ -855,7 +661,7 @@ class LocationHistory(models.Model):
         ordering = ['-recorded_at']
         indexes = [
             models.Index(fields=['delivery_manager', 'recorded_at']),
-            models.Index(fields=['delivery_assignment', 'recorded_at']),
+            models.Index(fields=['delivery_request', 'recorded_at']),
             models.Index(fields=['tracking_type', 'recorded_at']),
         ]
     
@@ -979,13 +785,13 @@ class RealTimeTracking(models.Model):
         help_text="Whether currently on a delivery"
     )
     
-    current_delivery_assignment = models.ForeignKey(
-        'DeliveryAssignment',
+    current_delivery_request = models.ForeignKey(
+        'DeliveryRequest',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name='real_time_tracking',
-        help_text="Current delivery assignment being tracked"
+        help_text="Current delivery request being tracked (merged from DeliveryAssignment)"
     )
     
     # Settings
@@ -1041,15 +847,15 @@ class RealTimeTracking(models.Model):
         
         return True, "Tracking can be started"
     
-    def start_tracking(self, delivery_assignment=None):
+    def start_tracking(self, delivery_request=None):
         """Start real-time tracking."""
         can_start, message = self.can_start_tracking()
         if not can_start:
             return False, message
         
         self.is_delivering = True
-        if delivery_assignment:
-            self.current_delivery_assignment = delivery_assignment
+        if delivery_request:
+            self.current_delivery_request = delivery_request
         self.save()
         
         return True, "Tracking started successfully"
@@ -1057,7 +863,7 @@ class RealTimeTracking(models.Model):
     def stop_tracking(self):
         """Stop real-time tracking."""
         self.is_delivering = False
-        self.current_delivery_assignment = None
+        self.current_delivery_request = None
         self.save()
         
         return True, "Tracking stopped successfully"
@@ -1065,9 +871,11 @@ class RealTimeTracking(models.Model):
 
 class DeliveryActivity(models.Model):
     """
-    Model to track delivery manager activities for monitoring and analytics.
+    Unified model to track all delivery activities and status changes.
+    Merges delivery_activity and delivery_status_history into a single source of truth.
     """
     ACTIVITY_TYPES = [
+        # General activities
         ('contact_customer', 'Contact Customer'),
         ('view_route', 'View Route'),
         ('add_notes', 'Add Notes'),
@@ -1077,20 +885,56 @@ class DeliveryActivity(models.Model):
         ('start_delivery', 'Start Delivery'),
         ('complete_delivery', 'Complete Delivery'),
         ('update_eta', 'Update ETA'),
+        # Status change activities (from DeliveryStatusHistory)
+        ('status_change', 'Status Change'),
     ]
     
+    ACTOR_TYPE_CHOICES = [
+        ('delivery_manager', 'Delivery Manager'),
+        ('system', 'System'),
+        ('admin', 'Administrator'),
+        ('customer', 'Customer'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('assigned', 'Assigned'),
+        ('accepted', 'Accepted'),
+        ('picked_up', 'Picked Up'),
+        ('in_transit', 'In Transit'),
+        ('delivered', 'Delivered'),
+        ('completed', 'Completed'),
+        ('failed', 'Delivery Failed'),
+        ('cancelled', 'Cancelled'),
+    ]
+    
+    # Delivery assignment (optional, for status history)
+    delivery_request = models.ForeignKey(
+        DeliveryRequest,
+        on_delete=models.CASCADE,
+        related_name='activities',
+        null=True,
+        blank=True,
+        help_text="Delivery request this activity belongs to (for status changes, merged from DeliveryAssignment)"
+    )
+    
+    # Delivery manager (optional, for system-generated activities)
     delivery_manager = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
         related_name='delivery_activities',
         limit_choices_to={'user_type': 'delivery_admin'},
+        null=True,
+        blank=True,
         help_text="Delivery manager who performed the activity"
     )
     
+    # Order (optional, can derive from delivery_request)
     order = models.ForeignKey(
         Order,
         on_delete=models.CASCADE,
         related_name='delivery_activities',
+        null=True,
+        blank=True,
         help_text="Order related to this activity"
     )
     
@@ -1098,6 +942,38 @@ class DeliveryActivity(models.Model):
         max_length=50,
         choices=ACTIVITY_TYPES,
         help_text="Type of activity performed"
+    )
+    
+    # Status change fields (for status history)
+    previous_status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        null=True,
+        blank=True,
+        help_text="Previous delivery status (for status changes)"
+    )
+    
+    new_status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        null=True,
+        blank=True,
+        help_text="New delivery status (for status changes)"
+    )
+    
+    # Actor information
+    actor_type = models.CharField(
+        max_length=20,
+        choices=ACTOR_TYPE_CHOICES,
+        default='delivery_manager',
+        help_text="Type of actor who performed this activity"
+    )
+    
+    # Notes (from DeliveryStatusHistory)
+    notes = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Additional notes about this activity or status change"
     )
     
     activity_data = models.JSONField(
@@ -1128,9 +1004,47 @@ class DeliveryActivity(models.Model):
         verbose_name_plural = 'Delivery Activities'
         indexes = [
             models.Index(fields=['delivery_manager', 'timestamp']),
+            models.Index(fields=['delivery_request', 'timestamp']),
             models.Index(fields=['order', 'timestamp']),
             models.Index(fields=['activity_type', 'timestamp']),
+            models.Index(fields=['new_status', 'timestamp']),
+            models.Index(fields=['actor_type', 'timestamp']),
         ]
     
+    def clean(self):
+        """
+        Validate that required fields are present based on activity type.
+        """
+        from django.core.exceptions import ValidationError
+        
+        # For status changes, require delivery_request and status fields
+        if self.activity_type == 'status_change':
+            if not self.delivery_request:
+                raise ValidationError("delivery_request is required for status_change activities.")
+            if not self.new_status:
+                raise ValidationError("new_status is required for status_change activities.")
+            # Set order from delivery_request if not set
+            if not self.order and self.delivery_request:
+                self.order = self.delivery_request.order
+        
+        # For other activities, require either order or delivery_request
+        elif not self.order and not self.delivery_request:
+            raise ValidationError("Either order or delivery_request must be provided.")
+        
+        # Set order from delivery_request if not set
+        if not self.order and self.delivery_request:
+            self.order = self.delivery_request.order
+    
+    def save(self, *args, **kwargs):
+        """Override save to ensure order is set from delivery_request if needed."""
+        self.full_clean()
+        super().save(*args, **kwargs)
+    
     def __str__(self):
-        return f"{self.delivery_manager.email} - {self.get_activity_type_display()} - {self.order.order_number}"
+        if self.activity_type == 'status_change':
+            actor = self.delivery_manager.email if self.delivery_manager else self.actor_type
+            return f"{actor} - {self.previous_status} → {self.new_status} - {self.order.order_number if self.order else 'N/A'}"
+        else:
+            actor = self.delivery_manager.email if self.delivery_manager else self.actor_type
+            order_num = self.order.order_number if self.order else 'N/A'
+            return f"{actor} - {self.get_activity_type_display()} - {order_num}"

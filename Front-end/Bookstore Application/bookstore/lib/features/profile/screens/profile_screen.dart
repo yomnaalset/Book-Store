@@ -8,6 +8,7 @@ import '../../../core/widgets/common/custom_button.dart';
 import '../../../core/widgets/common/custom_text_field.dart';
 import '../../../core/widgets/common/loading_indicator.dart';
 import '../../../core/utils/validators.dart';
+import '../../../core/localization/app_localizations.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/profile_provider.dart';
 
@@ -164,9 +165,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           'ProfileScreen: Consumer builder called - AuthProvider user: ${authProvider.user?.firstName} ${authProvider.user?.lastName}',
         );
 
+        final localizations = AppLocalizations.of(context);
         return Scaffold(
           appBar: AppBar(
-            title: const Text('Profile'),
+            title: Text(localizations.profile),
             actions: [
               if (!_isEditing)
                 IconButton(
@@ -182,6 +184,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               }
 
               return SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(AppDimensions.paddingL),
                 child: Form(
                   key: _formKey,
@@ -325,34 +328,49 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Personal Information',
-              style: TextStyle(
-                fontSize: AppDimensions.fontSizeL,
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.onSurface,
-              ),
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Text(
+                  localizations.personalInformation,
+                  style: TextStyle(
+                    fontSize: AppDimensions.fontSizeL,
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                );
+              },
             ),
             const SizedBox(height: AppDimensions.spacingM),
 
             Row(
               children: [
-                Expanded(
-                  child: CustomTextField(
-                    label: 'First Name',
-                    controller: _firstNameController,
-                    enabled: _isEditing,
-                    validator: Validators.name,
-                  ),
+                Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return Expanded(
+                      child: CustomTextField(
+                        label: localizations.firstNameLabel,
+                        controller: _firstNameController,
+                        enabled: _isEditing,
+                        validator: Validators.name,
+                      ),
+                    );
+                  },
                 ),
                 const SizedBox(width: AppDimensions.spacingM),
-                Expanded(
-                  child: CustomTextField(
-                    label: 'Last Name',
-                    controller: _lastNameController,
-                    enabled: _isEditing,
-                    validator: Validators.name,
-                  ),
+                Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return Expanded(
+                      child: CustomTextField(
+                        label: localizations.lastNameLabel,
+                        controller: _lastNameController,
+                        enabled: _isEditing,
+                        validator: Validators.name,
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -360,24 +378,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: AppDimensions.spacingM),
 
             // Date of Birth Field
-            CustomTextField(
-              label: 'Date of Birth',
-              controller: _dateOfBirthController,
-              enabled: _isEditing,
-              keyboardType: TextInputType.datetime,
-              prefixIcon: const Icon(Icons.calendar_today_outlined),
-              hint: 'YYYY-MM-DD',
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return null; // Date of birth is optional
-                }
-                // Basic date format validation
-                // ignore: deprecated_member_use
-                final dateRegex = RegExp(r'^\d{4}-\d{2}-\d{2}$');
-                if (!dateRegex.hasMatch(value)) {
-                  return 'Please enter date in YYYY-MM-DD format';
-                }
-                return null;
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return CustomTextField(
+                  label: localizations.dateOfBirthLabel,
+                  controller: _dateOfBirthController,
+                  enabled: _isEditing,
+                  keyboardType: TextInputType.datetime,
+                  prefixIcon: const Icon(Icons.calendar_today_outlined),
+                  hint: localizations.dateFormatHint,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return null; // Date of birth is optional
+                    }
+                    // Basic date format validation
+                    // ignore: deprecated_member_use
+                    final dateRegex = RegExp(r'^\d{4}-\d{2}-\d{2}$');
+                    if (!dateRegex.hasMatch(value)) {
+                      return localizations.pleaseEnterDateFormat;
+                    }
+                    return null;
+                  },
+                );
               },
             ),
 
@@ -385,19 +408,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
             if (_isEditing) ...[
               const SizedBox(height: AppDimensions.spacingS),
               Align(
-                alignment: Alignment.centerRight,
-                child: ElevatedButton.icon(
-                  onPressed: _selectDateOfBirth,
-                  icon: const Icon(Icons.calendar_today, size: 16),
-                  label: const Text('Select Date'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.primary,
-                    foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                  ),
+                alignment: AlignmentDirectional.centerEnd,
+                child: Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return ElevatedButton.icon(
+                      onPressed: _selectDateOfBirth,
+                      icon: const Icon(Icons.calendar_today, size: 16),
+                      label: Text(localizations.selectDate),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        foregroundColor: Theme.of(
+                          context,
+                        ).colorScheme.onPrimary,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ),
             ],
@@ -414,24 +444,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Text(
-                  'Contact Information',
-                  style: TextStyle(
-                    fontSize: AppDimensions.fontSizeL,
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.onSurface,
-                  ),
-                ),
-                const Spacer(),
-                if (_isEditing && !_isChangingEmail)
-                  TextButton.icon(
-                    onPressed: _handleStartEmailChange,
-                    icon: const Icon(Icons.edit, size: 16),
-                    label: const Text('Change Email'),
-                  ),
-              ],
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Row(
+                  children: [
+                    Text(
+                      localizations.contactInformation,
+                      style: TextStyle(
+                        fontSize: AppDimensions.fontSizeL,
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                    ),
+                    const Spacer(),
+                    if (_isEditing && !_isChangingEmail)
+                      TextButton.icon(
+                        onPressed: _handleStartEmailChange,
+                        icon: const Icon(Icons.edit, size: 16),
+                        label: Text(localizations.changeEmail),
+                      ),
+                  ],
+                );
+              },
             ),
             const SizedBox(height: AppDimensions.spacingM),
 
@@ -453,98 +488,113 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
             // Email change form
             if (_isChangingEmail) ...[
-              CustomTextField(
-                label: 'New Email',
-                controller: _newEmailController,
-                enabled: true,
-                keyboardType: TextInputType.emailAddress,
-                validator: Validators.email,
-                prefixIcon: const Icon(Icons.email_outlined),
-              ),
-              const SizedBox(height: AppDimensions.spacingM),
-              CustomTextField(
-                label: 'Confirm New Email',
-                controller: _confirmEmailController,
-                enabled: true,
-                keyboardType: TextInputType.emailAddress,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please confirm your new email';
-                  }
-                  if (value != _newEmailController.text) {
-                    return 'Email addresses do not match';
-                  }
-                  return null;
+              Builder(
+                builder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return Column(
+                    children: [
+                      CustomTextField(
+                        label: localizations.newEmailLabel,
+                        controller: _newEmailController,
+                        enabled: true,
+                        keyboardType: TextInputType.emailAddress,
+                        validator: Validators.email,
+                        prefixIcon: const Icon(Icons.email_outlined),
+                      ),
+                      const SizedBox(height: AppDimensions.spacingM),
+                      CustomTextField(
+                        label: localizations.confirmNewEmailLabel,
+                        controller: _confirmEmailController,
+                        enabled: true,
+                        keyboardType: TextInputType.emailAddress,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return localizations.pleaseConfirmNewEmail;
+                          }
+                          if (value != _newEmailController.text) {
+                            return localizations.emailAddressesDoNotMatch;
+                          }
+                          return null;
+                        },
+                        prefixIcon: const Icon(Icons.email_outlined),
+                      ),
+                      const SizedBox(height: AppDimensions.spacingM),
+                      CustomTextField(
+                        label: localizations.currentPasswordLabel,
+                        controller: _currentPasswordController,
+                        enabled: true,
+                        obscureText: _obscureCurrentPassword,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return localizations.currentPasswordRequired;
+                          }
+                          return null;
+                        },
+                        prefixIcon: const Icon(Icons.lock_outline),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscureCurrentPassword
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _obscureCurrentPassword =
+                                  !_obscureCurrentPassword;
+                            });
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: AppDimensions.spacingM),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: CustomButton(
+                              text: localizations.cancel,
+                              onPressed: _handleCancelEmailChange,
+                              type: ButtonType.secondary,
+                            ),
+                          ),
+                          const SizedBox(width: AppDimensions.spacingM),
+                          Expanded(
+                            child: CustomButton(
+                              text: localizations.changeEmail,
+                              onPressed: _handleChangeEmail,
+                              type: ButtonType.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  );
                 },
-                prefixIcon: const Icon(Icons.email_outlined),
-              ),
-              const SizedBox(height: AppDimensions.spacingM),
-              CustomTextField(
-                label: 'Current Password',
-                controller: _currentPasswordController,
-                enabled: true,
-                obscureText: _obscureCurrentPassword,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Current password is required';
-                  }
-                  return null;
-                },
-                prefixIcon: const Icon(Icons.lock_outline),
-                suffixIcon: IconButton(
-                  icon: Icon(
-                    _obscureCurrentPassword
-                        ? Icons.visibility_outlined
-                        : Icons.visibility_off_outlined,
-                  ),
-                  onPressed: () {
-                    setState(() {
-                      _obscureCurrentPassword = !_obscureCurrentPassword;
-                    });
-                  },
-                ),
-              ),
-              const SizedBox(height: AppDimensions.spacingM),
-              Row(
-                children: [
-                  Expanded(
-                    child: CustomButton(
-                      text: 'Cancel',
-                      onPressed: _handleCancelEmailChange,
-                      type: ButtonType.secondary,
-                    ),
-                  ),
-                  const SizedBox(width: AppDimensions.spacingM),
-                  Expanded(
-                    child: CustomButton(
-                      text: 'Change Email',
-                      onPressed: _handleChangeEmail,
-                      type: ButtonType.primary,
-                    ),
-                  ),
-                ],
               ),
             ],
 
             const SizedBox(height: AppDimensions.spacingM),
 
-            CustomTextField(
-              label: 'Phone Number',
-              controller: _phoneController,
-              enabled: _isEditing,
-              keyboardType: TextInputType.phone,
-              validator: (value) {
-                // Phone is optional but if provided, should be valid format
-                if (value != null && value.trim().isNotEmpty) {
-                  // ignore: deprecated_member_use
-                  final phoneRegex = RegExp(r'^\+?[\d\s\-\(\)]{7,20}$');
-                  if (!phoneRegex.hasMatch(value.trim())) {
-                    return 'Please enter a valid phone number (e.g., +1234567890)';
-                  }
-                }
-                return null;
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return CustomTextField(
+                  label: localizations.phoneLabel,
+                  controller: _phoneController,
+                  enabled: _isEditing,
+                  keyboardType: TextInputType.phone,
+                  validator: (value) {
+                    // Phone is optional but if provided, should be valid format
+                    if (value != null && value.trim().isNotEmpty) {
+                      // ignore: deprecated_member_use
+                      final phoneRegex = RegExp(r'^\+?[\d\s\-\(\)]{7,20}$');
+                      if (!phoneRegex.hasMatch(value.trim())) {
+                        return localizations.pleaseEnterValidPhone;
+                      }
+                    }
+                    return null;
+                  },
+                  prefixIcon: const Icon(Icons.phone_outlined),
+                );
               },
-              prefixIcon: const Icon(Icons.phone_outlined),
             ),
           ],
         ),
@@ -559,53 +609,63 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Address Information',
-              style: TextStyle(
-                fontSize: AppDimensions.fontSizeL,
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.onSurface,
-              ),
-            ),
-            const SizedBox(height: AppDimensions.spacingM),
-
-            CustomTextField(
-              label: 'Address',
-              controller: _addressController,
-              enabled: _isEditing,
-              maxLines: 2,
-              prefixIcon: const Icon(Icons.location_on_outlined),
-            ),
-
-            const SizedBox(height: AppDimensions.spacingM),
-
-            CustomTextField(
-              label: 'City',
-              controller: _cityController,
-              enabled: _isEditing,
-            ),
-
-            const SizedBox(height: AppDimensions.spacingM),
-
-            Row(
-              children: [
-                Expanded(
-                  child: CustomTextField(
-                    label: 'ZIP Code',
-                    controller: _zipCodeController,
-                    enabled: _isEditing,
-                    keyboardType: TextInputType.number,
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Text(
+                  localizations.addressInformation,
+                  style: TextStyle(
+                    fontSize: AppDimensions.fontSizeL,
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.onSurface,
                   ),
-                ),
-                const SizedBox(width: AppDimensions.spacingM),
-                Expanded(
-                  child: CustomTextField(
-                    label: 'Country',
-                    controller: _countryController,
-                    enabled: _isEditing,
-                  ),
-                ),
-              ],
+                );
+              },
+            ),
+            const SizedBox(height: AppDimensions.spacingM),
+
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Column(
+                  children: [
+                    CustomTextField(
+                      label: localizations.addressLabel,
+                      controller: _addressController,
+                      enabled: _isEditing,
+                      maxLines: 2,
+                      prefixIcon: const Icon(Icons.location_on_outlined),
+                    ),
+                    const SizedBox(height: AppDimensions.spacingM),
+                    CustomTextField(
+                      label: localizations.cityLabel,
+                      controller: _cityController,
+                      enabled: _isEditing,
+                    ),
+                    const SizedBox(height: AppDimensions.spacingM),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: CustomTextField(
+                            label: localizations.zipCodeLabel,
+                            controller: _zipCodeController,
+                            enabled: _isEditing,
+                            keyboardType: TextInputType.number,
+                          ),
+                        ),
+                        const SizedBox(width: AppDimensions.spacingM),
+                        Expanded(
+                          child: CustomTextField(
+                            label: localizations.countryLabel,
+                            controller: _countryController,
+                            enabled: _isEditing,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+              },
             ),
           ],
         ),
@@ -616,25 +676,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildActionButtons(ProfileProvider profileProvider) {
     return Row(
       children: [
-        Expanded(
-          child: CustomButton(
-            text: 'Cancel',
-            onPressed: () {
-              setState(() => _isEditing = false);
-              // Reset form data without triggering loading
-              _resetFormData();
-            },
-            type: ButtonType.secondary,
-          ),
+        Builder(
+          builder: (context) {
+            final localizations = AppLocalizations.of(context);
+            return Expanded(
+              child: CustomButton(
+                text: localizations.cancel,
+                onPressed: () {
+                  setState(() => _isEditing = false);
+                  // Reset form data without triggering loading
+                  _resetFormData();
+                },
+                type: ButtonType.secondary,
+              ),
+            );
+          },
         ),
         const SizedBox(width: AppDimensions.spacingM),
-        Expanded(
-          child: CustomButton(
-            text: 'Save Changes',
-            onPressed: profileProvider.isLoading ? null : _handleSaveProfile,
-            type: ButtonType.primary,
-            isLoading: profileProvider.isLoading,
-          ),
+        Builder(
+          builder: (context) {
+            final localizations = AppLocalizations.of(context);
+            return Expanded(
+              child: CustomButton(
+                text: localizations.saveChanges,
+                onPressed: profileProvider.isLoading
+                    ? null
+                    : _handleSaveProfile,
+                type: ButtonType.primary,
+                isLoading: profileProvider.isLoading,
+              ),
+            );
+          },
         ),
       ],
     );
@@ -991,10 +1063,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _handleChangeEmail() async {
     // Only validate the email change form fields, not the entire form
+    final localizations = AppLocalizations.of(context);
     if (_newEmailController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a new email address'),
+        SnackBar(
+          content: Text(localizations.pleaseEnterNewEmail),
           backgroundColor: AppColors.error,
         ),
       );
@@ -1003,8 +1076,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     if (_confirmEmailController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please confirm your new email address'),
+        SnackBar(
+          content: Text(localizations.pleaseConfirmNewEmailAddress),
           backgroundColor: AppColors.error,
         ),
       );
@@ -1014,8 +1087,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (_newEmailController.text.trim() !=
         _confirmEmailController.text.trim()) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Email addresses do not match'),
+        SnackBar(
+          content: Text(localizations.emailAddressesDoNotMatch),
           backgroundColor: AppColors.error,
         ),
       );
@@ -1024,8 +1097,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     if (_currentPasswordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter your current password'),
+        SnackBar(
+          content: Text(localizations.pleaseEnterCurrentPasswordProfile),
           backgroundColor: AppColors.error,
         ),
       );
@@ -1065,10 +1138,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (mounted) {
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Email changed successfully! Please log in again with your new email.',
-            ),
+          SnackBar(
+            content: Text(localizations.emailChangedSuccessfully),
             backgroundColor: AppColors.success,
           ),
         );
@@ -1087,7 +1158,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              profileProvider.errorMessage ?? 'Failed to change email',
+              profileProvider.errorMessage ?? localizations.failedToChangeEmail,
             ),
             backgroundColor: AppColors.error,
           ),
@@ -1098,36 +1169,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   // Helper method to generate appropriate success messages
   String _getSuccessMessage(Map<String, dynamic> changedFields) {
+    final localizations = AppLocalizations.of(context);
     if (changedFields.isEmpty) {
-      return 'No changes detected.';
+      return localizations.noChangesDetected;
     }
 
     if (changedFields.length == 1) {
       final field = changedFields.keys.first;
       switch (field) {
         case 'date_of_birth':
-          return 'Date of birth updated successfully.';
+          return localizations.dateOfBirthUpdatedSuccessfully;
         case 'phone_number':
-          return 'Phone number updated successfully.';
+          return localizations.phoneNumberUpdatedSuccessfully;
         case 'email':
-          return 'Email address updated successfully.';
+          return localizations.emailAddressUpdatedSuccessfully;
         case 'first_name':
-          return 'First name updated successfully.';
+          return localizations.firstNameUpdatedSuccessfully;
         case 'last_name':
-          return 'Last name updated successfully.';
+          return localizations.lastNameUpdatedSuccessfully;
         case 'address':
-          return 'Address updated successfully.';
+          return localizations.addressUpdatedSuccessfully;
         case 'city':
-          return 'City updated successfully.';
+          return localizations.cityUpdatedSuccessfully;
         case 'zip_code':
-          return 'ZIP code updated successfully.';
+          return localizations.zipCodeUpdatedSuccessfully;
         case 'country':
-          return 'Country updated successfully.';
+          return localizations.countryUpdatedSuccessfully;
         default:
-          return 'Profile updated successfully.';
+          return localizations.profileUpdatedSuccessfully;
       }
     } else {
-      return 'Profile updated successfully! Updated ${changedFields.length} field(s).';
+      return localizations.profileUpdatedFields(changedFields.length);
     }
   }
 }

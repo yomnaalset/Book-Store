@@ -7,6 +7,7 @@ import '../../../services/manager_api_service.dart';
 import '../../../../auth/providers/auth_provider.dart';
 import '../book_selection/book_selection_screen.dart';
 import '../../../../../../core/services/api_config.dart';
+import '../../../../../core/localization/app_localizations.dart';
 
 class DiscountFormScreen extends StatefulWidget {
   final Discount? discount;
@@ -173,17 +174,16 @@ class _DiscountFormScreenState extends State<DiscountFormScreen> {
   }
 
   void _showAlternativeCodesDialog(List<String> alternatives) {
+    final localizations = AppLocalizations.of(context);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Code Already Exists'),
+        title: Text(localizations.codeAlreadyExists),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'A discount code with this name already exists. Choose one of these alternatives:',
-            ),
+            Text(localizations.discountCodeAlreadyExistsMessage),
             const SizedBox(height: 16),
             ...alternatives.map(
               (code) => ListTile(
@@ -199,7 +199,7 @@ class _DiscountFormScreenState extends State<DiscountFormScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
+            child: Text(localizations.cancel),
           ),
         ],
       ),
@@ -209,11 +209,12 @@ class _DiscountFormScreenState extends State<DiscountFormScreen> {
   Future<void> _saveDiscount() async {
     if (!_formKey.currentState!.validate()) return;
 
+    final localizations = AppLocalizations.of(context);
     // Additional validation for book discounts
     if (_discountType == 'book' && _selectedBook == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select a book for the discount'),
+        SnackBar(
+          content: Text(localizations.pleaseSelectBookForDiscount),
           backgroundColor: Colors.red,
         ),
       );
@@ -232,17 +233,19 @@ class _DiscountFormScreenState extends State<DiscountFormScreen> {
       }
     } catch (e) {
       if (mounted) {
-        String errorMessage = 'Error: ${e.toString()}';
+        final localizations = AppLocalizations.of(context);
+        String errorMessage = '${localizations.error}: ${e.toString()}';
 
         // Parse error message for better user feedback
         if (e.toString().contains(
           'Discount Code with this code already exists',
         )) {
           final alternatives = _generateAlternativeCodes(_codeController.text);
-          errorMessage =
-              'A discount code with this name already exists. Try: ${alternatives.join(', ')}';
+          errorMessage = localizations.discountCodeAlreadyExistsTry(
+            alternatives.join(', '),
+          );
         } else if (e.toString().contains('validation errors')) {
-          errorMessage = 'Please check your input and try again.';
+          errorMessage = localizations.pleaseCheckInputAndTryAgain;
         }
 
         // Show error with alternative codes if available
@@ -303,15 +306,17 @@ class _DiscountFormScreenState extends State<DiscountFormScreen> {
     if (widget.discount == null) {
       await provider.createDiscount(discountData);
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Discount created successfully')),
+          SnackBar(content: Text(localizations.discountCreatedSuccessfully)),
         );
       }
     } else {
       await provider.updateDiscount(discountData);
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Discount updated successfully')),
+          SnackBar(content: Text(localizations.discountUpdatedSuccessfully)),
         );
       }
     }
@@ -359,15 +364,21 @@ class _DiscountFormScreenState extends State<DiscountFormScreen> {
     if (widget.bookDiscount == null) {
       await apiService.createBookDiscount(bookDiscountData);
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Book discount created successfully')),
+          SnackBar(
+            content: Text(localizations.bookDiscountCreatedSuccessfully),
+          ),
         );
       }
     } else {
       await apiService.updateBookDiscount(bookDiscountData);
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Book discount updated successfully')),
+          SnackBar(
+            content: Text(localizations.bookDiscountUpdatedSuccessfully),
+          ),
         );
       }
     }
@@ -379,12 +390,13 @@ class _DiscountFormScreenState extends State<DiscountFormScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
         title: Text(
           widget.discount != null || widget.bookDiscount != null
-              ? 'Edit Discount'
-              : 'Create Discount',
+              ? localizations.editDiscount
+              : localizations.createDiscount,
         ),
         actions: [
           if (widget.discount != null || widget.bookDiscount != null)
@@ -411,37 +423,47 @@ class _DiscountFormScreenState extends State<DiscountFormScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Row(
-                              children: [
-                                Icon(Icons.local_offer, color: Colors.orange),
-                                SizedBox(width: 12),
-                                Text(
-                                  'Discount Information',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
+                            Builder(
+                              builder: (context) {
+                                final localizations = AppLocalizations.of(
+                                  context,
+                                );
+                                return Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.local_offer,
+                                      color: Colors.orange,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      localizations.discountInformation,
+                                      style: const TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
                             ),
                             const SizedBox(height: 24),
 
                             // Code Field
                             TextFormField(
                               controller: _codeController,
-                              decoration: const InputDecoration(
-                                labelText: 'Discount Code *',
-                                border: OutlineInputBorder(),
-                                hintText: 'Enter discount code (e.g., SAVE20)',
-                                prefixIcon: Icon(Icons.code),
+                              decoration: InputDecoration(
+                                labelText: '${localizations.discountCode} *',
+                                border: const OutlineInputBorder(),
+                                hintText: localizations.enterDiscountCode,
+                                prefixIcon: const Icon(Icons.code),
                               ),
                               textCapitalization: TextCapitalization.characters,
                               validator: (value) {
                                 if (value == null || value.trim().isEmpty) {
-                                  return 'Discount code is required';
+                                  return localizations.discountCodeRequired;
                                 }
                                 if (value.trim().length < 3) {
-                                  return 'Discount code must be at least 3 characters';
+                                  return localizations.discountCodeMinLength;
                                 }
                                 return null;
                               },
@@ -460,13 +482,16 @@ class _DiscountFormScreenState extends State<DiscountFormScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Row(
+                              Row(
                                 children: [
-                                  Icon(Icons.category, color: Colors.purple),
-                                  SizedBox(width: 12),
+                                  const Icon(
+                                    Icons.category,
+                                    color: Colors.purple,
+                                  ),
+                                  const SizedBox(width: 12),
                                   Text(
-                                    'Discount Type',
-                                    style: TextStyle(
+                                    localizations.discountType,
+                                    style: const TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.bold,
                                     ),
@@ -477,19 +502,20 @@ class _DiscountFormScreenState extends State<DiscountFormScreen> {
 
                               DropdownButtonFormField<String>(
                                 initialValue: _discountType,
-                                decoration: const InputDecoration(
-                                  labelText: 'Select Discount Type *',
-                                  border: OutlineInputBorder(),
-                                  prefixIcon: Icon(Icons.local_offer),
+                                decoration: InputDecoration(
+                                  labelText:
+                                      '${localizations.selectDiscountType} *',
+                                  border: const OutlineInputBorder(),
+                                  prefixIcon: const Icon(Icons.local_offer),
                                 ),
-                                items: const [
+                                items: [
                                   DropdownMenuItem(
                                     value: 'invoice',
-                                    child: Text('Invoice Discount'),
+                                    child: Text(localizations.invoiceDiscount),
                                   ),
                                   DropdownMenuItem(
                                     value: 'book',
-                                    child: Text('Book Discount'),
+                                    child: Text(localizations.bookDiscount),
                                   ),
                                 ],
                                 onChanged: (value) {
@@ -503,7 +529,8 @@ class _DiscountFormScreenState extends State<DiscountFormScreen> {
                                 },
                                 validator: (value) {
                                   if (value == null || value.isEmpty) {
-                                    return 'Please select a discount type';
+                                    return localizations
+                                        .pleaseSelectDiscountType;
                                   }
                                   return null;
                                 },
@@ -524,13 +551,13 @@ class _DiscountFormScreenState extends State<DiscountFormScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Row(
+                              Row(
                                 children: [
-                                  Icon(Icons.book, color: Colors.green),
-                                  SizedBox(width: 12),
+                                  const Icon(Icons.book, color: Colors.green),
+                                  const SizedBox(width: 12),
                                   Text(
-                                    'Book Selection',
-                                    style: TextStyle(
+                                    localizations.bookSelection,
+                                    style: const TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.bold,
                                     ),
@@ -629,8 +656,8 @@ class _DiscountFormScreenState extends State<DiscountFormScreen> {
                                   icon: const Icon(Icons.search),
                                   label: Text(
                                     _selectedBook == null
-                                        ? 'Select Book'
-                                        : 'Change Book',
+                                        ? localizations.selectBook
+                                        : localizations.changeBook,
                                   ),
                                 ),
                               ),
@@ -648,16 +675,16 @@ class _DiscountFormScreenState extends State<DiscountFormScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Row(
+                            Row(
                               children: [
-                                Icon(
+                                const Icon(
                                   Icons.monetization_on,
                                   color: Colors.amber,
                                 ),
-                                SizedBox(width: 12),
+                                const SizedBox(width: 12),
                                 Text(
-                                  'Discount Value',
-                                  style: TextStyle(
+                                  localizations.discountValue,
+                                  style: const TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -670,25 +697,25 @@ class _DiscountFormScreenState extends State<DiscountFormScreen> {
                               // Percentage Field for Invoice Discounts
                               TextFormField(
                                 controller: _percentageController,
-                                decoration: const InputDecoration(
-                                  labelText: 'Discount Percentage *',
-                                  border: OutlineInputBorder(),
-                                  hintText:
-                                      'Enter percentage (e.g., 20 for 20%)',
-                                  prefixIcon: Icon(Icons.percent),
+                                decoration: InputDecoration(
+                                  labelText:
+                                      '${localizations.discountPercentage} *',
+                                  border: const OutlineInputBorder(),
+                                  hintText: localizations.enterPercentage,
+                                  prefixIcon: const Icon(Icons.percent),
                                   suffixText: '%',
                                 ),
                                 keyboardType: TextInputType.number,
                                 validator: (value) {
                                   if (value == null || value.trim().isEmpty) {
-                                    return 'Percentage is required';
+                                    return localizations.percentageRequired;
                                   }
                                   final percentage = double.tryParse(value);
                                   if (percentage == null) {
-                                    return 'Please enter a valid number';
+                                    return localizations.pleaseEnterValidNumber;
                                   }
                                   if (percentage <= 0 || percentage > 100) {
-                                    return 'Percentage must be between 1 and 100';
+                                    return localizations.percentageRange;
                                   }
                                   return null;
                                 },
@@ -698,9 +725,10 @@ class _DiscountFormScreenState extends State<DiscountFormScreen> {
                               TextFormField(
                                 controller: _discountedPriceController,
                                 decoration: InputDecoration(
-                                  labelText: 'Price after Discount *',
+                                  labelText:
+                                      '${localizations.priceAfterDiscount} *',
                                   border: const OutlineInputBorder(),
-                                  hintText: 'Enter final price (e.g., 15.99)',
+                                  hintText: localizations.enterFinalPrice,
                                   prefixIcon: const Icon(Icons.attach_money),
                                   suffix: _selectedBook?.price != null
                                       ? Padding(
@@ -711,7 +739,7 @@ class _DiscountFormScreenState extends State<DiscountFormScreen> {
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
                                               Text(
-                                                'Original: \$${_selectedBook!.price!.toStringAsFixed(2)}',
+                                                '${localizations.original}: \$${_selectedBook!.price!.toStringAsFixed(2)}',
                                                 style: const TextStyle(
                                                   decoration: TextDecoration
                                                       .lineThrough,
@@ -727,18 +755,21 @@ class _DiscountFormScreenState extends State<DiscountFormScreen> {
                                 keyboardType: TextInputType.number,
                                 validator: (value) {
                                   if (value == null || value.trim().isEmpty) {
-                                    return 'Discounted price is required';
+                                    return localizations
+                                        .discountedPriceRequired;
                                   }
                                   final price = double.tryParse(value);
                                   if (price == null) {
-                                    return 'Please enter a valid number';
+                                    return localizations.pleaseEnterValidNumber;
                                   }
                                   if (price <= 0) {
-                                    return 'Price must be greater than 0';
+                                    return localizations
+                                        .priceMustBeGreaterThanZero;
                                   }
                                   if (_selectedBook?.price != null &&
                                       price >= _selectedBook!.price!) {
-                                    return 'Discounted price must be less than original price';
+                                    return localizations
+                                        .discountedPriceMustBeLess;
                                   }
                                   return null;
                                 },
@@ -750,20 +781,21 @@ class _DiscountFormScreenState extends State<DiscountFormScreen> {
                             // Max Uses Field
                             TextFormField(
                               controller: _maxUsesController,
-                              decoration: const InputDecoration(
-                                labelText: 'Max Uses Per Customer *',
-                                border: OutlineInputBorder(),
-                                hintText: 'Enter maximum uses per customer',
-                                prefixIcon: Icon(Icons.person),
+                              decoration: InputDecoration(
+                                labelText:
+                                    '${localizations.maxUsesPerCustomer} *',
+                                border: const OutlineInputBorder(),
+                                hintText: localizations.enterMaxUses,
+                                prefixIcon: const Icon(Icons.person),
                               ),
                               keyboardType: TextInputType.number,
                               validator: (value) {
                                 if (value == null || value.trim().isEmpty) {
-                                  return 'Max uses is required';
+                                  return localizations.maxUsesRequired;
                                 }
                                 final maxUses = int.tryParse(value);
                                 if (maxUses == null || maxUses <= 0) {
-                                  return 'Please enter a valid positive number';
+                                  return localizations.validPositiveNumber;
                                 }
                                 return null;
                               },
@@ -781,13 +813,13 @@ class _DiscountFormScreenState extends State<DiscountFormScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Row(
+                            Row(
                               children: [
-                                Icon(Icons.schedule, color: Colors.blue),
-                                SizedBox(width: 12),
+                                const Icon(Icons.schedule, color: Colors.blue),
+                                const SizedBox(width: 12),
                                 Text(
-                                  'Validity & Status',
-                                  style: TextStyle(
+                                  localizations.validityAndStatus,
+                                  style: const TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -800,10 +832,10 @@ class _DiscountFormScreenState extends State<DiscountFormScreen> {
                             InkWell(
                               onTap: _selectStartDate,
                               child: InputDecorator(
-                                decoration: const InputDecoration(
-                                  labelText: 'Start Date *',
-                                  border: OutlineInputBorder(),
-                                  prefixIcon: Icon(Icons.calendar_today),
+                                decoration: InputDecoration(
+                                  labelText: '${localizations.startDate} *',
+                                  border: const OutlineInputBorder(),
+                                  prefixIcon: const Icon(Icons.calendar_today),
                                 ),
                                 child: Text(
                                   '${_startDate.day}/${_startDate.month}/${_startDate.year}',
@@ -821,10 +853,10 @@ class _DiscountFormScreenState extends State<DiscountFormScreen> {
                             InkWell(
                               onTap: _selectEndDate,
                               child: InputDecorator(
-                                decoration: const InputDecoration(
-                                  labelText: 'End Date *',
-                                  border: OutlineInputBorder(),
-                                  prefixIcon: Icon(Icons.calendar_today),
+                                decoration: InputDecoration(
+                                  labelText: '${localizations.endDate} *',
+                                  border: const OutlineInputBorder(),
+                                  prefixIcon: const Icon(Icons.calendar_today),
                                 ),
                                 child: Text(
                                   '${_endDate.day}/${_endDate.month}/${_endDate.year}',
@@ -840,8 +872,8 @@ class _DiscountFormScreenState extends State<DiscountFormScreen> {
 
                             // Active Status Switch
                             SwitchListTile(
-                              title: const Text('Active'),
-                              subtitle: const Text('Enable this discount'),
+                              title: Text(localizations.active),
+                              subtitle: Text(localizations.enableThisDiscount),
                               value: _isActive,
                               onChanged: (value) {
                                 setState(() {
@@ -872,7 +904,7 @@ class _DiscountFormScreenState extends State<DiscountFormScreen> {
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: Text(
-                                        'This discount will be created as inactive and can be activated later.',
+                                        localizations.discountCreatedInactive,
                                         style: TextStyle(
                                           color: Colors.orange[700],
                                           fontSize: 14,
@@ -903,7 +935,10 @@ class _DiscountFormScreenState extends State<DiscountFormScreen> {
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
-                                      'This discount will be valid from ${_startDate.day}/${_startDate.month}/${_startDate.year} to ${_endDate.day}/${_endDate.month}/${_endDate.year}',
+                                      localizations.discountValidFromTo(
+                                        '${_startDate.day}/${_startDate.month}/${_startDate.year}',
+                                        '${_endDate.day}/${_endDate.month}/${_endDate.year}',
+                                      ),
                                       style: const TextStyle(
                                         fontSize: 12,
                                         color: Colors.blue,
@@ -931,9 +966,10 @@ class _DiscountFormScreenState extends State<DiscountFormScreen> {
                                 widget.discount == null &&
                                         widget.bookDiscount == null
                                     ? (_isActive
-                                          ? 'Create Discount'
-                                          : 'Create Inactive Discount')
-                                    : 'Edit Discount',
+                                          ? localizations.createDiscount
+                                          : localizations
+                                                .createInactiveDiscount)
+                                    : localizations.editDiscount,
                               ),
                       ),
                     ),
@@ -945,24 +981,23 @@ class _DiscountFormScreenState extends State<DiscountFormScreen> {
   }
 
   Future<void> _deleteDiscount() async {
+    final localizations = AppLocalizations.of(context);
     final discountCode =
         widget.discount?.code ?? widget.bookDiscount?.code ?? '';
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Discount'),
-        content: Text(
-          'Are you sure you want to delete "$discountCode"? This action cannot be undone.',
-        ),
+        title: Text(localizations.deleteDiscount),
+        content: Text(localizations.deleteDiscountConfirmation(discountCode)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text(localizations.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
+            child: Text(localizations.delete),
           ),
         ],
       ),

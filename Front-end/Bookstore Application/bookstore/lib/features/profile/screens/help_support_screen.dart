@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
+import '../../../core/localization/app_localizations.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../help_support/providers/help_support_provider.dart';
 import '../../help_support/models/help_support_models.dart';
@@ -46,9 +47,10 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Help & Support'),
+        title: Text(localizations.helpSupportTitle),
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.white,
         elevation: 0,
@@ -70,9 +72,9 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
                     color: AppColors.error,
                   ),
                   const SizedBox(height: AppDimensions.spacingM),
-                  const Text(
-                    'Error loading help content',
-                    style: TextStyle(
+                  Text(
+                    localizations.errorLoadingHelpContent,
+                    style: const TextStyle(
                       fontSize: 18,
                       color: AppColors.textPrimary,
                     ),
@@ -89,7 +91,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
                   const SizedBox(height: AppDimensions.spacingL),
                   ElevatedButton(
                     onPressed: _loadHelpSupportData,
-                    child: const Text('Retry'),
+                    child: Text(localizations.retry),
                   ),
                 ],
               ),
@@ -97,6 +99,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
           }
 
           return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(AppDimensions.paddingL),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -108,30 +111,30 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
                     color: AppColors.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Row(
+                  child: Row(
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.help_outline,
                         size: 32,
                         color: AppColors.primary,
                       ),
-                      SizedBox(width: AppDimensions.spacingM),
+                      const SizedBox(width: AppDimensions.spacingM),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'How can we help you?',
-                              style: TextStyle(
+                              localizations.howCanWeHelp,
+                              style: const TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
                                 color: AppColors.textPrimary,
                               ),
                             ),
-                            SizedBox(height: AppDimensions.spacingXS),
+                            const SizedBox(height: AppDimensions.spacingXS),
                             Text(
-                              'Find answers to common questions or contact our support team',
-                              style: TextStyle(
+                              localizations.findAnswers,
+                              style: const TextStyle(
                                 fontSize: 14,
                                 color: AppColors.textSecondary,
                               ),
@@ -146,26 +149,29 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
                 const SizedBox(height: AppDimensions.spacingXL),
 
                 // Quick Help
-                _buildSectionTitle('Quick Help'),
+                _buildSectionTitle(localizations.quickHelp),
                 const SizedBox(height: AppDimensions.spacingM),
                 _buildHelpTile(
-                  title: 'Frequently Asked Questions',
-                  subtitle:
-                      'Find answers to common questions (${helpSupportProvider.faqs.length} available)',
+                  title: localizations.frequentlyAskedQuestions,
+                  subtitle: localizations.findAnswersCommon(
+                    helpSupportProvider.faqs.length,
+                  ),
                   icon: Icons.quiz_outlined,
                   onTap: () => _showFAQ(context, helpSupportProvider),
                 ),
                 _buildHelpTile(
-                  title: 'User Guide',
-                  subtitle:
-                      'Learn how to use the app effectively (${helpSupportProvider.userGuides.length} articles)',
+                  title: localizations.userGuide,
+                  subtitle: localizations.learnHowToUse(
+                    helpSupportProvider.userGuides.length,
+                  ),
                   icon: Icons.book_outlined,
                   onTap: () => _showUserGuide(context, helpSupportProvider),
                 ),
                 _buildHelpTile(
-                  title: 'Troubleshooting',
-                  subtitle:
-                      'Fix common issues and problems (${helpSupportProvider.troubleshootingGuides.length} guides)',
+                  title: localizations.troubleshooting,
+                  subtitle: localizations.fixCommonIssues(
+                    helpSupportProvider.troubleshootingGuides.length,
+                  ),
                   icon: Icons.build_outlined,
                   onTap: () =>
                       _showTroubleshooting(context, helpSupportProvider),
@@ -174,7 +180,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
                 const SizedBox(height: AppDimensions.spacingXL),
 
                 // Contact Support
-                _buildSectionTitle('Contact Support (Admin Only)'),
+                _buildSectionTitle(localizations.contactSupportAdmin),
                 const SizedBox(height: AppDimensions.spacingM),
                 if (helpSupportProvider.supportContacts.isNotEmpty)
                   ...helpSupportProvider.supportContacts.map(
@@ -187,9 +193,8 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
                   )
                 else
                   _buildHelpTile(
-                    title: 'No Support Contacts Available',
-                    subtitle:
-                        'Contact information is not available at this time',
+                    title: localizations.noSupportContacts,
+                    subtitle: localizations.contactInfoNotAvailable,
                     icon: Icons.info_outline,
                     onTap: () {},
                   ),
@@ -197,44 +202,44 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
                 const SizedBox(height: AppDimensions.spacingXL),
 
                 // App Information
-                _buildSectionTitle('App Information'),
+                _buildSectionTitle(localizations.appInformation),
                 const SizedBox(height: AppDimensions.spacingM),
                 _buildInfoCard(
-                  title: 'Version',
+                  title: localizations.version,
                   value: '1.0.0',
                   icon: Icons.info_outline,
                 ),
                 _buildInfoCard(
-                  title: 'Last Updated',
+                  title: localizations.lastUpdatedLabel,
                   value: 'December 2024',
                   icon: Icons.update_outlined,
                 ),
                 _buildInfoCard(
-                  title: 'Developer',
-                  value: 'E-Library Team',
+                  title: localizations.developer,
+                  value: 'ReadGo Team',
                   icon: Icons.code_outlined,
                 ),
 
                 const SizedBox(height: AppDimensions.spacingXL),
 
                 // Feedback
-                _buildSectionTitle('Feedback'),
+                _buildSectionTitle(localizations.feedback),
                 const SizedBox(height: AppDimensions.spacingM),
                 _buildHelpTile(
-                  title: 'Rate the App',
-                  subtitle: 'Rate us on the app store',
+                  title: localizations.rateTheApp,
+                  subtitle: localizations.rateUsOnStore,
                   icon: Icons.star_outline,
                   onTap: () => _rateApp(context),
                 ),
                 _buildHelpTile(
-                  title: 'Send Feedback',
-                  subtitle: 'Share your thoughts and suggestions',
+                  title: localizations.sendFeedback,
+                  subtitle: localizations.shareThoughts,
                   icon: Icons.feedback_outlined,
                   onTap: () => _sendFeedback(context),
                 ),
                 _buildHelpTile(
-                  title: 'Report a Bug',
-                  subtitle: 'Help us improve by reporting issues',
+                  title: localizations.reportABug,
+                  subtitle: localizations.helpUsImprove,
                   icon: Icons.bug_report_outlined,
                   onTap: () => _reportBug(context),
                 ),
@@ -242,17 +247,17 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
                 const SizedBox(height: AppDimensions.spacingXL),
 
                 // Legal
-                _buildSectionTitle('Legal'),
+                _buildSectionTitle(localizations.legal),
                 const SizedBox(height: AppDimensions.spacingM),
                 _buildHelpTile(
-                  title: 'Terms of Service',
-                  subtitle: 'Read our terms and conditions',
+                  title: localizations.termsOfService,
+                  subtitle: localizations.readTerms,
                   icon: Icons.description_outlined,
                   onTap: () => _showTermsOfService(context),
                 ),
                 _buildHelpTile(
-                  title: 'Privacy Policy',
-                  subtitle: 'Learn how we protect your data',
+                  title: localizations.privacyPolicy,
+                  subtitle: localizations.learnDataProtection,
                   icon: Icons.privacy_tip_outlined,
                   onTap: () => _showPrivacyPolicy(context),
                 ),
@@ -359,10 +364,11 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
 
   // FAQ Dialog
   void _showFAQ(BuildContext context, HelpSupportProvider provider) {
+    final localizations = AppLocalizations.of(context);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Frequently Asked Questions'),
+        title: Text(localizations.frequentlyAskedQuestions),
         content: SizedBox(
           width: double.maxFinite,
           child: ListView.builder(
@@ -385,7 +391,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+            child: Text(localizations.close),
           ),
         ],
       ),
@@ -394,10 +400,11 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
 
   // User Guide Dialog
   void _showUserGuide(BuildContext context, HelpSupportProvider provider) {
+    final localizations = AppLocalizations.of(context);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('User Guide'),
+        title: Text(localizations.userGuide),
         content: SizedBox(
           width: double.maxFinite,
           child: ListView.builder(
@@ -421,7 +428,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+            child: Text(localizations.close),
           ),
         ],
       ),
@@ -433,10 +440,11 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
     BuildContext context,
     HelpSupportProvider provider,
   ) {
+    final localizations = AppLocalizations.of(context);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Troubleshooting'),
+        title: Text(localizations.troubleshooting),
         content: SizedBox(
           width: double.maxFinite,
           child: ListView.builder(
@@ -460,7 +468,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+            child: Text(localizations.close),
           ),
         ],
       ),
@@ -469,22 +477,23 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
 
   // Contact Support Methods
   void _openLiveChat(BuildContext context, String contactInfo) {
+    final localizations = AppLocalizations.of(context);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Live Chat'),
+        title: Text(localizations.liveChat),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Live chat is not available at the moment.'),
+            Text(localizations.liveChatNotAvailable),
             const SizedBox(height: 16),
-            Text('Contact URL: $contactInfo'),
+            Text(localizations.contactUrl(contactInfo)),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+            child: Text(localizations.close),
           ),
         ],
       ),
@@ -492,22 +501,23 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
   }
 
   void _sendEmail(BuildContext context, String contactInfo) {
+    final localizations = AppLocalizations.of(context);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Email Support'),
+        title: Text(localizations.emailSupport),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Send us an email and we\'ll get back to you.'),
+            Text(localizations.sendUsEmail),
             const SizedBox(height: 16),
-            Text('Email: $contactInfo'),
+            Text(localizations.emailLabelWithValue(contactInfo)),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+            child: Text(localizations.close),
           ),
         ],
       ),
@@ -515,22 +525,23 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
   }
 
   void _makePhoneCall(BuildContext context, String contactInfo) {
+    final localizations = AppLocalizations.of(context);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Phone Support'),
+        title: Text(localizations.phoneSupport),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Call us for immediate assistance.'),
+            Text(localizations.callUsAssistance),
             const SizedBox(height: 16),
-            Text('Phone: $contactInfo'),
+            Text(localizations.phoneLabelWithValue(contactInfo)),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+            child: Text(localizations.close),
           ),
         ],
       ),
@@ -539,6 +550,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
 
   // Other methods (simplified for now)
   void _showDetailedGuide(BuildContext context, UserGuide guide) {
+    final localizations = AppLocalizations.of(context);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -547,7 +559,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+            child: Text(localizations.close),
           ),
         ],
       ),
@@ -555,34 +567,37 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
   }
 
   void _rateApp(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Rate app functionality not implemented')),
+      SnackBar(content: Text(localizations.rateAppNotImplemented)),
     );
   }
 
   void _sendFeedback(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Send feedback functionality not implemented'),
-      ),
+      SnackBar(content: Text(localizations.sendFeedbackNotImplemented)),
     );
   }
 
   void _reportBug(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Report bug functionality not implemented')),
+      SnackBar(content: Text(localizations.reportBugNotImplemented)),
     );
   }
 
   void _showTermsOfService(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Terms of service not available')),
-    );
+    final localizations = AppLocalizations.of(context);
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(localizations.termsNotAvailable)));
   }
 
   void _showPrivacyPolicy(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Privacy policy not available')),
-    );
+    final localizations = AppLocalizations.of(context);
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(localizations.privacyNotAvailable)));
   }
 }

@@ -6,6 +6,7 @@ import '../../../models/author.dart';
 import '../../../widgets/library_manager/admin_search_bar.dart';
 import '../../../widgets/library_manager/empty_state.dart';
 import '../../../../../../routes/app_routes.dart';
+import '../../../../../../core/localization/app_localizations.dart';
 import '../../../../auth/providers/auth_provider.dart';
 
 class AuthorsListScreen extends StatefulWidget {
@@ -85,9 +86,10 @@ class _AuthorsListScreenState extends State<AuthorsListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Authors'),
+        title: Text(localizations.authors),
         actions: [
           IconButton(
             onPressed: () => _loadAuthors(),
@@ -101,7 +103,7 @@ class _AuthorsListScreenState extends State<AuthorsListScreen> {
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: AdminSearchBar(
-              hintText: 'Search authors...',
+              hintText: localizations.searchAuthors,
               onSubmitted: _onSearchImmediate,
               onChanged: _onSearch,
             ),
@@ -116,18 +118,19 @@ class _AuthorsListScreenState extends State<AuthorsListScreen> {
                 }
 
                 if (provider.error != null && provider.authors.isEmpty) {
+                  final localizations = AppLocalizations.of(context);
                   return Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          'Error: ${provider.error}',
+                          '${localizations.error}: ${provider.error}',
                           style: const TextStyle(color: Colors.red),
                         ),
                         const SizedBox(height: 16),
                         ElevatedButton(
                           onPressed: _loadAuthors,
-                          child: const Text('Retry'),
+                          child: Text(localizations.retry),
                         ),
                       ],
                     ),
@@ -135,11 +138,12 @@ class _AuthorsListScreenState extends State<AuthorsListScreen> {
                 }
 
                 if (provider.authors.isEmpty) {
+                  final localizations = AppLocalizations.of(context);
                   return EmptyState(
-                    title: 'No Authors',
-                    message: 'No authors found',
+                    title: localizations.noAuthors,
+                    message: localizations.noAuthorsFound,
                     icon: Icons.person,
-                    actionText: 'Add Author',
+                    actionText: localizations.addAuthor,
                     onAction: () => _navigateToAuthorForm(),
                   );
                 }
@@ -159,13 +163,14 @@ class _AuthorsListScreenState extends State<AuthorsListScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _navigateToAuthorForm(),
-        tooltip: 'Add Author',
+        tooltip: localizations.addAuthor,
         child: const Icon(Icons.add),
       ),
     );
   }
 
   Widget _buildAuthorCard(Author author) {
+    final localizations = AppLocalizations.of(context);
     return Card(
       margin: const EdgeInsets.only(bottom: 12.0),
       child: ListTile(
@@ -202,7 +207,7 @@ class _AuthorsListScreenState extends State<AuthorsListScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
-                      'Born: ${author.birthDate ?? 'Unknown'}',
+                      '${localizations.born}: ${author.birthDate ?? localizations.unknown}',
                       style: const TextStyle(
                         fontSize: 12,
                         color: Colors.blue,
@@ -222,9 +227,9 @@ class _AuthorsListScreenState extends State<AuthorsListScreen> {
                       color: Colors.orange.withValues(alpha: (0.1)),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Text(
-                      'Has Photo',
-                      style: TextStyle(
+                    child: Text(
+                      localizations.hasPhoto,
+                      style: const TextStyle(
                         fontSize: 12,
                         color: Colors.orange,
                         fontWeight: FontWeight.bold,
@@ -246,7 +251,7 @@ class _AuthorsListScreenState extends State<AuthorsListScreen> {
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
-                      'Added: ${_formatDate(author.createdAt)}',
+                      '${localizations.added}: ${_formatDate(author.createdAt)}',
                       style: const TextStyle(fontSize: 12, color: Colors.grey),
                     ),
                   ),
@@ -266,10 +271,13 @@ class _AuthorsListScreenState extends State<AuthorsListScreen> {
                 break;
             }
           },
-          itemBuilder: (context) => [
-            const PopupMenuItem(value: 'edit', child: Text('Edit')),
-            const PopupMenuItem(value: 'delete', child: Text('Delete')),
-          ],
+          itemBuilder: (context) {
+            final localizations = AppLocalizations.of(context);
+            return [
+              PopupMenuItem(value: 'edit', child: Text(localizations.edit)),
+              PopupMenuItem(value: 'delete', child: Text(localizations.delete)),
+            ];
+          },
         ),
         onTap: () => _navigateToAuthorForm(author),
       ),
@@ -277,13 +285,14 @@ class _AuthorsListScreenState extends State<AuthorsListScreen> {
   }
 
   Future<void> _deleteAuthor(Author author) async {
+    final localizations = AppLocalizations.of(context);
     // Check user permissions first
     final authProvider = context.read<AuthProvider>();
     if (authProvider.userRole != 'library_admin') {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Only library administrators can delete authors'),
+          SnackBar(
+            content: Text(localizations.onlyLibraryAdminsCanDeleteAuthors),
             backgroundColor: Colors.red,
           ),
         );
@@ -293,23 +302,24 @@ class _AuthorsListScreenState extends State<AuthorsListScreen> {
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Author'),
-        content: Text(
-          'Are you sure you want to delete "${author.name}"? This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+      builder: (context) {
+        final localizations = AppLocalizations.of(context);
+        return AlertDialog(
+          title: Text(localizations.deleteAuthor),
+          content: Text(localizations.deleteAuthorConfirmation(author.name)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(localizations.cancel),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: Text(localizations.delete),
+            ),
+          ],
+        );
+      },
     );
 
     if (confirmed == true) {
@@ -326,9 +336,10 @@ class _AuthorsListScreenState extends State<AuthorsListScreen> {
         await provider.deleteAuthor(int.parse(author.id));
 
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Author deleted successfully'),
+            SnackBar(
+              content: Text(localizations.authorDeletedSuccessfully),
               backgroundColor: Colors.green,
             ),
           );
@@ -337,20 +348,21 @@ class _AuthorsListScreenState extends State<AuthorsListScreen> {
         }
       } catch (e) {
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           String errorMessage = e.toString();
           if (errorMessage.contains('Permission denied') ||
               errorMessage.contains('403') ||
               errorMessage.contains('Unauthorized')) {
-            errorMessage =
-                'You do not have permission to delete authors. Only library administrators can delete authors.';
+            errorMessage = localizations.onlyLibraryAdminsCanDeleteAuthors;
           } else if (errorMessage.contains('AUTHOR_HAS_BOOKS')) {
-            errorMessage =
-                'Cannot delete this author because they have books in the library. Please remove or reassign all books first.';
+            errorMessage = localizations.cannotDeleteAuthorWithBooks;
+          } else {
+            errorMessage = '${localizations.error}: $errorMessage';
           }
 
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Error: $errorMessage'),
+              content: Text(errorMessage),
               backgroundColor: Colors.red,
               duration: const Duration(seconds: 5),
             ),

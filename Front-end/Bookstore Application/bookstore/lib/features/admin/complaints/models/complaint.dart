@@ -6,17 +6,6 @@ class Complaint {
   static const String statusClosed = 'closed';
   static const String statusRejected = 'rejected';
 
-  static const String typeComplaint = 'complaint';
-  static const String typeFeedback = 'feedback';
-  static const String typeSuggestion = 'suggestion';
-  static const String typeBugReport = 'bug_report';
-  static const String typeFeatureRequest = 'feature_request';
-
-  static const String priorityLow = 'low';
-  static const String priorityMedium = 'medium';
-  static const String priorityHigh = 'high';
-  static const String priorityUrgent = 'urgent';
-
   static const Map<String, String> statusLabels = {
     statusNew: 'New',
     statusUnderReview: 'Under Review',
@@ -26,34 +15,13 @@ class Complaint {
     statusRejected: 'Rejected',
   };
 
-  static const Map<String, String> typeLabels = {
-    typeComplaint: 'Complaint',
-    typeFeedback: 'Feedback',
-    typeSuggestion: 'Suggestion',
-    typeBugReport: 'Bug Report',
-    typeFeatureRequest: 'Feature Request',
-  };
-
-  static const Map<String, String> priorityLabels = {
-    priorityLow: 'Low',
-    priorityMedium: 'Medium',
-    priorityHigh: 'High',
-    priorityUrgent: 'Urgent',
-  };
-
   final int? id;
   final String title;
   final String description;
-  final String type;
   final String status;
-  final String priority;
   final int customerId;
   final String customerName;
   final String customerEmail;
-  final int? assignedTo;
-  final String? assignedToName;
-  final String? resolution;
-  final DateTime? resolvedAt;
   final int? resolvedBy;
   final String? resolvedByName;
   final List<String>? attachments;
@@ -65,16 +33,10 @@ class Complaint {
     this.id,
     required this.title,
     required this.description,
-    required this.type,
     required this.status,
-    required this.priority,
     required this.customerId,
     required this.customerName,
     required this.customerEmail,
-    this.assignedTo,
-    this.assignedToName,
-    this.resolution,
-    this.resolvedAt,
     this.resolvedBy,
     this.resolvedByName,
     this.attachments,
@@ -84,33 +46,62 @@ class Complaint {
   });
 
   factory Complaint.fromJson(Map<String, dynamic> json) {
+    // Safely extract customer_id
+    int? customerIdValue;
+    if (json['customer_id'] != null) {
+      customerIdValue = json['customer_id'] is int
+          ? json['customer_id'] as int
+          : int.tryParse(json['customer_id'].toString());
+    } else if (json['customer'] != null) {
+      if (json['customer'] is Map) {
+        final customer = json['customer'] as Map<String, dynamic>;
+        if (customer['id'] != null) {
+          customerIdValue = customer['id'] is int
+              ? customer['id'] as int
+              : int.tryParse(customer['id'].toString());
+        }
+      } else if (json['customer'] is int) {
+        customerIdValue = json['customer'] as int;
+      }
+    }
+
+    if (customerIdValue == null) {
+      throw Exception(
+        'customer_id is required but was null in response. JSON keys: ${json.keys.toList()}',
+      );
+    }
+
     return Complaint(
       id: json['id'],
       title: json['title'] ?? '',
       description: json['description'] ?? '',
-      type: json['type'] ?? typeComplaint,
       status: json['status'] ?? statusNew,
-      priority: json['priority'] ?? priorityMedium,
-      customerId: json['customer_id'] ?? json['customer']['id'],
-      customerName: json['customer_name'] ?? json['customer']['name'] ?? '',
-      customerEmail: json['customer_email'] ?? json['customer']['email'] ?? '',
-      assignedTo: json['assigned_to'],
-      assignedToName: json['assigned_to_name'],
-      resolution: json['resolution'],
-      resolvedAt: json['resolved_at'] != null
-          ? DateTime.parse(json['resolved_at'])
-          : null,
+      customerId: customerIdValue,
+      customerName:
+          json['customer_name'] ??
+          (json['customer'] != null && json['customer'] is Map
+              ? (json['customer'] as Map)['name'] ?? ''
+              : ''),
+      customerEmail:
+          json['customer_email'] ??
+          (json['customer'] != null && json['customer'] is Map
+              ? (json['customer'] as Map)['email'] ?? ''
+              : ''),
       resolvedBy: json['resolved_by'],
       resolvedByName: json['resolved_by_name'],
       attachments: json['attachments'] != null
           ? List<String>.from(json['attachments'])
           : null,
-      createdAt: DateTime.parse(json['created_at']),
-      updatedAt: DateTime.parse(json['updated_at']),
+      createdAt: json['created_at'] != null
+          ? DateTime.parse(json['created_at'] as String)
+          : DateTime.now(),
+      updatedAt: json['updated_at'] != null
+          ? DateTime.parse(json['updated_at'] as String)
+          : DateTime.now(),
       responses: json['responses'] != null
           ? (json['responses'] as List)
-              .map((response) => ComplaintResponse.fromJson(response))
-              .toList()
+                .map((response) => ComplaintResponse.fromJson(response))
+                .toList()
           : null,
     );
   }
@@ -120,13 +111,8 @@ class Complaint {
       'id': id,
       'title': title,
       'description': description,
-      'type': type,
       'status': status,
-      'priority': priority,
       'customer_id': customerId,
-      'assigned_to': assignedTo,
-      'resolution': resolution,
-      'resolved_at': resolvedAt?.toIso8601String(),
       'resolved_by': resolvedBy,
       'attachments': attachments,
       'created_at': createdAt.toIso8601String(),
@@ -138,20 +124,10 @@ class Complaint {
     return statusLabels[status] ?? status;
   }
 
-  String get typeLabel {
-    return typeLabels[type] ?? type;
-  }
-
-  String get priorityLabel {
-    return priorityLabels[priority] ?? priority;
-  }
-
   bool get isOpen {
-    return status != statusResolved && status != statusClosed && status != statusRejected;
-  }
-
-  bool get canBeAssigned {
-    return status == statusNew || status == statusUnderReview;
+    return status != statusResolved &&
+        status != statusClosed &&
+        status != statusRejected;
   }
 
   bool get canBeResolved {
@@ -173,25 +149,15 @@ class Complaint {
     return responses!.first.createdAt.difference(createdAt);
   }
 
-  Duration? get resolutionTime {
-    if (resolvedAt == null) return null;
-    return resolvedAt!.difference(createdAt);
-  }
-
   Complaint copyWith({
     int? id,
     String? title,
     String? description,
     String? type,
     String? status,
-    String? priority,
     int? customerId,
     String? customerName,
     String? customerEmail,
-    int? assignedTo,
-    String? assignedToName,
-    String? resolution,
-    DateTime? resolvedAt,
     int? resolvedBy,
     String? resolvedByName,
     List<String>? attachments,
@@ -203,16 +169,10 @@ class Complaint {
       id: id ?? this.id,
       title: title ?? this.title,
       description: description ?? this.description,
-      type: type ?? this.type,
       status: status ?? this.status,
-      priority: priority ?? this.priority,
       customerId: customerId ?? this.customerId,
       customerName: customerName ?? this.customerName,
       customerEmail: customerEmail ?? this.customerEmail,
-      assignedTo: assignedTo ?? this.assignedTo,
-      assignedToName: assignedToName ?? this.assignedToName,
-      resolution: resolution ?? this.resolution,
-      resolvedAt: resolvedAt ?? this.resolvedAt,
       resolvedBy: resolvedBy ?? this.resolvedBy,
       resolvedByName: resolvedByName ?? this.resolvedByName,
       attachments: attachments ?? this.attachments,
@@ -249,19 +209,81 @@ class ComplaintResponse {
   });
 
   factory ComplaintResponse.fromJson(Map<String, dynamic> json) {
+    // Safely extract complaint_id
+    int? complaintIdValue;
+    if (json['complaint_id'] != null) {
+      complaintIdValue = json['complaint_id'] is int
+          ? json['complaint_id'] as int
+          : int.tryParse(json['complaint_id'].toString());
+    } else if (json['complaint'] != null) {
+      if (json['complaint'] is Map) {
+        final complaint = json['complaint'] as Map<String, dynamic>;
+        if (complaint['id'] != null) {
+          complaintIdValue = complaint['id'] is int
+              ? complaint['id'] as int
+              : int.tryParse(complaint['id'].toString());
+        }
+      } else if (json['complaint'] is int) {
+        complaintIdValue = json['complaint'] as int;
+      }
+    }
+
+    if (complaintIdValue == null) {
+      throw Exception(
+        'complaint_id is required but was null in response. JSON keys: ${json.keys.toList()}',
+      );
+    }
+
+    // Safely extract responder_id
+    int? responderIdValue;
+    if (json['responder_id'] != null) {
+      responderIdValue = json['responder_id'] is int
+          ? json['responder_id'] as int
+          : int.tryParse(json['responder_id'].toString());
+    } else if (json['responder'] != null) {
+      if (json['responder'] is Map) {
+        final responder = json['responder'] as Map<String, dynamic>;
+        if (responder['id'] != null) {
+          responderIdValue = responder['id'] is int
+              ? responder['id'] as int
+              : int.tryParse(responder['id'].toString());
+        }
+      } else if (json['responder'] is int) {
+        responderIdValue = json['responder'] as int;
+      }
+    }
+
+    if (responderIdValue == null) {
+      throw Exception(
+        'responder_id is required but was null in response. JSON keys: ${json.keys.toList()}',
+      );
+    }
+
     return ComplaintResponse(
       id: json['id'],
-      complaintId: json['complaint_id'],
-      message: json['message'] ?? '',
-      responderId: json['responder_id'] ?? json['responder']['id'],
-      responderName: json['responder_name'] ?? json['responder']['name'] ?? '',
-      responderRole: json['responder_role'] ?? json['responder']['user_type'] ?? '',
+      complaintId: complaintIdValue,
+      message: json['message'] ?? json['response_text'] ?? '',
+      responderId: responderIdValue,
+      responderName:
+          json['responder_name'] ??
+          (json['responder'] != null && json['responder'] is Map
+              ? (json['responder'] as Map)['name'] ?? ''
+              : ''),
+      responderRole:
+          json['responder_role'] ??
+          (json['responder'] != null && json['responder'] is Map
+              ? (json['responder'] as Map)['user_type'] ?? ''
+              : ''),
       isInternal: json['is_internal'] ?? false,
       attachments: json['attachments'] != null
           ? List<String>.from(json['attachments'])
           : null,
-      createdAt: DateTime.parse(json['created_at']),
-      updatedAt: DateTime.parse(json['updated_at']),
+      createdAt: json['created_at'] != null
+          ? DateTime.parse(json['created_at'] as String)
+          : DateTime.now(),
+      updatedAt: json['updated_at'] != null
+          ? DateTime.parse(json['updated_at'] as String)
+          : DateTime.now(),
     );
   }
 
@@ -284,7 +306,8 @@ class ComplaintResponse {
   }
 
   bool get isFromAdmin {
-    return responderRole == 'library_admin' || responderRole == 'delivery_admin';
+    return responderRole == 'library_admin' ||
+        responderRole == 'delivery_admin';
   }
 }
 
@@ -328,10 +351,16 @@ class ComplaintStatistics {
       resolvedComplaints: json['resolved_complaints'] ?? 0,
       closedComplaints: json['closed_complaints'] ?? 0,
       rejectedComplaints: json['rejected_complaints'] ?? 0,
-      averageResponseTime: double.tryParse(json['average_response_time']?.toString() ?? '0') ?? 0.0,
-      averageResolutionTime: double.tryParse(json['average_resolution_time']?.toString() ?? '0') ?? 0.0,
+      averageResponseTime:
+          double.tryParse(json['average_response_time']?.toString() ?? '0') ??
+          0.0,
+      averageResolutionTime:
+          double.tryParse(json['average_resolution_time']?.toString() ?? '0') ??
+          0.0,
       complaintsByType: Map<String, int>.from(json['complaints_by_type'] ?? {}),
-      complaintsByPriority: Map<String, int>.from(json['complaints_by_priority'] ?? {}),
+      complaintsByPriority: Map<String, int>.from(
+        json['complaints_by_priority'] ?? {},
+      ),
       periodStart: DateTime.parse(json['period_start']),
       periodEnd: DateTime.parse(json['period_end']),
     );

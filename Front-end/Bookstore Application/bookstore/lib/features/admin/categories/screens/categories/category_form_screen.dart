@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../providers/categories_provider.dart';
 import '../../../models/category.dart';
 import '../../../../auth/providers/auth_provider.dart';
+import '../../../../../core/localization/app_localizations.dart';
 
 class CategoryFormScreen extends StatefulWidget {
   final Category? category;
@@ -91,14 +92,19 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
           isActive: _isActive,
         );
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           if (success) {
             scaffoldMessenger.showSnackBar(
-              const SnackBar(content: Text('Category created successfully')),
+              SnackBar(
+                content: Text(localizations.categoryCreatedSuccessfully),
+              ),
             );
           } else {
             scaffoldMessenger.showSnackBar(
               SnackBar(
-                content: Text(provider.error ?? 'Failed to create category'),
+                content: Text(
+                  provider.error ?? localizations.failedToCreateCategory,
+                ),
                 backgroundColor: Colors.red,
               ),
             );
@@ -115,14 +121,19 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
           isActive: _isActive,
         );
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           if (success) {
             scaffoldMessenger.showSnackBar(
-              const SnackBar(content: Text('Category updated successfully')),
+              SnackBar(
+                content: Text(localizations.categoryUpdatedSuccessfully),
+              ),
             );
           } else {
             scaffoldMessenger.showSnackBar(
               SnackBar(
-                content: Text(provider.error ?? 'Failed to update category'),
+                content: Text(
+                  provider.error ?? localizations.failedToUpdateCategory,
+                ),
                 backgroundColor: Colors.red,
               ),
             );
@@ -136,17 +147,18 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
       }
     } catch (e) {
       if (mounted) {
-        String errorMessage = 'Failed to save category';
+        final localizations = AppLocalizations.of(context);
+        String errorMessage = localizations.failedToSaveCategory;
 
         // Check for specific error types
         if (e.toString().contains('401')) {
-          errorMessage = 'Authentication failed. Please log in again.';
+          errorMessage = localizations.authenticationFailedPleaseLogInAgain;
         } else if (e.toString().contains('400')) {
-          errorMessage = 'Invalid data. Please check your input.';
+          errorMessage = localizations.invalidDataPleaseCheckInput;
         } else if (e.toString().contains('500')) {
-          errorMessage = 'Server error. Please try again later.';
+          errorMessage = localizations.serverError;
         } else {
-          errorMessage = 'Error: ${e.toString()}';
+          errorMessage = '${localizations.error}: ${e.toString()}';
         }
 
         ScaffoldMessenger.of(context).showSnackBar(
@@ -168,10 +180,13 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          widget.category == null ? 'Create Category' : 'Edit Category',
+          widget.category == null
+              ? localizations.createCategory
+              : localizations.editCategory,
         ),
         actions: [
           if (widget.category != null)
@@ -198,13 +213,13 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Row(
+                            Row(
                               children: [
-                                Icon(Icons.category, color: Colors.blue),
-                                SizedBox(width: 12),
+                                const Icon(Icons.category, color: Colors.blue),
+                                const SizedBox(width: 12),
                                 Text(
-                                  'Category Information',
-                                  style: TextStyle(
+                                  localizations.categoryInformation,
+                                  style: const TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -216,18 +231,18 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
                             // Name Field
                             TextFormField(
                               controller: _nameController,
-                              decoration: const InputDecoration(
-                                labelText: 'Category Name *',
-                                border: OutlineInputBorder(),
-                                hintText: 'Enter category name',
-                                prefixIcon: Icon(Icons.category),
+                              decoration: InputDecoration(
+                                labelText: '${localizations.categoryName} *',
+                                border: const OutlineInputBorder(),
+                                hintText: localizations.enterCategoryName,
+                                prefixIcon: const Icon(Icons.category),
                               ),
                               validator: (value) {
                                 if (value == null || value.trim().isEmpty) {
-                                  return 'Category name is required';
+                                  return localizations.categoryNameRequired;
                                 }
                                 if (value.trim().length < 2) {
-                                  return 'Category name must be at least 2 characters';
+                                  return localizations.categoryNameMinLength;
                                 }
                                 return null;
                               },
@@ -237,12 +252,12 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
                             // Description Field
                             TextFormField(
                               controller: _descriptionController,
-                              decoration: const InputDecoration(
-                                labelText: 'Description',
-                                border: OutlineInputBorder(),
+                              decoration: InputDecoration(
+                                labelText: localizations.description,
+                                border: const OutlineInputBorder(),
                                 hintText:
-                                    'Enter category description (optional)',
-                                prefixIcon: Icon(Icons.description),
+                                    localizations.enterCategoryDescription,
+                                prefixIcon: const Icon(Icons.description),
                               ),
                               maxLines: 3,
                             ),
@@ -272,7 +287,7 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
                                             CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            'Category Status',
+                                            localizations.categoryStatus,
                                             style: TextStyle(
                                               fontSize: 16,
                                               fontWeight: FontWeight.w500,
@@ -283,8 +298,10 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
                                           ),
                                           Text(
                                             _isActive
-                                                ? 'This category is active and visible to users'
-                                                : 'This category is inactive and hidden from users',
+                                                ? localizations
+                                                      .categoryActiveDescription
+                                                : localizations
+                                                      .categoryInactiveDescription,
                                             style: TextStyle(
                                               fontSize: 14,
                                               color: _isActive
@@ -325,8 +342,8 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
                             ? const CircularProgressIndicator()
                             : Text(
                                 widget.category == null
-                                    ? 'Create Category'
-                                    : 'Update Category',
+                                    ? localizations.createCategory
+                                    : localizations.updateCategory,
                               ),
                       ),
                     ),
@@ -338,22 +355,23 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
   }
 
   Future<void> _deleteCategory() async {
+    final localizations = AppLocalizations.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Category'),
+        title: Text(localizations.deleteCategory),
         content: Text(
-          'Are you sure you want to delete "${widget.category!.name}"? This action cannot be undone.',
+          localizations.deleteCategoryConfirmation(widget.category!.name),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text(localizations.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
+            child: Text(localizations.delete),
           ),
         ],
       ),
@@ -370,8 +388,9 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
         await provider.deleteCategory(int.parse(widget.category!.id));
 
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Category deleted successfully')),
+            SnackBar(content: Text(localizations.categoryDeletedSuccessfully)),
           );
           Navigator.pop(context);
         }

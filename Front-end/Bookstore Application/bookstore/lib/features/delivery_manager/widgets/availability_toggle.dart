@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/localization/app_localizations.dart';
 
 class AvailabilityToggle extends StatelessWidget {
   final String currentStatus;
@@ -16,13 +17,14 @@ class AvailabilityToggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final localizations = AppLocalizations.of(context);
     return Column(
       children: [
         Row(
           children: [
             _buildStatusButton(
               'online',
-              'Online',
+              localizations.online,
               Icons.circle,
               AppColors.success,
               theme,
@@ -30,7 +32,7 @@ class AvailabilityToggle extends StatelessWidget {
             const SizedBox(width: 12),
             _buildStatusButton(
               'busy',
-              'Busy',
+              localizations.busy,
               Icons.schedule,
               AppColors.warning,
               theme,
@@ -38,7 +40,7 @@ class AvailabilityToggle extends StatelessWidget {
             const SizedBox(width: 12),
             _buildStatusButton(
               'offline',
-              'Offline',
+              localizations.offline,
               Icons.circle_outlined,
               AppColors.error,
               theme,

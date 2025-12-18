@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_model.dart';
 import '../models/auth_response.dart';
 import '../services/auth_api_service.dart';
+import '../../../core/utils/jwt_utils.dart';
 
 class AuthProvider extends ChangeNotifier {
   User? _user;
@@ -12,6 +14,8 @@ class AuthProvider extends ChangeNotifier {
   bool _isAuthenticated = false;
   bool _isLoading = false;
   String? _errorMessage;
+  Timer? _tokenRefreshTimer;
+  bool _isRefreshing = false;
 
   // Getters
   User? get user => _user;
@@ -30,6 +34,12 @@ class AuthProvider extends ChangeNotifier {
 
   AuthProvider() {
     _initializeAuthProvider();
+  }
+
+  @override
+  void dispose() {
+    _tokenRefreshTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _initializeAuthProvider() async {
@@ -67,38 +77,63 @@ class AuthProvider extends ChangeNotifier {
     if (storedToken != null && storedUserData != null) {
       _token = storedToken;
       _refreshToken = storedRefreshToken;
+
       try {
         // Parse stored user data first
         final userData = jsonDecode(storedUserData);
         debugPrint(
           'AuthProvider: Loading stored user data from SharedPreferences',
         );
-        debugPrint(
-          'AuthProvider: Stored user data - firstName: ${userData['firstName']}, lastName: ${userData['lastName']}',
-        );
-        debugPrint(
-          'AuthProvider: Stored user data - phone: ${userData['phone']}, dateOfBirth: ${userData['dateOfBirth']}',
-        );
-        debugPrint(
-          'AuthProvider: Stored user data - address: ${userData['address']}, city: ${userData['city']}',
-        );
-        debugPrint(
-          'AuthProvider: Stored user data - userType: ${userData['userType']}',
-        );
         _user = User.fromJson(userData);
-        debugPrint(
-          'AuthProvider: Loaded user - userType: ${_user?.userType}, isDeliveryAdmin: ${_user?.isDeliveryManager}',
-        );
-        _isAuthenticated = true;
+        debugPrint('AuthProvider: Loaded user - userType: ${_user?.userType}');
 
-        // Notify listeners immediately after loading stored data
-        notifyListeners();
+        // Check token expiration
+        final isAccessTokenExpired = JwtUtils.isTokenExpired(storedToken);
+        final isRefreshTokenExpired =
+            storedRefreshToken == null ||
+            JwtUtils.isTokenExpired(storedRefreshToken);
 
-        // Try to verify token with API in background (non-blocking)
-        _verifyTokenInBackground(storedToken);
+        if (isAccessTokenExpired && !isRefreshTokenExpired) {
+          // Access token expired but refresh token is valid - refresh automatically
+          // Note: storedRefreshToken is guaranteed to be non-null here because
+          // isRefreshTokenExpired would be true if storedRefreshToken was null
+          debugPrint(
+            'AuthProvider: Access token expired, attempting automatic refresh...',
+          );
+          final refreshSuccess = await _refreshTokenWithRetry();
+          if (refreshSuccess) {
+            _isAuthenticated = true;
+            notifyListeners();
+            _startTokenRefreshTimer();
+            return;
+          } else {
+            debugPrint(
+              'AuthProvider: Token refresh failed, clearing auth data',
+            );
+            await clearAuthData();
+            notifyListeners();
+            return;
+          }
+        } else if (isAccessTokenExpired && isRefreshTokenExpired) {
+          // Both tokens expired - user needs to login
+          debugPrint('AuthProvider: Both tokens expired, user needs to login');
+          await clearAuthData();
+          notifyListeners();
+          return;
+        } else if (!isAccessTokenExpired) {
+          // Access token is still valid
+          debugPrint('AuthProvider: Access token is still valid');
+          _isAuthenticated = true;
+          notifyListeners();
+          _startTokenRefreshTimer();
+
+          // Verify token with API in background (non-blocking)
+          _verifyTokenInBackground(storedToken);
+        }
       } catch (parseError) {
         debugPrint('Error parsing stored user data: ${parseError.toString()}');
         await clearAuthData();
+        notifyListeners();
       }
     } else {
       debugPrint('AuthProvider: No stored authentication data found');
@@ -124,14 +159,134 @@ class AuthProvider extends ChangeNotifier {
         await _saveUserData(_user!);
         notifyListeners();
       } else {
-        // Token is invalid, clear stored data
-        await clearAuthData();
-        notifyListeners();
+        // Token might be expired, try to refresh
+        if (_refreshToken != null && !JwtUtils.isTokenExpired(_refreshToken!)) {
+          debugPrint('AuthProvider: Token invalid, attempting refresh...');
+          final refreshSuccess = await _refreshTokenWithRetry();
+          if (!refreshSuccess) {
+            await clearAuthData();
+            notifyListeners();
+          }
+        } else {
+          // Both tokens invalid, clear stored data
+          await clearAuthData();
+          notifyListeners();
+        }
       }
     } catch (e) {
       debugPrint('Background token verification failed: ${e.toString()}');
-      // Keep using cached credentials on error
+      // Keep using cached credentials on error - don't force logout
     }
+  }
+
+  // Refresh token with retry logic
+  Future<bool> _refreshTokenWithRetry({int maxRetries = 3}) async {
+    if (_isRefreshing) {
+      debugPrint('AuthProvider: Token refresh already in progress');
+      return false;
+    }
+
+    if (_refreshToken == null || _refreshToken!.isEmpty) {
+      debugPrint('AuthProvider: No refresh token available');
+      return false;
+    }
+
+    // Check if refresh token is expired
+    if (JwtUtils.isTokenExpired(_refreshToken!)) {
+      debugPrint('AuthProvider: Refresh token is expired');
+      return false;
+    }
+
+    _isRefreshing = true;
+
+    for (int attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        debugPrint(
+          'AuthProvider: Attempting token refresh (attempt $attempt/$maxRetries)...',
+        );
+
+        final response = await AuthApiService.refreshToken(_refreshToken!)
+            .timeout(
+              const Duration(seconds: 10),
+              onTimeout: () {
+                debugPrint('AuthProvider: Token refresh timeout');
+                return const AuthResponse(success: false, message: 'Timeout');
+              },
+            );
+
+        if (response.success && response.accessToken != null) {
+          debugPrint('AuthProvider: Token refreshed successfully');
+          _token = response.accessToken;
+
+          // Update refresh token if a new one is provided
+          if (response.refreshToken != null) {
+            _refreshToken = response.refreshToken;
+          }
+
+          await _saveAuthData();
+          _isRefreshing = false;
+          _startTokenRefreshTimer();
+          notifyListeners();
+          return true;
+        } else {
+          debugPrint('AuthProvider: Token refresh failed: ${response.message}');
+          if (attempt < maxRetries) {
+            // Wait before retrying (exponential backoff)
+            final delay = Duration(seconds: attempt * 2);
+            debugPrint(
+              'AuthProvider: Retrying in ${delay.inSeconds} seconds...',
+            );
+            await Future.delayed(delay);
+          }
+        }
+      } catch (e) {
+        debugPrint('AuthProvider: Token refresh error (attempt $attempt): $e');
+        if (attempt < maxRetries) {
+          // Wait before retrying (exponential backoff)
+          final delay = Duration(seconds: attempt * 2);
+          debugPrint('AuthProvider: Retrying in ${delay.inSeconds} seconds...');
+          await Future.delayed(delay);
+        }
+      }
+    }
+
+    _isRefreshing = false;
+    debugPrint('AuthProvider: Token refresh failed after $maxRetries attempts');
+    return false;
+  }
+
+  // Start timer to automatically refresh token before expiration
+  void _startTokenRefreshTimer() {
+    _tokenRefreshTimer?.cancel();
+
+    if (_token == null) return;
+
+    final timeUntilExpiration = JwtUtils.getTimeUntilExpiration(_token!);
+    if (timeUntilExpiration == null) return;
+
+    // Refresh token 1 hour before expiration (or immediately if less than 1 hour remaining)
+    final refreshDelay = timeUntilExpiration.inHours > 1
+        ? timeUntilExpiration - const Duration(hours: 1)
+        : const Duration(minutes: 5);
+
+    if (refreshDelay.inSeconds > 0) {
+      debugPrint(
+        'AuthProvider: Scheduling token refresh in ${refreshDelay.inHours} hours',
+      );
+      _tokenRefreshTimer = Timer(refreshDelay, () {
+        debugPrint('AuthProvider: Automatic token refresh triggered');
+        _refreshTokenWithRetry();
+      });
+    } else {
+      // Token expires soon, refresh immediately
+      debugPrint('AuthProvider: Token expires soon, refreshing immediately');
+      _refreshTokenWithRetry();
+    }
+  }
+
+  // Public method to refresh token (can be called externally)
+  Future<bool> refreshAccessToken() async {
+    return await _refreshTokenWithRetry();
   }
 
   // Login method
@@ -181,6 +336,9 @@ class AuthProvider extends ChangeNotifier {
         // Save to SharedPreferences first
         await _saveAuthData();
         debugPrint('AuthProvider: Tokens saved to SharedPreferences');
+
+        // Start automatic token refresh timer
+        _startTokenRefreshTimer();
 
         // Notify listeners immediately after setting the token
         notifyListeners();
@@ -277,10 +435,13 @@ class AuthProvider extends ChangeNotifier {
   // Clear authentication data
   Future<void> clearAuthData() async {
     debugPrint('AuthProvider: Clearing all authentication data');
+    _tokenRefreshTimer?.cancel();
+    _tokenRefreshTimer = null;
     _user = null;
     _token = null;
     _refreshToken = null;
     _isAuthenticated = false;
+    _isRefreshing = false;
     _clearError();
 
     final prefs = await SharedPreferences.getInstance();
@@ -539,6 +700,8 @@ class AuthProvider extends ChangeNotifier {
   void setToken(String newToken) {
     _token = newToken;
     _isAuthenticated = true;
+    _saveAuthData(); // Save immediately
+    _startTokenRefreshTimer(); // Restart timer
     notifyListeners();
     debugPrint('AuthProvider: Token updated via setToken method');
   }

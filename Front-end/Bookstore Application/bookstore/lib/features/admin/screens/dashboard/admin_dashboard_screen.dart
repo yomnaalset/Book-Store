@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/services/auth_service.dart';
+import '../../../../core/localization/app_localizations.dart';
 import '../../../../routes/app_routes.dart';
 import '../../../auth/providers/auth_provider.dart';
 import '../../providers/notifications_provider.dart';
@@ -12,10 +13,11 @@ class AdminDashboardScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
+    final localizations = AppLocalizations.of(context);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Admin Dashboard'),
+        title: Text(localizations.managerDashboard),
         actions: [
           Stack(
             children: [
@@ -93,7 +95,9 @@ class AdminDashboardScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Welcome, ${authProvider.user?.firstName ?? 'Admin'}',
+                      localizations.welcomeManager(
+                        authProvider.user?.firstName ?? localizations.admin,
+                      ),
                       style: const TextStyle(color: Colors.white, fontSize: 16),
                       overflow: TextOverflow.ellipsis,
                       maxLines: 1,
@@ -114,14 +118,14 @@ class AdminDashboardScreen extends StatelessWidget {
             ),
             ListTile(
               leading: const Icon(Icons.dashboard),
-              title: const Text('Dashboard'),
+              title: Text(localizations.dashboard),
               onTap: () {
                 Navigator.pop(context);
               },
             ),
             ListTile(
               leading: const Icon(Icons.library_books),
-              title: const Text('Books'),
+              title: Text(localizations.books),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.pushNamed(context, AppRoutes.adminBooks);
@@ -129,7 +133,7 @@ class AdminDashboardScreen extends StatelessWidget {
             ),
             ListTile(
               leading: const Icon(Icons.category),
-              title: const Text('Categories'),
+              title: Text(localizations.categories),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.pushNamed(context, AppRoutes.adminCategories);
@@ -137,7 +141,7 @@ class AdminDashboardScreen extends StatelessWidget {
             ),
             ListTile(
               leading: const Icon(Icons.person),
-              title: const Text('Authors'),
+              title: Text(localizations.authors),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.pushNamed(context, AppRoutes.adminAuthors);
@@ -145,7 +149,7 @@ class AdminDashboardScreen extends StatelessWidget {
             ),
             ListTile(
               leading: const Icon(Icons.people),
-              title: const Text('Users'),
+              title: Text(localizations.userLabel),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.pushNamed(context, AppRoutes.adminUsers);
@@ -153,7 +157,7 @@ class AdminDashboardScreen extends StatelessWidget {
             ),
             ListTile(
               leading: const Icon(Icons.shopping_cart),
-              title: const Text('Orders'),
+              title: Text(localizations.orders),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.pushNamed(context, AppRoutes.adminOrders);
@@ -161,7 +165,7 @@ class AdminDashboardScreen extends StatelessWidget {
             ),
             ListTile(
               leading: const Icon(Icons.book_online),
-              title: const Text('Borrowing'),
+              title: Text(localizations.borrowings),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.pushNamed(context, AppRoutes.libraryBorrowing);
@@ -169,7 +173,7 @@ class AdminDashboardScreen extends StatelessWidget {
             ),
             ListTile(
               leading: const Icon(Icons.assignment_return),
-              title: const Text('Return Requests'),
+              title: Text(localizations.returnRequests),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.pushNamed(context, AppRoutes.adminReturnRequests);
@@ -177,7 +181,7 @@ class AdminDashboardScreen extends StatelessWidget {
             ),
             ListTile(
               leading: const Icon(Icons.local_shipping),
-              title: const Text('Delivery'),
+              title: Text(localizations.deliveries),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.pushNamed(context, AppRoutes.libraryDelivery);
@@ -185,7 +189,7 @@ class AdminDashboardScreen extends StatelessWidget {
             ),
             ListTile(
               leading: const Icon(Icons.discount),
-              title: const Text('Discounts'),
+              title: Text(localizations.discounts),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.pushNamed(context, AppRoutes.adminDiscounts);
@@ -193,7 +197,7 @@ class AdminDashboardScreen extends StatelessWidget {
             ),
             ListTile(
               leading: const Icon(Icons.campaign),
-              title: const Text('Ads'),
+              title: Text(localizations.advertisements),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.pushNamed(context, AppRoutes.adminAds);
@@ -201,7 +205,7 @@ class AdminDashboardScreen extends StatelessWidget {
             ),
             ListTile(
               leading: const Icon(Icons.report_problem),
-              title: const Text('Complaints'),
+              title: Text(localizations.complaints),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.pushNamed(context, AppRoutes.adminComplaints);
@@ -209,7 +213,7 @@ class AdminDashboardScreen extends StatelessWidget {
             ),
             ListTile(
               leading: const Icon(Icons.bar_chart),
-              title: const Text('Reports'),
+              title: Text(localizations.reports),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.pushNamed(context, AppRoutes.adminReports);
@@ -218,27 +222,28 @@ class AdminDashboardScreen extends StatelessWidget {
             const Divider(),
             ListTile(
               leading: const Icon(Icons.logout, color: AppColors.error),
-              title: const Text(
-                'Sign Out',
-                style: TextStyle(color: AppColors.error),
+              title: Text(
+                localizations.signOut,
+                style: const TextStyle(color: AppColors.error),
               ),
               onTap: () {
                 Navigator.pop(context); // Close drawer first
-                _showLogoutDialog(context, authProvider);
+                _showLogoutDialog(context, authProvider, localizations);
               },
             ),
           ],
         ),
       ),
       body: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 24),
-            const Text(
-              'Quick Actions',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            Text(
+              localizations.quickActions,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
             GridView.count(
@@ -250,41 +255,45 @@ class AdminDashboardScreen extends StatelessWidget {
               children: [
                 _buildQuickActionCard(
                   context,
-                  'Borrowing',
+                  localizations.borrowings,
                   Icons.book_online,
                   Colors.orange,
-                  () => Navigator.pushNamed(context, AppRoutes.libraryBorrowing),
+                  () =>
+                      Navigator.pushNamed(context, AppRoutes.libraryBorrowing),
                 ),
                 _buildQuickActionCard(
                   context,
-                  'Orders',
+                  localizations.orders,
                   Icons.shopping_cart,
                   Colors.purple,
                   () => Navigator.pushNamed(context, AppRoutes.adminOrders),
                 ),
                 _buildQuickActionCard(
                   context,
-                  'Return Requests',
+                  localizations.returnRequests,
                   Icons.assignment_return,
                   Colors.teal,
-                  () => Navigator.pushNamed(context, AppRoutes.adminReturnRequests),
+                  () => Navigator.pushNamed(
+                    context,
+                    AppRoutes.adminReturnRequests,
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: 24),
-            const Text(
-              'System Overview',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            Text(
+              localizations.systemOverview,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
-            _buildStatsCards(),
+            _buildStatsCards(localizations),
             const SizedBox(height: 24),
-            const Text(
-              'Recent Activity',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            Text(
+              localizations.recentActivity,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
-            _buildRecentActivityList(),
+            _buildRecentActivityList(localizations),
           ],
         ),
       ),
@@ -326,7 +335,7 @@ class AdminDashboardScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildStatsCards() {
+  Widget _buildStatsCards(AppLocalizations localizations) {
     return GridView.count(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -335,16 +344,26 @@ class AdminDashboardScreen extends StatelessWidget {
       mainAxisSpacing: 16,
       childAspectRatio: 1.5,
       children: [
-        _buildStatCard('Total Books', '1,234', Icons.book, Colors.blue),
-        _buildStatCard('Active Users', '567', Icons.people, Colors.green),
         _buildStatCard(
-          'Pending Orders',
+          localizations.totalBooks,
+          '1,234',
+          Icons.book,
+          Colors.blue,
+        ),
+        _buildStatCard(
+          localizations.activeUsers,
+          '567',
+          Icons.people,
+          Colors.green,
+        ),
+        _buildStatCard(
+          localizations.pendingOrders,
           '89',
           Icons.shopping_cart,
           Colors.orange,
         ),
         _buildStatCard(
-          'Revenue',
+          localizations.revenue,
           '\$12,345',
           Icons.attach_money,
           Colors.purple,
@@ -383,7 +402,7 @@ class AdminDashboardScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildRecentActivityList() {
+  Widget _buildRecentActivityList(AppLocalizations localizations) {
     return Card(
       elevation: 2,
       child: ListView.separated(
@@ -409,11 +428,11 @@ class AdminDashboardScreen extends StatelessWidget {
             ),
             title: Text(
               [
-                'New user registered',
-                'New order placed',
-                'Book added to library',
-                'New complaint received',
-                'Discount code created',
+                localizations.newUserRegistered,
+                localizations.newOrderPlaced,
+                localizations.newBookAdded,
+                localizations.newComplaintReceived,
+                localizations.newDiscountCodeCreated,
               ][index],
             ),
             subtitle: Text(
@@ -430,6 +449,7 @@ class AdminDashboardScreen extends StatelessWidget {
   static void _showLogoutDialog(
     BuildContext context,
     AuthProvider authProvider,
+    AppLocalizations localizations,
   ) {
     final theme = Theme.of(context);
     showDialog(
@@ -442,7 +462,7 @@ class AdminDashboardScreen extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
           ),
           title: Text(
-            'Sign Out',
+            localizations.signOut,
             style: TextStyle(
               color: theme.colorScheme.onSurface,
               fontWeight: FontWeight.bold,
@@ -450,7 +470,7 @@ class AdminDashboardScreen extends StatelessWidget {
             ),
           ),
           content: Text(
-            'Are you sure you want to sign out?',
+            localizations.signOutConfirmation,
             style: TextStyle(
               color: theme.colorScheme.onSurfaceVariant,
               fontSize: 16,
@@ -466,9 +486,12 @@ class AdminDashboardScreen extends StatelessWidget {
                   vertical: 12,
                 ),
               ),
-              child: const Text(
-                'Cancel',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              child: Text(
+                localizations.cancel,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
             ElevatedButton(
@@ -487,9 +510,12 @@ class AdminDashboardScreen extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
-              child: const Text(
-                'Sign Out',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              child: Text(
+                localizations.signOut,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ],
@@ -515,9 +541,10 @@ class AdminDashboardScreen extends StatelessWidget {
       }
     } catch (e) {
       if (context.mounted) {
+        final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Sign out failed: $e'),
+            content: Text('${localizations.signOutFailed}: $e'),
             backgroundColor: AppColors.error,
           ),
         );

@@ -10,6 +10,7 @@ import '../../../widgets/library_manager/empty_state.dart';
 import '../../../../auth/providers/auth_provider.dart';
 import '../../../../../../routes/app_routes.dart';
 import '../../../../../../core/constants/app_colors.dart' as app_colors;
+import '../../../../../../core/localization/app_localizations.dart';
 
 class BooksListScreen extends StatefulWidget {
   const BooksListScreen({super.key});
@@ -139,13 +140,15 @@ class _BooksListScreenState extends State<BooksListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Books'),
+        title: Text(localizations.books),
         actions: [
           IconButton(
             onPressed: () => _loadBooks(),
             icon: const Icon(Icons.refresh),
+            tooltip: localizations.refresh,
           ),
         ],
       ),
@@ -154,28 +157,33 @@ class _BooksListScreenState extends State<BooksListScreen> {
           // Search Bar
           Padding(
             padding: const EdgeInsets.all(16.0),
-            child: AdminSearchBar(
-              hintText: 'Search books...',
-              onChanged: (query) {
-                // Cancel previous timer
-                _searchDebounceTimer?.cancel();
+            child: Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return AdminSearchBar(
+                  hintText: localizations.searchBooksPlaceholder,
+                  onChanged: (query) {
+                    // Cancel previous timer
+                    _searchDebounceTimer?.cancel();
 
-                // Set new timer for debounced search
-                _searchDebounceTimer = Timer(
-                  const Duration(milliseconds: 500),
-                  () {
+                    // Set new timer for debounced search
+                    _searchDebounceTimer = Timer(
+                      const Duration(milliseconds: 500),
+                      () {
+                        setState(() {
+                          _searchQuery = query.isEmpty ? null : query;
+                        });
+                        _loadBooks();
+                      },
+                    );
+                  },
+                  onSubmitted: (query) {
                     setState(() {
                       _searchQuery = query.isEmpty ? null : query;
                     });
                     _loadBooks();
                   },
                 );
-              },
-              onSubmitted: (query) {
-                setState(() {
-                  _searchQuery = query.isEmpty ? null : query;
-                });
-                _loadBooks();
               },
             ),
           ),
@@ -192,87 +200,112 @@ class _BooksListScreenState extends State<BooksListScreen> {
                       children: [
                         // Status Filter
                         Expanded(
-                          child: Container(
-                            constraints: const BoxConstraints(minHeight: 60),
-                            child: DropdownButtonFormField<String>(
-                              // ignore: deprecated_member_use
-                              value: _selectedStatus,
-                              isExpanded: true,
-                              decoration: InputDecoration(
-                                labelText: 'Status',
-                                floatingLabelBehavior:
-                                    FloatingLabelBehavior.always,
-                                border: const OutlineInputBorder(),
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 12,
+                          child: Builder(
+                            builder: (context) {
+                              final localizations = AppLocalizations.of(
+                                context,
+                              );
+                              return Container(
+                                constraints: const BoxConstraints(
+                                  minHeight: 60,
                                 ),
-                                filled: true,
-                                fillColor: Theme.of(context).colorScheme.surface,
-                                labelStyle: TextStyle(
-                                  color: Theme.of(context).colorScheme.onSurface,
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 12,
-                                ),
-                              ),
-                              items: [
-                                DropdownMenuItem(
-                                  value: null,
-                                  child: Text(
-                                    'All Statuses',
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color: Theme.of(context).colorScheme.onSurface,
-                                      fontWeight: FontWeight.w500,
+                                child: DropdownButtonFormField<String>(
+                                  // ignore: deprecated_member_use
+                                  value: _selectedStatus,
+                                  isExpanded: true,
+                                  decoration: InputDecoration(
+                                    labelText: localizations.status,
+                                    floatingLabelBehavior:
+                                        FloatingLabelBehavior.always,
+                                    border: const OutlineInputBorder(),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 12,
+                                    ),
+                                    filled: true,
+                                    fillColor: Theme.of(
+                                      context,
+                                    ).colorScheme.surface,
+                                    labelStyle: TextStyle(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onSurface,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 12,
                                     ),
                                   ),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'available',
-                                  child: Text(
-                                    'Available',
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color: Theme.of(context).colorScheme.onSurface,
-                                      fontWeight: FontWeight.w500,
+                                  items: [
+                                    DropdownMenuItem(
+                                      value: null,
+                                      child: Text(
+                                        localizations.allStatuses,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.onSurface,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
                                     ),
+                                    DropdownMenuItem(
+                                      value: 'available',
+                                      child: Text(
+                                        localizations.available,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.onSurface,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 'unavailable',
+                                      child: Text(
+                                        localizations.unavailable,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.onSurface,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 'borrowed',
+                                      child: Text(
+                                        localizations.borrowed,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.onSurface,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                  onChanged: (value) => _onFilterChanged(value),
+                                  dropdownColor: Theme.of(
+                                    context,
+                                  ).colorScheme.surface,
+                                  style: TextStyle(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurface,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
                                   ),
                                 ),
-                                DropdownMenuItem(
-                                  value: 'unavailable',
-                                  child: Text(
-                                    'Unavailable',
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color: Theme.of(context).colorScheme.onSurface,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'borrowed',
-                                  child: Text(
-                                    'Borrowed',
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color: Theme.of(context).colorScheme.onSurface,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                              onChanged: (value) => _onFilterChanged(value),
-                              dropdownColor: Theme.of(context).colorScheme.surface,
-                              style: TextStyle(
-                                color: Theme.of(context).colorScheme.onSurface,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
+                              );
+                            },
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -282,12 +315,15 @@ class _BooksListScreenState extends State<BooksListScreen> {
                             constraints: const BoxConstraints(minHeight: 60),
                             child: Consumer<CategoriesProvider>(
                               builder: (context, categoriesProvider, child) {
+                                final localizations = AppLocalizations.of(
+                                  context,
+                                );
                                 return DropdownButtonFormField<String>(
                                   // ignore: deprecated_member_use
                                   value: _selectedCategory,
                                   isExpanded: true,
                                   decoration: InputDecoration(
-                                    labelText: 'Category',
+                                    labelText: localizations.category,
                                     floatingLabelBehavior:
                                         FloatingLabelBehavior.always,
                                     border: const OutlineInputBorder(),
@@ -296,9 +332,13 @@ class _BooksListScreenState extends State<BooksListScreen> {
                                       vertical: 12,
                                     ),
                                     filled: true,
-                                    fillColor: Theme.of(context).colorScheme.surface,
+                                    fillColor: Theme.of(
+                                      context,
+                                    ).colorScheme.surface,
                                     labelStyle: TextStyle(
-                                      color: Theme.of(context).colorScheme.onSurface,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onSurface,
                                       fontWeight: FontWeight.w600,
                                       fontSize: 12,
                                     ),
@@ -307,11 +347,13 @@ class _BooksListScreenState extends State<BooksListScreen> {
                                     DropdownMenuItem(
                                       value: null,
                                       child: Text(
-                                        'All Categories',
+                                        localizations.allCategories,
                                         overflow: TextOverflow.ellipsis,
                                         style: TextStyle(
                                           fontSize: 14,
-                                          color: Theme.of(context).colorScheme.onSurface,
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.onSurface,
                                           fontWeight: FontWeight.w500,
                                         ),
                                       ),
@@ -326,7 +368,9 @@ class _BooksListScreenState extends State<BooksListScreen> {
                                               overflow: TextOverflow.ellipsis,
                                               style: TextStyle(
                                                 fontSize: 14,
-                                                color: Theme.of(context).colorScheme.onSurface,
+                                                color: Theme.of(
+                                                  context,
+                                                ).colorScheme.onSurface,
                                                 fontWeight: FontWeight.w500,
                                               ),
                                             ),
@@ -335,9 +379,13 @@ class _BooksListScreenState extends State<BooksListScreen> {
                                   ],
                                   onChanged: (value) =>
                                       _onCategoryFilterChanged(value),
-                                  dropdownColor: Theme.of(context).colorScheme.surface,
+                                  dropdownColor: Theme.of(
+                                    context,
+                                  ).colorScheme.surface,
                                   style: TextStyle(
-                                    color: Theme.of(context).colorScheme.onSurface,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurface,
                                     fontSize: 14,
                                     fontWeight: FontWeight.w500,
                                   ),
@@ -358,12 +406,15 @@ class _BooksListScreenState extends State<BooksListScreen> {
                             constraints: const BoxConstraints(minHeight: 60),
                             child: Consumer<AuthorsProvider>(
                               builder: (context, authorsProvider, child) {
+                                final localizations = AppLocalizations.of(
+                                  context,
+                                );
                                 return DropdownButtonFormField<String>(
                                   // ignore: deprecated_member_use
                                   value: _selectedAuthor,
                                   isExpanded: true,
                                   decoration: InputDecoration(
-                                    labelText: 'Author',
+                                    labelText: localizations.author,
                                     floatingLabelBehavior:
                                         FloatingLabelBehavior.always,
                                     border: const OutlineInputBorder(),
@@ -372,9 +423,13 @@ class _BooksListScreenState extends State<BooksListScreen> {
                                       vertical: 12,
                                     ),
                                     filled: true,
-                                    fillColor: Theme.of(context).colorScheme.surface,
+                                    fillColor: Theme.of(
+                                      context,
+                                    ).colorScheme.surface,
                                     labelStyle: TextStyle(
-                                      color: Theme.of(context).colorScheme.onSurface,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onSurface,
                                       fontWeight: FontWeight.w600,
                                       fontSize: 12,
                                     ),
@@ -383,11 +438,13 @@ class _BooksListScreenState extends State<BooksListScreen> {
                                     DropdownMenuItem(
                                       value: null,
                                       child: Text(
-                                        'All Authors',
+                                        localizations.allAuthors,
                                         overflow: TextOverflow.ellipsis,
                                         style: TextStyle(
                                           fontSize: 14,
-                                          color: Theme.of(context).colorScheme.onSurface,
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.onSurface,
                                           fontWeight: FontWeight.w500,
                                         ),
                                       ),
@@ -402,7 +459,9 @@ class _BooksListScreenState extends State<BooksListScreen> {
                                               overflow: TextOverflow.ellipsis,
                                               style: TextStyle(
                                                 fontSize: 14,
-                                                color: Theme.of(context).colorScheme.onSurface,
+                                                color: Theme.of(
+                                                  context,
+                                                ).colorScheme.onSurface,
                                                 fontWeight: FontWeight.w500,
                                               ),
                                             ),
@@ -411,9 +470,13 @@ class _BooksListScreenState extends State<BooksListScreen> {
                                   ],
                                   onChanged: (value) =>
                                       _onAuthorFilterChanged(value),
-                                  dropdownColor: Theme.of(context).colorScheme.surface,
+                                  dropdownColor: Theme.of(
+                                    context,
+                                  ).colorScheme.surface,
                                   style: TextStyle(
-                                    color: Theme.of(context).colorScheme.onSurface,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurface,
                                     fontSize: 14,
                                     fontWeight: FontWeight.w500,
                                   ),
@@ -472,68 +535,109 @@ class _BooksListScreenState extends State<BooksListScreen> {
                               : Theme.of(context).colorScheme.error,
                         ),
                         const SizedBox(height: 16),
-                        Text(
-                          isAuthError
-                              ? 'Authentication Required'
-                              : isNoLibraryError
-                              ? 'No Library Found'
-                              : 'Error: ${provider.error}',
-                          style: TextStyle(
-                            color: isNoLibraryError
-                                ? app_colors.AppColors.primary
-                                : Theme.of(context).colorScheme.error,
-                            fontSize: 16,
-                          ),
-                          textAlign: TextAlign.center,
+                        Builder(
+                          builder: (context) {
+                            final localizations = AppLocalizations.of(context);
+                            return Text(
+                              isAuthError
+                                  ? localizations.authenticationRequired
+                                  : isNoLibraryError
+                                  ? localizations.noLibraryFound
+                                  : '${localizations.error}: ${provider.error}',
+                              style: TextStyle(
+                                color: isNoLibraryError
+                                    ? app_colors.AppColors.primary
+                                    : Theme.of(context).colorScheme.error,
+                                fontSize: 16,
+                              ),
+                              textAlign: TextAlign.center,
+                            );
+                          },
                         ),
                         if (isAuthError) ...[
                           const SizedBox(height: 8),
-                          Text(
-                            'Please log in to access books management.',
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
-                              fontSize: 14,
-                            ),
-                            textAlign: TextAlign.center,
+                          Builder(
+                            builder: (context) {
+                              final localizations = AppLocalizations.of(
+                                context,
+                              );
+                              return Text(
+                                localizations.pleaseLogInBooksManagement,
+                                style: TextStyle(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                  fontSize: 14,
+                                ),
+                                textAlign: TextAlign.center,
+                              );
+                            },
                           ),
                         ],
                         if (isNoLibraryError) ...[
                           const SizedBox(height: 8),
-                          Text(
-                            'Create a library first to manage books',
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
-                              fontSize: 14,
-                            ),
-                            textAlign: TextAlign.center,
+                          Builder(
+                            builder: (context) {
+                              final localizations = AppLocalizations.of(
+                                context,
+                              );
+                              return Text(
+                                localizations.createLibraryFirstManageBooks,
+                                style: TextStyle(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                  fontSize: 14,
+                                ),
+                                textAlign: TextAlign.center,
+                              );
+                            },
                           ),
                         ],
                         const SizedBox(height: 16),
                         if (isNoLibraryError)
-                          ElevatedButton.icon(
-                            onPressed: () {
-                              Navigator.pushNamed(
+                          Builder(
+                            builder: (context) {
+                              final localizations = AppLocalizations.of(
                                 context,
-                                AppRoutes.managerLibraryForm,
+                              );
+                              return ElevatedButton.icon(
+                                onPressed: () {
+                                  Navigator.pushNamed(
+                                    context,
+                                    AppRoutes.managerLibraryForm,
+                                  );
+                                },
+                                icon: const Icon(Icons.add),
+                                label: Text(localizations.createLibrary),
                               );
                             },
-                            icon: const Icon(Icons.add),
-                            label: const Text('Create Library'),
                           )
                         else
-                          ElevatedButton(
-                            onPressed: () {
-                              if (isAuthError) {
-                                Navigator.pushNamedAndRemoveUntil(
-                                  context,
-                                  AppRoutes.login,
-                                  (route) => false,
-                                );
-                              } else {
-                                _loadBooks();
-                              }
+                          Builder(
+                            builder: (context) {
+                              final localizations = AppLocalizations.of(
+                                context,
+                              );
+                              return ElevatedButton(
+                                onPressed: () {
+                                  if (isAuthError) {
+                                    Navigator.pushNamedAndRemoveUntil(
+                                      context,
+                                      AppRoutes.login,
+                                      (route) => false,
+                                    );
+                                  } else {
+                                    _loadBooks();
+                                  }
+                                },
+                                child: Text(
+                                  isAuthError
+                                      ? localizations.goToLogin
+                                      : localizations.retry,
+                                ),
+                              );
                             },
-                            child: Text(isAuthError ? 'Go to Login' : 'Retry'),
                           ),
                       ],
                     ),
@@ -541,12 +645,17 @@ class _BooksListScreenState extends State<BooksListScreen> {
                 }
 
                 if (provider.books.isEmpty) {
-                  return EmptyState(
-                    title: 'No Books',
-                    message: 'No books found',
-                    icon: Icons.book,
-                    actionText: 'Add Book',
-                    onAction: () => _navigateToBookForm(),
+                  return Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return EmptyState(
+                        title: localizations.noBooks,
+                        message: localizations.noBooksFound,
+                        icon: Icons.book,
+                        actionText: localizations.addBook,
+                        onAction: () => _navigateToBookForm(),
+                      );
+                    },
                   );
                 }
 
@@ -563,10 +672,15 @@ class _BooksListScreenState extends State<BooksListScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _navigateToBookForm(),
-        tooltip: 'Add Book',
-        child: const Icon(Icons.add),
+      floatingActionButton: Builder(
+        builder: (context) {
+          final localizations = AppLocalizations.of(context);
+          return FloatingActionButton(
+            onPressed: () => _navigateToBookForm(),
+            tooltip: localizations.addBook,
+            child: const Icon(Icons.add),
+          );
+        },
       ),
     );
   }
@@ -586,48 +700,61 @@ class _BooksListScreenState extends State<BooksListScreen> {
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (book.author != null) ...[
-              const SizedBox(height: 4),
-              Text(
-                'By: ${book.author!.name}',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-            if (book.category != null) ...[
-              const SizedBox(height: 4),
-              Text(
-                'Category: ${book.category!.name}',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.withValues(alpha: (0.1)),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    'Copies: ${book.availableCopies}/${book.quantity ?? 0}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Colors.blue,
-                      fontWeight: FontWeight.bold,
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (book.author != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        localizations.byAuthor(book.author!.name),
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                    if (book.category != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        '${localizations.category}: ${book.category!.name}',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.withValues(alpha: (0.1)),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '${localizations.availableCopiesLabel}: ${book.availableCopies}/${book.quantity ?? 0}',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.blue,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ),
-              ],
+                  ],
+                );
+              },
             ),
             if (book.description != null) ...[
               const SizedBox(height: 8),
@@ -640,21 +767,28 @@ class _BooksListScreenState extends State<BooksListScreen> {
             ],
             const SizedBox(height: 8),
             // View Details Button
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () => _navigateToBookDetails(book),
-                icon: const Icon(Icons.visibility, size: 16),
-                label: const Text('View Details'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  foregroundColor: Theme.of(context).colorScheme.onSurface,
-                  padding: const EdgeInsets.symmetric(vertical: 8.0),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () => _navigateToBookDetails(book),
+                    icon: const Icon(Icons.visibility, size: 16),
+                    label: Text(localizations.viewDetails),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Theme.of(
+                        context,
+                      ).colorScheme.surfaceContainerHighest,
+                      foregroundColor: Theme.of(context).colorScheme.onSurface,
+                      padding: const EdgeInsets.symmetric(vertical: 8.0),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
                   ),
-                ),
-              ),
+                );
+              },
             ),
           ],
         ),
@@ -669,10 +803,13 @@ class _BooksListScreenState extends State<BooksListScreen> {
                 break;
             }
           },
-          itemBuilder: (context) => [
-            const PopupMenuItem(value: 'edit', child: Text('Edit')),
-            const PopupMenuItem(value: 'delete', child: Text('Delete')),
-          ],
+          itemBuilder: (context) {
+            final localizations = AppLocalizations.of(context);
+            return [
+              PopupMenuItem(value: 'edit', child: Text(localizations.edit)),
+              PopupMenuItem(value: 'delete', child: Text(localizations.delete)),
+            ];
+          },
         ),
       ),
     );
@@ -681,11 +818,12 @@ class _BooksListScreenState extends State<BooksListScreen> {
   Future<void> _deleteBook(Book book) async {
     // Check user permissions first
     final authProvider = context.read<AuthProvider>();
+    final localizations = AppLocalizations.of(context);
     if (authProvider.userRole != 'library_admin') {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Only library administrators can delete books'),
+          SnackBar(
+            content: Text(localizations.onlyLibraryAdministratorsDelete),
             backgroundColor: Colors.red,
           ),
         );
@@ -696,19 +834,17 @@ class _BooksListScreenState extends State<BooksListScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Book'),
-        content: Text(
-          'Are you sure you want to delete "${book.title}"? This action cannot be undone.',
-        ),
+        title: Text(localizations.deleteBook),
+        content: Text(localizations.areYouSureDeleteBookWithTitle(book.title)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text(localizations.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
+            child: Text(localizations.delete),
           ),
         ],
       ),
@@ -721,9 +857,10 @@ class _BooksListScreenState extends State<BooksListScreen> {
         await provider.deleteBook(int.parse(book.id));
 
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Book deleted successfully'),
+            SnackBar(
+              content: Text(localizations.bookDeletedSuccessfully),
               backgroundColor: Colors.green,
             ),
           );
@@ -732,20 +869,19 @@ class _BooksListScreenState extends State<BooksListScreen> {
         }
       } catch (e) {
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           String errorMessage = e.toString();
           if (errorMessage.contains('Permission denied') ||
               errorMessage.contains('403') ||
               errorMessage.contains('Unauthorized')) {
-            errorMessage =
-                'You do not have permission to delete books. Only library administrators can delete books.';
+            errorMessage = localizations.noPermissionDeleteBooks;
           } else if (errorMessage.contains('AUTHOR_HAS_BOOKS')) {
-            errorMessage =
-                'Cannot delete this book because it is associated with an author who has other books.';
+            errorMessage = localizations.cannotDeleteBookAuthor;
           }
 
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Error: $errorMessage'),
+              content: Text('${localizations.error}: $errorMessage'),
               backgroundColor: Colors.red,
               duration: const Duration(seconds: 5),
             ),

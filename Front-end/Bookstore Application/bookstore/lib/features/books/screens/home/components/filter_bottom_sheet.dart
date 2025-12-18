@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/constants/app_dimensions.dart';
+import '../../../../../core/localization/app_localizations.dart';
 import '../../../../../core/widgets/common/custom_button.dart';
 import '../../../providers/books_provider.dart';
 import '../../../providers/categories_provider.dart';
@@ -282,35 +283,49 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
   }
 
   Widget _buildAvailabilitySelector() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppDimensions.paddingM),
-      decoration: BoxDecoration(
-        border: Border.all(color: Theme.of(context).dividerColor),
-        borderRadius: BorderRadius.circular(8),
-        color: Theme.of(context).cardColor,
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: _selectedAvailability,
-          isExpanded: true,
-          dropdownColor: Theme.of(context).cardColor,
-          style: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color),
-          items: const [
-            DropdownMenuItem(value: 'all', child: Text('All Books')),
-            DropdownMenuItem(value: 'available', child: Text('Available Only')),
-            DropdownMenuItem(value: 'borrow_only', child: Text('Borrow Only')),
-            DropdownMenuItem(
-              value: 'purchase_only',
-              child: Text('Purchase Only'),
+    return Builder(
+      builder: (context) {
+        final localizations = AppLocalizations.of(context);
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: AppDimensions.paddingM),
+          decoration: BoxDecoration(
+            border: Border.all(color: Theme.of(context).dividerColor),
+            borderRadius: BorderRadius.circular(8),
+            color: Theme.of(context).cardColor,
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: _selectedAvailability,
+              isExpanded: true,
+              dropdownColor: Theme.of(context).cardColor,
+              style: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color),
+              items: [
+                DropdownMenuItem(
+                  value: 'all',
+                  child: Text(localizations.allBooks),
+                ),
+                DropdownMenuItem(
+                  value: 'available',
+                  child: Text(localizations.availableOnly),
+                ),
+                DropdownMenuItem(
+                  value: 'borrow_only',
+                  child: Text(localizations.borrowOnlyFilter),
+                ),
+                DropdownMenuItem(
+                  value: 'purchase_only',
+                  child: Text(localizations.purchaseOnly),
+                ),
+              ],
+              onChanged: (value) {
+                setState(() {
+                  _selectedAvailability = value!;
+                });
+              },
             ),
-          ],
-          onChanged: (value) {
-            setState(() {
-              _selectedAvailability = value!;
-            });
-          },
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 

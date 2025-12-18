@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 
 from ..models import (
-    Order, OrderItem, DeliveryAssignment, DeliveryStatusHistory, 
+    Order, OrderItem, DeliveryRequest, DeliveryActivity, 
     User, Payment, Cart, CartItem, Book, BorrowRequest
 )
 
@@ -269,7 +269,7 @@ class DeliveryService:
                 }
             
             # Check if already assigned
-            if hasattr(order, 'delivery_assignment'):
+            if hasattr(order, 'delivery_request') and order.delivery_request is not None:
                 return {
                     'success': False,
                     'message': 'Order already has a delivery assignment',
@@ -291,22 +291,31 @@ class DeliveryService:
                     'error_code': 'INACTIVE_DELIVERY_MANAGER'
                 }
             
-            # Get delivery manager's phone number from profile
-            contact_phone = None
-            try:
-                if hasattr(delivery_manager, 'profile') and delivery_manager.profile.phone_number:
-                    contact_phone = delivery_manager.profile.phone_number
-            except Exception as e:
-                logger.error(f"Failed to get delivery manager's phone number: {str(e)}")
-            
-            # Create delivery assignment
-            assignment = DeliveryAssignment.objects.create(
+            # Get or create delivery request for this order
+            delivery_request, created = DeliveryRequest.objects.get_or_create(
                 order=order,
-                delivery_manager=delivery_manager,
-                estimated_delivery_time=estimated_delivery_time,
-                delivery_notes=notes or '',
-                contact_phone=contact_phone
+                defaults={
+                    'customer': order.customer,
+                    'request_type': 'delivery',
+                    'delivery_address': order.delivery_address if hasattr(order, 'delivery_address') else '',
+                    'delivery_city': order.delivery_city if hasattr(order, 'delivery_city') else '',
+                    'preferred_pickup_time': timezone.now(),
+                    'preferred_delivery_time': estimated_delivery_time,
+                    'status': 'assigned',
+                    'delivery_manager': delivery_manager,
+                    'assigned_at': timezone.now(),
+                    'estimated_delivery_time': estimated_delivery_time,
+                    'delivery_notes': notes or '',
+                }
             )
+            
+            # If request already existed, update it
+            if not created:
+                delivery_request.delivery_manager = delivery_manager
+                delivery_request.status = 'assigned'
+                delivery_request.save()
+            
+            assignment = delivery_request
             
             # Update order status
             order.status = 'assigned_to_delivery'
@@ -341,7 +350,7 @@ class DeliveryService:
     
     @staticmethod
     @transaction.atomic
-    def update_delivery_status(assignment: DeliveryAssignment, new_status: str, updated_by: User, notes: str = None, failure_reason: str = None) -> Dict[str, Any]:
+    def update_delivery_status(assignment: DeliveryRequest, new_status: str, updated_by: User, notes: str = None, failure_reason: str = None) -> Dict[str, Any]:
         """
         Update delivery assignment status with validation and history tracking.
         """
@@ -375,11 +384,10 @@ class DeliveryService:
                 except Exception as e:
                     logger.warning(f"Failed to update delivery manager status to busy: {str(e)}")
             elif new_status == 'delivered':
-                assignment.delivered_at = timezone.now()
-                assignment.actual_delivery_time = timezone.now()
                 # Update order status
                 assignment.order.status = 'delivered'
-                assignment.order.delivered_at = timezone.now()
+                if hasattr(assignment.order, 'delivered_at'):
+                    assignment.order.delivered_at = timezone.now()
                 assignment.order.save()
                 # Update payment status for COD
                 if assignment.order.payment.payment_method == 'cash_on_delivery':
@@ -395,7 +403,6 @@ class DeliveryService:
                 except Exception as e:
                     logger.warning(f"Failed to update delivery manager status to online: {str(e)}")
             elif new_status == 'completed':
-                assignment.completed_at = timezone.now()
                 # Update order status to completed
                 assignment.order.status = 'delivered'  # Keep order as delivered, completion is for delivery assignment
                 assignment.order.save()
@@ -415,15 +422,18 @@ class DeliveryService:
                 assignment.order.status = 'ready_for_delivery'
                 assignment.order.save()
             
-            if notes:
-                assignment.delivery_notes = notes
-            
             assignment.save()
             
-            # Create status history
-            DeliveryStatusHistory.objects.create(
-                delivery_assignment=assignment,
-                status=new_status,
+            # Create status history (now part of DeliveryActivity)
+            previous_status = assignment.status
+            DeliveryActivity.objects.create(
+                delivery_assignment=assignment if assignment.order else None,
+                delivery_manager=assignment.delivery_manager,
+                order=assignment.order,
+                activity_type='status_change',
+                previous_status=previous_status,
+                new_status=new_status,
+                actor_type='delivery_manager',
                 notes=notes or ''
             )
             
@@ -478,9 +488,13 @@ class DeliveryService:
     def get_delivery_assignments(delivery_manager: User = None, status: str = None) -> Dict[str, Any]:
         """
         Get delivery assignments filtered by manager and/or status.
+        Now uses DeliveryRequest model.
         """
         try:
-            queryset = DeliveryAssignment.objects.select_related(
+            queryset = DeliveryRequest.objects.filter(
+                order__isnull=False,
+                delivery_manager__isnull=False
+            ).select_related(
                 'order__customer', 'order__payment', 'delivery_manager'
             ).prefetch_related('order__items__book')
             
@@ -523,8 +537,8 @@ class DeliveryService:
                 is_active=True
             ).annotate(
                 active_assignments=models.Count(
-                    'delivery_assignments',
-                    filter=models.Q(delivery_assignments__status__in=['assigned', 'accepted', 'picked_up', 'in_transit'])
+                    'assigned_requests',
+                    filter=models.Q(assigned_requests__status__in=['assigned', 'accepted', 'picked_up', 'in_transit'], assigned_requests__order__isnull=False)
                 )
             ).order_by('active_assignments', 'first_name')
             
@@ -860,22 +874,22 @@ class LocationTrackingService:
                     'error_code': 'INVALID_USER_TYPE'
                 }
             
-            # Get delivery assignment if provided
+            # Get delivery request (assignment) if provided
             delivery_assignment = None
             if delivery_assignment_id:
-                from ..models.delivery_model import DeliveryAssignment
+                from ..models.delivery_model import DeliveryRequest
                 try:
-                    delivery_assignment = DeliveryAssignment.objects.get(id=delivery_assignment_id)
-                except DeliveryAssignment.DoesNotExist:
+                    delivery_assignment = DeliveryRequest.objects.get(id=delivery_assignment_id, order__isnull=False)
+                except DeliveryRequest.DoesNotExist:
                     return {
                         'success': False,
                         'message': 'Delivery assignment not found',
                         'error_code': 'DELIVERY_ASSIGNMENT_NOT_FOUND'
                     }
             
-            # If borrow_request_id is provided, try to find the delivery assignment
+            # If borrow_request_id is provided, try to find the delivery request
             if borrow_request_id and not delivery_assignment:
-                from ..models.delivery_model import DeliveryAssignment, Order
+                from ..models.delivery_model import DeliveryRequest, Order
                 from ..models.borrowing_model import BorrowRequest
                 try:
                     borrow_request = BorrowRequest.objects.get(id=borrow_request_id)
@@ -884,7 +898,7 @@ class LocationTrackingService:
                         order_type='borrowing'
                     ).first()
                     if order:
-                        delivery_assignment = DeliveryAssignment.objects.filter(order=order).first()
+                        delivery_assignment = DeliveryRequest.objects.filter(order=order).first()
                 except BorrowRequest.DoesNotExist:
                     pass
             
@@ -1154,7 +1168,7 @@ class BorrowingDeliveryService:
         """
         Create a delivery order for a borrowing request as specified in requirements
         """
-        from ..models.delivery_model import Order, OrderItem, DeliveryAssignment
+        from ..models.delivery_model import Order, OrderItem, DeliveryRequest
         
         try:
             # Create the delivery order
@@ -1184,21 +1198,28 @@ class BorrowingDeliveryService:
                 total_price=0.00
             )
             
-            # If delivery manager is assigned to borrow request, create delivery assignment
+            # If delivery manager is assigned to borrow request, create delivery request
             if borrow_request.delivery_person:
-                # Check if assignment already exists (prevent duplicates)
-                if not DeliveryAssignment.objects.filter(order=delivery_order).exists():
-                    assignment = DeliveryAssignment.objects.create(
+                # Check if request already exists (prevent duplicates)
+                if not DeliveryRequest.objects.filter(order=delivery_order).exists():
+                    assignment = DeliveryRequest.objects.create(
+                        customer=borrow_request.customer,
                         order=delivery_order,
+                        request_type='delivery',
+                        delivery_address=borrow_request.delivery_address,
+                        delivery_city="Customer City",
+                        preferred_pickup_time=timezone.now(),
+                        preferred_delivery_time=borrow_request.expected_return_date,
                         delivery_manager=borrow_request.delivery_person,
                         estimated_delivery_time=borrow_request.expected_return_date,
                         delivery_notes=f"Borrowing delivery for {borrow_request.book.name}",
                         status='assigned',  # Explicitly set status
-                        assigned_by=borrow_request.approved_by  # Set who assigned it
+                        assigned_by=borrow_request.approved_by,  # Set who assigned it
+                        assigned_at=timezone.now()
                     )
-                    logger.info(f"Created delivery assignment {assignment.id} for order {delivery_order.id}, assigned to manager {borrow_request.delivery_person.id}")
+                    logger.info(f"Created delivery request {assignment.id} for order {delivery_order.id}, assigned to manager {borrow_request.delivery_person.id}")
                 else:
-                    logger.warning(f"Delivery assignment already exists for order {delivery_order.id}")
+                    logger.warning(f"Delivery request already exists for order {delivery_order.id}")
             else:
                 logger.info(f"No delivery manager assigned to borrow request {borrow_request.id}, order status set to pending_assignment")
             
@@ -1341,7 +1362,7 @@ class BorrowingDeliveryService:
             if delivery_manager:
                 # Filter by assigned delivery manager
                 queryset = queryset.filter(
-                    delivery_assignment__delivery_manager=delivery_manager
+                    delivery_request__delivery_manager=delivery_manager
                 )
             
             orders = []
@@ -1384,7 +1405,7 @@ class BorrowingDeliveryService:
             if delivery_manager:
                 # Filter by assigned delivery manager
                 queryset = queryset.filter(
-                    delivery_assignment__delivery_manager=delivery_manager
+                    delivery_request__delivery_manager=delivery_manager
                 )
             
             orders = []
@@ -1420,11 +1441,18 @@ class BorrowingDeliveryService:
         Assign a borrowing delivery to a delivery manager
         """
         try:
-            # Create delivery assignment
-            assignment = DeliveryAssignment.objects.create(
+            # Create delivery request
+            assignment = DeliveryRequest.objects.create(
+                customer=order.customer,
                 order=order,
+                request_type='delivery',
+                delivery_address=order.delivery_address if hasattr(order, 'delivery_address') else '',
+                delivery_city=order.delivery_city if hasattr(order, 'delivery_city') else '',
+                preferred_pickup_time=timezone.now(),
+                preferred_delivery_time=timezone.now() + timedelta(days=1),
                 delivery_manager=delivery_manager,
-                status='assigned'
+                status='assigned',
+                assigned_at=timezone.now()
             )
             
             return {

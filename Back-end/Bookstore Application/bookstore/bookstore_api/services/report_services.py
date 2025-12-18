@@ -9,8 +9,9 @@ from ..models.report_model import Report, ReportTemplate
 from ..models.library_model import Book, Library, Author, Category, BookEvaluation
 from ..models.user_model import User
 from ..models.delivery_model import Order
-from ..models.borrowing_model import BorrowRequest, BorrowFine, BorrowStatusChoices, FineStatusChoices
-from ..models.delivery_model import DeliveryAssignment
+from ..models.borrowing_model import BorrowRequest, BorrowStatusChoices, FineStatusChoices
+from ..models.return_model import ReturnFine
+from ..models.delivery_model import DeliveryRequest
 from ..models.payment_model import Payment
 
 logger = logging.getLogger(__name__)
@@ -394,31 +395,31 @@ class ReportManagementService:
             else:
                 avg_days_overdue = 0
             
-            # Fine Collection Data
-            total_fines_issued = BorrowFine.objects.count()
-            total_fine_amount = BorrowFine.objects.aggregate(
-                total=models.Sum('amount')
+            # Fine Collection Data (using unified ReturnFine model)
+            total_fines_issued = ReturnFine.objects.count()
+            total_fine_amount = ReturnFine.objects.aggregate(
+                total=models.Sum('fine_amount')
             )['total'] or Decimal('0.00')
             
-            unpaid_fines = BorrowFine.objects.filter(
-                status=FineStatusChoices.UNPAID
+            unpaid_fines = ReturnFine.objects.filter(
+                is_paid=False
             ).count()
             
-            paid_fines = BorrowFine.objects.filter(
-                status=FineStatusChoices.PAID
+            paid_fines = ReturnFine.objects.filter(
+                is_paid=True
             ).count()
             
             # Fine Payment Status
-            total_unpaid_amount = BorrowFine.objects.filter(
-                status=FineStatusChoices.UNPAID
+            total_unpaid_amount = ReturnFine.objects.filter(
+                is_paid=False
             ).aggregate(
-                total=models.Sum('amount')
+                total=models.Sum('fine_amount')
             )['total'] or Decimal('0.00')
             
-            total_paid_amount = BorrowFine.objects.filter(
-                status=FineStatusChoices.PAID
+            total_paid_amount = ReturnFine.objects.filter(
+                is_paid=True
             ).aggregate(
-                total=models.Sum('amount')
+                total=models.Sum('fine_amount')
             )['total'] or Decimal('0.00')
             
             payment_rate = 0.0
@@ -426,11 +427,11 @@ class ReportManagementService:
                 payment_rate = (total_paid_amount / total_fine_amount) * 100
             
             # Historical Fine Trends
-            current_month_fines = BorrowFine.objects.filter(
+            current_month_fines = ReturnFine.objects.filter(
                 created_at__gte=timezone.now() - timedelta(days=30)
             ).count()
             
-            previous_month_fines = BorrowFine.objects.filter(
+            previous_month_fines = ReturnFine.objects.filter(
                 created_at__gte=timezone.now() - timedelta(days=60),
                 created_at__lt=timezone.now() - timedelta(days=30)
             ).count()
@@ -443,19 +444,27 @@ class ReportManagementService:
                 fine_trend = 'stable'
             
             # Recent fines data for trends
-            recent_fines = BorrowFine.objects.filter(
+            recent_fines = ReturnFine.objects.filter(
                 created_at__gte=timezone.now() - timedelta(days=7)
             ).order_by('-created_at')[:10]
             
             recent_fines_data = []
             for fine in recent_fines:
+                # Get book and customer info from return request
+                if fine.return_request and fine.return_request.borrowing:
+                    book_title = fine.return_request.borrowing.book.name
+                    customer_name = fine.return_request.borrowing.customer.get_full_name()
+                else:
+                    book_title = "Unknown"
+                    customer_name = "Unknown"
+                
                 recent_fines_data.append({
                     'id': fine.id,
-                    'amount': float(fine.amount),
-                    'status': fine.status,
-                    'reason': fine.reason,
-                    'book_title': fine.borrow_request.book.name,
-                    'customer_name': fine.borrow_request.customer.get_full_name(),
+                    'amount': float(fine.fine_amount),
+                    'status': fine.payment_status,
+                    'reason': fine.reason or "Late return",
+                    'book_title': book_title,
+                    'customer_name': customer_name,
                     'created_at': fine.created_at.isoformat(),
                 })
             
@@ -744,8 +753,8 @@ class ReportManagementService:
                     # Fallback to date format
                     end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
             
-            # Get delivery statistics from DeliveryAssignment
-            deliveries = DeliveryAssignment.objects.filter(
+            # Get delivery statistics from DeliveryRequest
+            deliveries = DeliveryRequest.objects.filter(
                 assigned_at__date__range=[start_date, end_date]
             )
             
@@ -792,11 +801,11 @@ class ReportManagementService:
             overall_completion_rate = (completed_deliveries / total_deliveries * 100) if total_deliveries > 0 else 0
             
             # Calculate delivery trends
-            current_month_deliveries = DeliveryAssignment.objects.filter(
+            current_month_deliveries = DeliveryRequest.objects.filter(
                 assigned_at__gte=timezone.now() - timedelta(days=30)
             ).count()
             
-            previous_month_deliveries = DeliveryAssignment.objects.filter(
+            previous_month_deliveries = DeliveryRequest.objects.filter(
                 assigned_at__gte=timezone.now() - timedelta(days=60),
                 assigned_at__lt=timezone.now() - timedelta(days=30)
             ).count()

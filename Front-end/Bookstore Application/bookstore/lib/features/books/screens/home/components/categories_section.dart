@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../../core/constants/app_colors.dart';
+import '../../../../../core/localization/app_localizations.dart';
 import '../../../providers/categories_provider.dart';
 import '../../../../auth/providers/auth_provider.dart';
 import '../../../models/category.dart' as book_category;
@@ -64,23 +65,33 @@ class _CategoriesSectionState extends State<CategoriesSection> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'Browse Categories',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () {
-                      Navigator.pushNamed(context, '/categories-list');
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Text(
+                        localizations.browseCategories,
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      );
                     },
-                    child: const Text(
-                      'View All',
-                      style: TextStyle(
-                        color: AppColors.uranianBlue,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                  ),
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return TextButton(
+                        onPressed: () {
+                          Navigator.pushNamed(context, '/categories-list');
+                        },
+                        child: Text(
+                          localizations.viewAll,
+                          style: const TextStyle(
+                            color: AppColors.uranianBlue,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -99,31 +110,40 @@ class _CategoriesSectionState extends State<CategoriesSection> {
                       style: BorderStyle.solid,
                     ),
                   ),
-                  child: const Center(
+                  child: Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
+                        const Icon(
                           Icons.category_outlined,
                           size: 32,
                           color: AppColors.textHint,
                         ),
-                        SizedBox(height: 8),
-                        Text(
-                          'No categories available',
-                          style: TextStyle(
-                            color: AppColors.textHint,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          'Add categories in admin panel',
-                          style: TextStyle(
-                            color: AppColors.textHint,
-                            fontSize: 12,
-                          ),
+                        const SizedBox(height: 8),
+                        Builder(
+                          builder: (context) {
+                            final localizations = AppLocalizations.of(context);
+                            return Column(
+                              children: [
+                                Text(
+                                  localizations.noCategoriesAvailable,
+                                  style: const TextStyle(
+                                    color: AppColors.textHint,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  localizations.addCategoriesInAdminPanel,
+                                  style: const TextStyle(
+                                    color: AppColors.textHint,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
                         ),
                       ],
                     ),
@@ -219,12 +239,17 @@ class _CategoriesSectionState extends State<CategoriesSection> {
             ),
 
             // Book Count
-            Text(
-              '${category.booksCount ?? 0} books',
-              style: TextStyle(
-                fontSize: 10,
-                color: Theme.of(context).textTheme.bodySmall?.color,
-              ),
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Text(
+                  localizations.booksCount(category.booksCount ?? 0),
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: Theme.of(context).textTheme.bodySmall?.color,
+                  ),
+                );
+              },
             ),
           ],
         ),

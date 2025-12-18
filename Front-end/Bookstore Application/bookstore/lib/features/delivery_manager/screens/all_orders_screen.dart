@@ -143,7 +143,10 @@ class _AllOrdersScreenState extends State<AllOrdersScreen> {
             children: [
               // Advanced Search and Filter Bar
               AdvancedSearchFilterBar(
-                searchHint: 'Search all requests...',
+                searchHint: AppLocalizations.of(context).searchAllRequests,
+                initialSearchQuery: _searchQuery,
+                initialStatusFilter: _selectedStatus,
+                initialOrderTypeFilter: _selectedOrderType,
                 statusFilterOptions: statusFilterOptions,
                 orderTypeFilterOptions: ordersProvider.orderTypeFilterOptions,
                 onSearchChanged: _onSearchChanged,
@@ -172,8 +175,12 @@ class _AllOrdersScreenState extends State<AllOrdersScreen> {
                                 _searchQuery.isNotEmpty ||
                                         _selectedStatus != null ||
                                         _selectedOrderType != null
-                                    ? 'No matching requests found'
-                                    : 'No Orders Found',
+                                    ? AppLocalizations.of(
+                                        context,
+                                      ).noMatchingRequestsFound
+                                    : AppLocalizations.of(
+                                        context,
+                                      ).noOrdersFound,
                                 style: theme.textTheme.headlineSmall?.copyWith(
                                   color: theme.colorScheme.onSurfaceVariant,
                                 ),
@@ -183,8 +190,12 @@ class _AllOrdersScreenState extends State<AllOrdersScreen> {
                                 _searchQuery.isNotEmpty ||
                                         _selectedStatus != null ||
                                         _selectedOrderType != null
-                                    ? 'Try adjusting your search or filter criteria'
-                                    : 'No orders are currently available.',
+                                    ? AppLocalizations.of(
+                                        context,
+                                      ).tryAdjustingSearchOrFilter
+                                    : AppLocalizations.of(
+                                        context,
+                                      ).noOrdersCurrentlyAvailable,
                                 style: theme.textTheme.bodyMedium?.copyWith(
                                   color: theme.colorScheme.onSurfaceVariant,
                                 ),

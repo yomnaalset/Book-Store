@@ -236,9 +236,12 @@ class BorrowingDeliveryService {
   }
 
   /// Start delivery for a borrowing order
-  /// This marks that the book has been picked up and delivery has started
-  /// Status transition: in_progress -> on_the_way
-  /// Delivery manager status automatically changes to 'busy' (handled by Django)
+  /// Uses unified /start-delivery endpoint (backend-driven)
+  /// Status transition: assigned/pending -> OUT_FOR_DELIVERY
+  /// Delivery manager status automatically changes to 'busy' (handled by backend)
+  ///
+  /// IMPORTANT: This method should only be called by delivery managers.
+  /// Role validation should be done in the calling UI component before calling this method.
   static Future<Map<String, dynamic>> startDelivery(
     int orderId,
     int deliveryManagerId,
@@ -252,14 +255,42 @@ class BorrowingDeliveryService {
     }
 
     try {
-      // Call the correct endpoint for starting delivery on a borrow order
-      // Endpoint: /api/borrow/delivery/orders/<order_id>/start/
-      // Note: baseUrl already includes /api, so we don't add it again
-      final response = await http.patch(
-        Uri.parse(
-          '${ApiService.baseUrl}/borrow/delivery/orders/$orderId/start/',
-        ),
+      // Use unified endpoint that handles all delivery types
+      // First, get the borrow_request_id from the order
+      final orderResponse = await http.get(
+        Uri.parse('${ApiService.baseUrl}/delivery/orders/$orderId/'),
         headers: _getHeaders(),
+      );
+
+      if (orderResponse.statusCode != 200) {
+        return {
+          'success': false,
+          'message': 'Failed to fetch order details',
+          'error_code': 'FETCH_ORDER_FAILED',
+        };
+      }
+
+      final orderData = jsonDecode(orderResponse.body);
+      final borrowRequestId =
+          orderData['borrow_request']?['id'] ?? orderData['borrow_request_id'];
+
+      if (borrowRequestId == null) {
+        return {
+          'success': false,
+          'message': 'Borrow request not found for this order',
+          'error_code': 'NO_BORROW_REQUEST',
+        };
+      }
+
+      // Call unified start-delivery endpoint
+      final response = await http.post(
+        Uri.parse('${ApiService.baseUrl}/delivery/start-delivery/'),
+        headers: _getHeaders(),
+        body: jsonEncode({
+          'delivery_type': 'borrow',
+          'delivery_id': borrowRequestId,
+          'delivery_manager_id': deliveryManagerId,
+        }),
       );
 
       debugPrint(
@@ -272,8 +303,25 @@ class BorrowingDeliveryService {
         return {
           'success': true,
           'message': data['message'] ?? 'Delivery started successfully',
-          'order_status': data['order_status'] ?? 'in_delivery',
+          'borrow_status': data['borrow_status'] ?? 'out_for_delivery',
           'delivery_manager_status': data['delivery_manager_status'] ?? 'busy',
+          'picked_up_at': data['picked_up_at'],
+        };
+      } else if (response.statusCode == 403) {
+        // 403 Forbidden - User doesn't have permission (likely not a delivery manager)
+        final data = jsonDecode(response.body);
+        debugPrint(
+          'BorrowingDeliveryService: 403 Forbidden - User does not have permission to start delivery',
+        );
+        return {
+          'success': false,
+          'message':
+              data['error'] ??
+              data['message'] ??
+              'You do not have permission to perform this action. Only delivery managers can start deliveries.',
+          'error_code': 'FORBIDDEN',
+          'status_code': 403,
+          'should_not_retry': true, // Prevent retries for 403 errors
         };
       } else {
         final data = jsonDecode(response.body);
@@ -282,6 +330,7 @@ class BorrowingDeliveryService {
           'message':
               data['error'] ?? data['message'] ?? 'Failed to start delivery',
           'error_code': 'START_FAILED',
+          'status_code': response.statusCode,
           'errors': data['errors'],
         };
       }
@@ -296,9 +345,9 @@ class BorrowingDeliveryService {
   }
 
   /// Complete delivery for a borrowing order
-  /// This marks that the book has been delivered to the customer
-  /// Status transition: on_the_way -> delivered
-  /// Delivery manager status automatically returns to 'online'
+  /// Uses unified /complete-delivery endpoint (backend-driven)
+  /// Status transition: OUT_FOR_DELIVERY -> ACTIVE
+  /// Delivery manager status automatically returns to 'online' (if no other active deliveries)
   static Future<Map<String, dynamic>> completeDelivery(int orderId) async {
     if (_authToken == null) {
       return {
@@ -309,11 +358,41 @@ class BorrowingDeliveryService {
     }
 
     try {
-      final response = await http.patch(
-        Uri.parse(
-          '${ApiService.baseUrl}/borrow/delivery/orders/$orderId/complete/',
-        ),
+      // Use unified endpoint that handles all delivery types
+      // First, get the borrow_request_id from the order
+      final orderResponse = await http.get(
+        Uri.parse('${ApiService.baseUrl}/delivery/orders/$orderId/'),
         headers: _getHeaders(),
+      );
+
+      if (orderResponse.statusCode != 200) {
+        return {
+          'success': false,
+          'message': 'Failed to fetch order details',
+          'error_code': 'FETCH_ORDER_FAILED',
+        };
+      }
+
+      final orderData = jsonDecode(orderResponse.body);
+      final borrowRequestId =
+          orderData['borrow_request']?['id'] ?? orderData['borrow_request_id'];
+
+      if (borrowRequestId == null) {
+        return {
+          'success': false,
+          'message': 'Borrow request not found for this order',
+          'error_code': 'NO_BORROW_REQUEST',
+        };
+      }
+
+      // Call unified complete-delivery endpoint
+      final response = await http.post(
+        Uri.parse('${ApiService.baseUrl}/delivery/complete-delivery/'),
+        headers: _getHeaders(),
+        body: jsonEncode({
+          'delivery_type': 'borrow',
+          'delivery_id': borrowRequestId,
+        }),
       );
 
       debugPrint(
@@ -326,9 +405,26 @@ class BorrowingDeliveryService {
         return {
           'success': true,
           'message': data['message'] ?? 'Delivery completed successfully',
-          'data': data['data'],
-          'order_status': 'delivered',
-          'delivery_status': 'online', // Automatically returns to online
+          'borrow_status': data['borrow_status'] ?? 'active',
+          'delivery_manager_status':
+              data['delivery_manager_status'] ?? 'online',
+          'delivery_date': data['delivery_date'],
+        };
+      } else if (response.statusCode == 403) {
+        // 403 Forbidden - User doesn't have permission (likely not a delivery manager)
+        final data = jsonDecode(response.body);
+        debugPrint(
+          'BorrowingDeliveryService: 403 Forbidden - User does not have permission to complete delivery',
+        );
+        return {
+          'success': false,
+          'message':
+              data['error'] ??
+              data['message'] ??
+              'You do not have permission to perform this action. Only delivery managers can complete deliveries.',
+          'error_code': 'FORBIDDEN',
+          'status_code': 403,
+          'should_not_retry': true, // Prevent retries for 403 errors
         };
       } else {
         final data = jsonDecode(response.body);
@@ -336,6 +432,7 @@ class BorrowingDeliveryService {
           'success': false,
           'message': data['message'] ?? 'Failed to complete delivery',
           'error_code': 'COMPLETE_FAILED',
+          'status_code': response.statusCode,
           'errors': data['errors'],
         };
       }

@@ -8,6 +8,7 @@ import '../../../widgets/library_manager/empty_state.dart';
 import '../../../widgets/admin_search_bar.dart';
 import '../../../../auth/providers/auth_provider.dart';
 import '../../../../../routes/app_routes.dart';
+import '../../../../../core/localization/app_localizations.dart';
 
 class BorrowingPage extends StatefulWidget {
   const BorrowingPage({super.key});
@@ -23,13 +24,13 @@ class _BorrowingPageState extends State<BorrowingPage>
   Timer? _searchDebounceTimer;
   late TabController _tabController;
 
-  // Status tabs as per specification
-  final List<String> _statusTabs = [
-    'All',
-    'Pending',
-    'Approved',
-    'Borrowed',
-    'Rejected',
+  // Status tabs as per specification - using status values for mapping
+  final List<String?> _statusTabs = [
+    null, // All
+    'pending',
+    'approved',
+    'active', // Borrowed
+    'rejected',
   ];
 
   @override
@@ -55,26 +56,7 @@ class _BorrowingPageState extends State<BorrowingPage>
   void _onTabChanged() {
     if (!_tabController.indexIsChanging) return;
 
-    final selectedTab = _statusTabs[_tabController.index];
-    String? status;
-
-    switch (selectedTab) {
-      case 'All':
-        status = null;
-        break;
-      case 'Pending':
-        status = 'pending';
-        break;
-      case 'Approved':
-        status = 'approved';
-        break;
-      case 'Borrowed':
-        status = 'active';
-        break;
-      case 'Rejected':
-        status = 'rejected';
-        break;
-    }
+    final status = _statusTabs[_tabController.index];
 
     if (mounted) {
       setState(() {
@@ -146,9 +128,10 @@ class _BorrowingPageState extends State<BorrowingPage>
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Borrow Requests'),
+        title: Text(localizations.borrowRequests),
         backgroundColor: Theme.of(context).primaryColor,
         foregroundColor: Colors.white,
         actions: [
@@ -156,13 +139,22 @@ class _BorrowingPageState extends State<BorrowingPage>
           IconButton(
             onPressed: () => _loadRequests(),
             icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh Borrow Requests',
+            tooltip: localizations.refreshRequests,
           ),
         ],
         bottom: TabBar(
           controller: _tabController,
           isScrollable: true,
-          tabs: _statusTabs.map((status) => Tab(text: status)).toList(),
+          tabs: _statusTabs.map((status) {
+            if (status == null) {
+              return Tab(text: localizations.all);
+            }
+            // Use "Borrowed" label for "active" status in tabs
+            if (status == 'active') {
+              return Tab(text: localizations.statusBorrowed);
+            }
+            return Tab(text: localizations.getBorrowStatusLabel(status));
+          }).toList(),
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white70,
           indicatorColor: Colors.white,
@@ -175,7 +167,7 @@ class _BorrowingPageState extends State<BorrowingPage>
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: AdminSearchBar(
-              hintText: 'Search borrowing requests...',
+              hintText: localizations.searchBorrowingRequests,
               controller: _searchController,
               onChanged: _onSearch,
               onSubmitted: _onSearchImmediate,
@@ -197,7 +189,7 @@ class _BorrowingPageState extends State<BorrowingPage>
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          'Error: ${provider.errorMessage}',
+                          '${localizations.error}: ${provider.errorMessage}',
                           style: const TextStyle(color: Colors.red),
                         ),
                         const SizedBox(height: 16),
@@ -206,7 +198,7 @@ class _BorrowingPageState extends State<BorrowingPage>
                             provider.clearError();
                             _loadRequests();
                           },
-                          child: const Text('Retry'),
+                          child: Text(localizations.retry),
                         ),
                       ],
                     ),
@@ -235,8 +227,8 @@ class _BorrowingPageState extends State<BorrowingPage>
 
                 if (filteredRequests.isEmpty) {
                   return EmptyState(
-                    title: 'No Borrow Requests',
-                    message: _getEmptyMessage(),
+                    title: localizations.noBorrowingRequests,
+                    message: _getEmptyMessage(context),
                     icon: Icons.book_outlined,
                   );
                 }
@@ -250,7 +242,7 @@ class _BorrowingPageState extends State<BorrowingPage>
                   itemCount: filteredRequests.length,
                   itemBuilder: (context, index) {
                     final request = filteredRequests[index];
-                    return _buildBorrowingCard(request);
+                    return _buildBorrowingCard(request, context);
                   },
                 );
               },
@@ -261,7 +253,8 @@ class _BorrowingPageState extends State<BorrowingPage>
     );
   }
 
-  Widget _buildBorrowingCard(BorrowRequest request) {
+  Widget _buildBorrowingCard(BorrowRequest request, BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Card(
       margin: const EdgeInsets.only(bottom: 12.0),
       elevation: 2,
@@ -279,7 +272,7 @@ class _BorrowingPageState extends State<BorrowingPage>
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Request #${request.id}',
+                    localizations.requestNumber(request.id),
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -297,13 +290,18 @@ class _BorrowingPageState extends State<BorrowingPage>
                   const Icon(Icons.person, size: 16, color: Colors.grey),
                   const SizedBox(width: 4),
                   Expanded(
-                    child: Text(
-                      'User: ${request.customerName ?? 'Unknown User'}',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      overflow: TextOverflow.ellipsis,
+                    child: Builder(
+                      builder: (context) {
+                        final localizations = AppLocalizations.of(context);
+                        return Text(
+                          '${localizations.customerLabel}: ${request.customerName ?? localizations.unknownCustomer}',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        );
+                      },
                     ),
                   ),
                 ],
@@ -319,9 +317,17 @@ class _BorrowingPageState extends State<BorrowingPage>
                     color: Colors.grey,
                   ),
                   const SizedBox(width: 4),
-                  Text(
-                    'Requested: ${_formatDate(request.requestDate)}',
-                    style: const TextStyle(fontSize: 14, color: Colors.grey),
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Text(
+                        '${localizations.requested}: ${_formatDate(request.requestDate, context)}',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey,
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -332,9 +338,17 @@ class _BorrowingPageState extends State<BorrowingPage>
                 children: [
                   const Icon(Icons.event, size: 16, color: Colors.grey),
                   const SizedBox(width: 4),
-                  Text(
-                    'Expected Return: ${request.dueDate != null ? _formatDate(request.dueDate!) : 'Not set'}',
-                    style: const TextStyle(fontSize: 14, color: Colors.grey),
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Text(
+                        '${localizations.expectedReturnDate}: ${request.dueDate != null ? _formatDate(request.dueDate!, context) : localizations.notSet}',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey,
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -346,10 +360,18 @@ class _BorrowingPageState extends State<BorrowingPage>
                   const Icon(Icons.book, size: 16, color: Colors.grey),
                   const SizedBox(width: 4),
                   Expanded(
-                    child: Text(
-                      'Book: ${request.bookTitle ?? request.book?.title ?? 'Unknown Book'}',
-                      style: const TextStyle(fontSize: 14, color: Colors.grey),
-                      overflow: TextOverflow.ellipsis,
+                    child: Builder(
+                      builder: (context) {
+                        final localizations = AppLocalizations.of(context);
+                        return Text(
+                          '${localizations.bookLabel}: ${request.bookTitle ?? request.book?.title ?? localizations.unknownCustomer}',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        );
+                      },
                     ),
                   ),
                 ],
@@ -361,22 +383,24 @@ class _BorrowingPageState extends State<BorrowingPage>
     );
   }
 
-  String _getEmptyMessage() {
+  String _getEmptyMessage(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     switch (_selectedStatus) {
       case 'pending':
-        return 'No pending borrow requests found';
+        return localizations.noPendingBorrowRequestsFound;
       case 'approved':
-        return 'No approved borrow requests found';
+        return localizations.noApprovedBorrowRequestsFound;
       case 'active':
-        return 'No active borrowings found';
+        return localizations.noActiveBorrowingsFound;
       case 'rejected':
-        return 'No rejected requests found';
+        return localizations.noRejectedRequestsFound;
       default:
-        return 'No borrow requests found';
+        return localizations.noBorrowRequestsFound;
     }
   }
 
-  String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year}';
+  String _formatDate(DateTime date, BuildContext context) {
+    final localizations = AppLocalizations.of(context);
+    return '${date.day}/${date.month}/${date.year} ${localizations.at} ${date.hour}:${date.minute}';
   }
 }

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 import '../../../core/extensions/theme_extensions.dart';
+import '../../../core/localization/app_localizations.dart';
 import '../../../core/widgets/common/custom_button.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/review.dart';
@@ -49,6 +50,7 @@ class _ReviewFormState extends State<ReviewForm> {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(AppDimensions.paddingL),
@@ -59,8 +61,8 @@ class _ReviewFormState extends State<ReviewForm> {
             children: [
               Text(
                 widget.existingReview != null
-                    ? 'Edit Review'
-                    : 'Write a Review',
+                    ? localizations.editReview
+                    : localizations.writeReview,
                 style: TextStyle(
                   fontSize: AppDimensions.fontSizeXL,
                   fontWeight: FontWeight.bold,
@@ -71,7 +73,7 @@ class _ReviewFormState extends State<ReviewForm> {
 
               // Rating Section
               Text(
-                'Rating *',
+                '${localizations.ratingLabel} (${localizations.optional})',
                 style: TextStyle(
                   fontSize: AppDimensions.fontSizeM,
                   fontWeight: FontWeight.w600,
@@ -104,7 +106,7 @@ class _ReviewFormState extends State<ReviewForm> {
 
               // Comment Section
               Text(
-                'Comment',
+                '${localizations.commentLabel} (${localizations.optional})',
                 style: TextStyle(
                   fontSize: AppDimensions.fontSizeM,
                   fontWeight: FontWeight.w600,
@@ -114,18 +116,18 @@ class _ReviewFormState extends State<ReviewForm> {
               const SizedBox(height: AppDimensions.spacingS),
               TextFormField(
                 controller: _commentController,
-                decoration: const InputDecoration(
-                  hintText: 'Share your thoughts about this book...',
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.all(AppDimensions.paddingM),
+                decoration: InputDecoration(
+                  hintText: localizations.shareThoughtsAboutBook,
+                  border: const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.all(AppDimensions.paddingM),
                 ),
                 maxLines: 4,
                 validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Please write a comment';
-                  }
-                  if (value.trim().length < 10) {
-                    return 'Comment must be at least 10 characters long';
+                  // Comment is optional, but if provided, must be at least 10 characters
+                  if (value != null &&
+                      value.trim().isNotEmpty &&
+                      value.trim().length < 10) {
+                    return localizations.commentTooShort;
                   }
                   return null;
                 },
@@ -138,8 +140,8 @@ class _ReviewFormState extends State<ReviewForm> {
                   Expanded(
                     child: CustomButton(
                       text: widget.existingReview != null
-                          ? 'Update Review'
-                          : 'Submit Review',
+                          ? localizations.updateReview
+                          : localizations.submitReview,
                       onPressed: _isSubmitting ? null : _submitReview,
                       type: ButtonType.primary,
                     ),
@@ -148,7 +150,7 @@ class _ReviewFormState extends State<ReviewForm> {
                     const SizedBox(width: AppDimensions.spacingM),
                     Expanded(
                       child: CustomButton(
-                        text: 'Cancel',
+                        text: localizations.cancel,
                         onPressed: () => Navigator.pop(context),
                         type: ButtonType.secondary,
                       ),
@@ -166,10 +168,14 @@ class _ReviewFormState extends State<ReviewForm> {
   Future<void> _submitReview() async {
     if (!_formKey.currentState!.validate()) return;
 
-    // Validate rating
-    if (_rating == 0) {
+    // Validate that at least one of rating or comment is provided
+    final hasRating = _rating > 0;
+    final hasComment = _commentController.text.trim().isNotEmpty;
+
+    if (!hasRating && !hasComment) {
+      final localizations = AppLocalizations.of(context);
       setState(() {
-        _ratingError = 'Please select a rating';
+        _ratingError = localizations.pleaseProvideRatingOrComment;
       });
       return;
     }
@@ -184,20 +190,23 @@ class _ReviewFormState extends State<ReviewForm> {
         context,
         listen: false,
       );
+      final localizations = AppLocalizations.of(context);
 
       if (widget.existingReview != null) {
         // Update existing review
         final authProvider = Provider.of<AuthProvider>(context, listen: false);
         await reviewsProvider.updateReview(
           widget.existingReview!.id,
-          _rating.toInt(),
-          _commentController.text.trim(),
+          _rating > 0 ? _rating.toInt() : null,
+          _commentController.text.trim().isNotEmpty
+              ? _commentController.text.trim()
+              : null,
           authProvider.token,
         );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Review updated successfully!'),
+            SnackBar(
+              content: Text(localizations.reviewUpdatedSuccessfully),
               backgroundColor: AppColors.success,
             ),
           );
@@ -207,14 +216,16 @@ class _ReviewFormState extends State<ReviewForm> {
         final authProvider = Provider.of<AuthProvider>(context, listen: false);
         await reviewsProvider.addReview(
           widget.bookId,
-          _rating.toInt(),
-          _commentController.text.trim(),
+          _rating > 0 ? _rating.toInt() : null,
+          _commentController.text.trim().isNotEmpty
+              ? _commentController.text.trim()
+              : null,
           authProvider.token,
         );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Review submitted successfully!'),
+            SnackBar(
+              content: Text(localizations.reviewSubmittedSuccessfully),
               backgroundColor: AppColors.success,
             ),
           );

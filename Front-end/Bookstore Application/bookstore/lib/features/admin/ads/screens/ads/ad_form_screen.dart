@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../providers/ads_provider.dart';
 import '../../models/ad.dart' as ads_models;
 import '../../../../auth/providers/auth_provider.dart';
+import '../../../../../core/localization/app_localizations.dart';
 
 class AdFormScreen extends StatefulWidget {
   final ads_models.Ad? ad;
@@ -198,9 +199,12 @@ class _AdFormScreenState extends State<AdFormScreen> {
       if (authProvider.token == null) {
         debugPrint('DEBUG: No auth token available');
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Authentication required to load discount codes'),
+            SnackBar(
+              content: Text(
+                localizations.authenticationRequiredLoadDiscountCodes,
+              ),
               backgroundColor: Colors.orange,
             ),
           );
@@ -212,11 +216,10 @@ class _AdFormScreenState extends State<AdFormScreen> {
       if (!authProvider.isLibraryAdmin) {
         debugPrint('DEBUG: User is not a library admin');
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Only library administrators can access discount codes',
-              ),
+            SnackBar(
+              content: Text(localizations.onlyLibraryAdminsAccessDiscountCodes),
               backgroundColor: Colors.orange,
             ),
           );
@@ -242,13 +245,12 @@ class _AdFormScreenState extends State<AdFormScreen> {
 
         // Show message if no discount codes are available
         if (discountCodes.isEmpty) {
+          final localizations = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'No active discount codes found. Create some discount codes first.',
-              ),
+            SnackBar(
+              content: Text(localizations.noActiveDiscountCodesCreateFirst),
               backgroundColor: Colors.blue,
-              duration: Duration(seconds: 3),
+              duration: const Duration(seconds: 3),
             ),
           );
         }
@@ -256,9 +258,12 @@ class _AdFormScreenState extends State<AdFormScreen> {
     } catch (e) {
       debugPrint('Error loading discount codes: $e');
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to load discount codes: ${e.toString()}'),
+            content: Text(
+              '${localizations.failedToLoadDiscountCodes}: ${e.toString()}',
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -293,11 +298,12 @@ class _AdFormScreenState extends State<AdFormScreen> {
   Future<void> _saveAd() async {
     if (!_formKey.currentState!.validate()) return;
 
+    final localizations = AppLocalizations.of(context);
     // Validate required date fields
     if (_startDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select a start date'),
+        SnackBar(
+          content: Text(localizations.pleaseSelectStartDate),
           backgroundColor: Colors.red,
         ),
       );
@@ -306,8 +312,8 @@ class _AdFormScreenState extends State<AdFormScreen> {
 
     if (_endDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select an end date'),
+        SnackBar(
+          content: Text(localizations.pleaseSelectEndDate),
           backgroundColor: Colors.red,
         ),
       );
@@ -318,8 +324,8 @@ class _AdFormScreenState extends State<AdFormScreen> {
     if (_endDate!.isBefore(_startDate!) ||
         _endDate!.isAtSameMomentAs(_startDate!)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('End date must be after start date'),
+        SnackBar(
+          content: Text(localizations.endDateAfterStartDate),
           backgroundColor: Colors.red,
         ),
       );
@@ -362,8 +368,11 @@ class _AdFormScreenState extends State<AdFormScreen> {
         debugPrint('DEBUG: Ad toJson: ${newAd.toJson(includeId: false)}');
         await adsProvider.createAd(newAd);
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Advertisement created successfully')),
+            SnackBar(
+              content: Text(localizations.advertisementCreatedSuccessfully),
+            ),
           );
           Navigator.pop(context, true); // Return true to indicate success
         }
@@ -388,17 +397,23 @@ class _AdFormScreenState extends State<AdFormScreen> {
         debugPrint('DEBUG: Ad toJson: ${updatedAd.toJson(includeId: true)}');
         await adsProvider.updateAd(updatedAd);
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Advertisement updated successfully')),
+            SnackBar(
+              content: Text(localizations.advertisementUpdatedSuccessfully),
+            ),
           );
           Navigator.pop(context, true); // Return true to indicate success
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+        final localizations = AppLocalizations.of(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${localizations.errorColon} ${e.toString()}'),
+          ),
+        );
       }
     } finally {
       if (mounted) {
@@ -411,10 +426,13 @@ class _AdFormScreenState extends State<AdFormScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          widget.ad == null ? 'Create Advertisement' : 'Edit Advertisement',
+          widget.ad == null
+              ? localizations.createAdvertisement
+              : localizations.editAdvertisement,
         ),
         actions: [
           if (widget.ad != null)
@@ -435,17 +453,17 @@ class _AdFormScreenState extends State<AdFormScreen> {
               // Title
               TextFormField(
                 controller: _titleController,
-                decoration: const InputDecoration(
-                  labelText: 'Title *',
-                  border: OutlineInputBorder(),
-                  hintText: 'Enter advertisement title',
+                decoration: InputDecoration(
+                  labelText: '${localizations.titleLabel} *',
+                  border: const OutlineInputBorder(),
+                  hintText: localizations.enterAdvertisementTitle,
                 ),
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
-                    return 'Title is required';
+                    return localizations.titleRequired;
                   }
                   if (value.trim().length < 3) {
-                    return 'Title must be at least 3 characters';
+                    return localizations.titleMinLength;
                   }
                   return null;
                 },
@@ -455,18 +473,18 @@ class _AdFormScreenState extends State<AdFormScreen> {
               // Content
               TextFormField(
                 controller: _contentController,
-                decoration: const InputDecoration(
-                  labelText: 'Content *',
-                  border: OutlineInputBorder(),
-                  hintText: 'Enter advertisement content',
+                decoration: InputDecoration(
+                  labelText: '${localizations.contentLabel} *',
+                  border: const OutlineInputBorder(),
+                  hintText: localizations.enterAdvertisementContent,
                 ),
                 maxLines: 4,
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
-                    return 'Content is required';
+                    return localizations.contentRequired;
                   }
                   if (value.trim().length < 10) {
-                    return 'Content must be at least 10 characters';
+                    return localizations.contentMinLength;
                   }
                   return null;
                 },
@@ -476,10 +494,10 @@ class _AdFormScreenState extends State<AdFormScreen> {
               // Image URL
               TextFormField(
                 controller: _imageUrlController,
-                decoration: const InputDecoration(
-                  labelText: 'Image URL (Optional)',
-                  border: OutlineInputBorder(),
-                  hintText: 'Enter image URL',
+                decoration: InputDecoration(
+                  labelText: localizations.imageUrlOptional,
+                  border: const OutlineInputBorder(),
+                  hintText: localizations.enterImageUrl,
                 ),
               ),
               const SizedBox(height: 16),
@@ -492,18 +510,18 @@ class _AdFormScreenState extends State<AdFormScreen> {
                         _selectedAdType == 'discount_code')
                     ? _selectedAdType
                     : 'general',
-                decoration: const InputDecoration(
-                  labelText: 'Ad Type *',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: '${localizations.adTypeLabel} *',
+                  border: const OutlineInputBorder(),
                 ),
-                items: const [
+                items: [
                   DropdownMenuItem(
                     value: 'general',
-                    child: Text('General Advertisement'),
+                    child: Text(localizations.generalAdvertisement),
                   ),
                   DropdownMenuItem(
                     value: 'discount_code',
-                    child: Text('Discount Code Advertisement'),
+                    child: Text(localizations.discountCodeAdvertisement),
                   ),
                 ],
                 onChanged: (value) {
@@ -529,16 +547,18 @@ class _AdFormScreenState extends State<AdFormScreen> {
                           )
                           ? _selectedDiscountCode
                           : null,
-                      decoration: const InputDecoration(
-                        labelText: 'Discount Code *',
-                        border: OutlineInputBorder(),
-                        hintText: 'Select a discount code',
+                      decoration: InputDecoration(
+                        labelText: '${localizations.discountCodeLabel} *',
+                        border: const OutlineInputBorder(),
+                        hintText: localizations.selectDiscountCodeHint,
                       ),
                       items: _availableDiscountCodes.isEmpty
                           ? [
-                              const DropdownMenuItem<String>(
+                              DropdownMenuItem<String>(
                                 value: null,
-                                child: Text('No active discount codes found'),
+                                child: Text(
+                                  localizations.noActiveDiscountCodesFound,
+                                ),
                               ),
                             ]
                           : _availableDiscountCodes.map((code) {
@@ -571,7 +591,8 @@ class _AdFormScreenState extends State<AdFormScreen> {
                       validator: (value) {
                         if (_selectedAdType == 'discount_code') {
                           if (value == null || value.isEmpty) {
-                            return 'Please select a discount code for discount code advertisements';
+                            return localizations
+                                .discountCodeRequiredForDiscountAds;
                           }
                         }
                         return null;
@@ -601,7 +622,7 @@ class _AdFormScreenState extends State<AdFormScreen> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'No active discount codes found. Go to Discount Management to create discount codes first.',
+                            localizations.noActiveDiscountCodesInfo,
                             style: TextStyle(
                               color: Colors.blue[700],
                               fontSize: 12,
@@ -625,18 +646,27 @@ class _AdFormScreenState extends State<AdFormScreen> {
                         _selectedStatus == 'expired')
                     ? _selectedStatus
                     : 'inactive',
-                decoration: const InputDecoration(
-                  labelText: 'Status *',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: '${localizations.statusLabel} *',
+                  border: const OutlineInputBorder(),
                 ),
-                items: const [
-                  DropdownMenuItem(value: 'inactive', child: Text('Inactive')),
-                  DropdownMenuItem(value: 'active', child: Text('Active')),
+                items: [
+                  DropdownMenuItem(
+                    value: 'inactive',
+                    child: Text(localizations.advertisementStatusInactive),
+                  ),
+                  DropdownMenuItem(
+                    value: 'active',
+                    child: Text(localizations.advertisementStatusActive),
+                  ),
                   DropdownMenuItem(
                     value: 'scheduled',
-                    child: Text('Scheduled'),
+                    child: Text(localizations.advertisementStatusScheduled),
                   ),
-                  DropdownMenuItem(value: 'expired', child: Text('Expired')),
+                  DropdownMenuItem(
+                    value: 'expired',
+                    child: Text(localizations.advertisementStatusExpired),
+                  ),
                 ],
                 onChanged: (value) {
                   if (value != null) {
@@ -655,9 +685,9 @@ class _AdFormScreenState extends State<AdFormScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Start Date *',
-                          style: TextStyle(fontWeight: FontWeight.bold),
+                        Text(
+                          '${localizations.startDateLabel} *',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 8),
                         InkWell(
@@ -679,7 +709,7 @@ class _AdFormScreenState extends State<AdFormScreen> {
                                 Text(
                                   _startDate != null
                                       ? '${_startDate!.day}/${_startDate!.month}/${_startDate!.year}'
-                                      : 'Select start date',
+                                      : localizations.selectStartDate,
                                   style: TextStyle(
                                     color: _startDate == null
                                         ? Colors.red
@@ -691,11 +721,14 @@ class _AdFormScreenState extends State<AdFormScreen> {
                           ),
                         ),
                         if (_startDate == null)
-                          const Padding(
-                            padding: EdgeInsets.only(top: 4),
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
                             child: Text(
-                              'Start date is required',
-                              style: TextStyle(color: Colors.red, fontSize: 12),
+                              localizations.startDateRequired,
+                              style: const TextStyle(
+                                color: Colors.red,
+                                fontSize: 12,
+                              ),
                             ),
                           ),
                       ],
@@ -706,9 +739,9 @@ class _AdFormScreenState extends State<AdFormScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'End Date *',
-                          style: TextStyle(fontWeight: FontWeight.bold),
+                        Text(
+                          '${localizations.endDateLabel} *',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 8),
                         InkWell(
@@ -730,7 +763,7 @@ class _AdFormScreenState extends State<AdFormScreen> {
                                 Text(
                                   _endDate != null
                                       ? '${_endDate!.day}/${_endDate!.month}/${_endDate!.year}'
-                                      : 'Select end date',
+                                      : localizations.selectEndDate,
                                   style: TextStyle(
                                     color: _endDate == null ? Colors.red : null,
                                   ),
@@ -740,11 +773,14 @@ class _AdFormScreenState extends State<AdFormScreen> {
                           ),
                         ),
                         if (_endDate == null)
-                          const Padding(
-                            padding: EdgeInsets.only(top: 4),
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
                             child: Text(
-                              'End date is required',
-                              style: TextStyle(color: Colors.red, fontSize: 12),
+                              localizations.endDateRequired,
+                              style: const TextStyle(
+                                color: Colors.red,
+                                fontSize: 12,
+                              ),
                             ),
                           ),
                       ],
@@ -764,8 +800,8 @@ class _AdFormScreenState extends State<AdFormScreen> {
                       ? const CircularProgressIndicator()
                       : Text(
                           widget.ad == null
-                              ? 'Create Advertisement'
-                              : 'Update Advertisement',
+                              ? localizations.createAdvertisement
+                              : localizations.updateAdvertisement,
                         ),
                 ),
               ),
@@ -777,22 +813,21 @@ class _AdFormScreenState extends State<AdFormScreen> {
   }
 
   Future<void> _deleteAd() async {
+    final localizations = AppLocalizations.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Advertisement'),
-        content: const Text(
-          'Are you sure you want to delete this advertisement? This action cannot be undone.',
-        ),
+        title: Text(localizations.deleteAdvertisement),
+        content: Text(localizations.deleteAdvertisementConfirmation),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text(localizations.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
+            child: Text(localizations.delete),
           ),
         ],
       ),
@@ -809,16 +844,22 @@ class _AdFormScreenState extends State<AdFormScreen> {
         await adsProvider.deleteAd(widget.ad!.id);
 
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Advertisement deleted successfully')),
+            SnackBar(
+              content: Text(localizations.advertisementDeletedSuccessfully),
+            ),
           );
           Navigator.of(context).pop();
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+          final localizations = AppLocalizations.of(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${localizations.errorColon} ${e.toString()}'),
+            ),
+          );
         }
       } finally {
         if (mounted) {

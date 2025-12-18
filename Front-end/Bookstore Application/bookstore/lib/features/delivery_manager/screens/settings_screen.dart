@@ -4,6 +4,8 @@ import '../../../core/translations.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/services/theme_service.dart' as theme_service;
 import '../../../core/services/auth_service.dart';
+import '../../../core/localization/app_localizations.dart';
+import '../../../core/widgets/common/radio_group.dart' as custom;
 import 'location_management_screen.dart';
 import '../../../features/delivery_manager/providers/delivery_status_provider.dart';
 import '../../../features/auth/providers/auth_provider.dart';
@@ -139,18 +141,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          '${authProvider.user?.firstName ?? ''} ${authProvider.user?.lastName ?? ''}'
-                                  .trim()
-                                  .isEmpty
-                              ? 'Delivery Manager'
-                              : '${authProvider.user?.firstName ?? ''} ${authProvider.user?.lastName ?? ''}'
-                                    .trim(),
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: theme.colorScheme.onSurface,
-                          ),
+                        Builder(
+                          builder: (context) {
+                            final localizations = AppLocalizations.of(context);
+                            return Text(
+                              '${authProvider.user?.firstName ?? ''} ${authProvider.user?.lastName ?? ''}'
+                                      .trim()
+                                      .isEmpty
+                                  ? localizations.deliveryManager
+                                  : '${authProvider.user?.firstName ?? ''} ${authProvider.user?.lastName ?? ''}'
+                                        .trim(),
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: theme.colorScheme.onSurface,
+                              ),
+                            );
+                          },
                         ),
                         const SizedBox(height: 4),
                         Text(
@@ -161,25 +168,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                         ),
                         const SizedBox(height: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.primary.withValues(
-                              alpha: 0.1,
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            'Delivery Manager',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: theme.colorScheme.primary,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
+                        Builder(
+                          builder: (context) {
+                            final localizations = AppLocalizations.of(context);
+                            return Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.primary.withValues(
+                                  alpha: 0.1,
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                localizations.deliveryManager,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: theme.colorScheme.primary,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            );
+                          },
                         ),
                       ],
                     ),
@@ -213,30 +225,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                _buildNotificationItem(
-                  'New Task Assignments',
-                  'Get notified when new tasks are assigned to you',
-                  userSettings.orderUpdates,
-                  (value) async {
-                    await userSettings.updateNotificationSettings(
-                      orderUpdates: value,
+                Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return _buildNotificationItem(
+                      localizations.newTaskAssignments,
+                      localizations.getNotifiedWhenNewTasksAssigned,
+                      userSettings.orderUpdates,
+                      (value) async {
+                        await userSettings.updateNotificationSettings(
+                          orderUpdates: value,
+                        );
+                        if (mounted) {
+                          _showSettingsSavedMessage();
+                        }
+                      },
                     );
-                    if (mounted) {
-                      _showSettingsSavedMessage();
-                    }
                   },
                 ),
-                _buildNotificationItem(
-                  'Task Updates',
-                  'Get notified about task status changes',
-                  userSettings.deliveryUpdates,
-                  (value) async {
-                    await userSettings.updateNotificationSettings(
-                      deliveryUpdates: value,
+                Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return _buildNotificationItem(
+                      localizations.taskUpdates,
+                      localizations.getNotifiedAboutTaskStatusChanges,
+                      userSettings.deliveryUpdates,
+                      (value) async {
+                        await userSettings.updateNotificationSettings(
+                          deliveryUpdates: value,
+                        );
+                        if (mounted) {
+                          _showSettingsSavedMessage();
+                        }
+                      },
                     );
-                    if (mounted) {
-                      _showSettingsSavedMessage();
-                    }
                   },
                 ),
               ],
@@ -301,7 +323,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              AppTranslations.t(context, 'app_settings'),
+              AppLocalizations.of(context).appSettings,
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -313,7 +335,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               builder: (context, languageProvider, child) {
                 return _buildSettingsItem(
                   Icons.language,
-                  'Language',
+                  AppTranslations.t(context, 'language'),
                   languageProvider.currentLanguageDisplayName,
                   () => _showLanguageDialog(languageProvider),
                 );
@@ -321,6 +343,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             Consumer<theme_service.ThemeService>(
               builder: (context, themeService, child) {
+                final localizations = AppLocalizations.of(context);
                 return Container(
                   margin: const EdgeInsets.only(bottom: 8),
                   decoration: BoxDecoration(
@@ -333,9 +356,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       Icons.dark_mode,
                       color: theme.colorScheme.primary,
                     ),
-                    title: const Text('Dark Mode'),
+                    title: Text(localizations.darkMode),
                     subtitle: Text(
-                      themeService.isDarkMode ? 'Enabled' : 'Disabled',
+                      themeService.isDarkMode
+                          ? localizations.enabled
+                          : localizations.disabled,
                       style: TextStyle(
                         fontSize: 14,
                         color: theme.colorScheme.onSurfaceVariant,
@@ -354,11 +379,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 );
               },
             ),
-            _buildSettingsItem(
-              Icons.my_location,
-              'Manage Location',
-              'Set your delivery location',
-              () => _navigateToLocationManagement(),
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return _buildSettingsItem(
+                  Icons.my_location,
+                  localizations.manageLocation,
+                  localizations.setYourDeliveryLocation,
+                  () => _navigateToLocationManagement(),
+                );
+              },
             ),
           ],
         ),
@@ -401,12 +431,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            _buildActionItem(Icons.lock, 'Change Password', () {
-              Navigator.pushNamed(context, '/change-password');
-            }),
-            _buildActionItem(Icons.logout, 'Sign Out', () {
-              _showLogoutDialog(context);
-            }),
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Column(
+                  children: [
+                    _buildActionItem(
+                      Icons.lock,
+                      localizations.changePassword,
+                      () {
+                        Navigator.pushNamed(context, '/change-password');
+                      },
+                    ),
+                    _buildActionItem(Icons.logout, localizations.signOut, () {
+                      _showLogoutDialog(context);
+                    }),
+                  ],
+                );
+              },
+            ),
           ],
         ),
       ),
@@ -415,8 +458,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildActionItem(IconData icon, String title, VoidCallback onTap) {
     final theme = Theme.of(context);
+    final localizations = AppLocalizations.of(context);
     // Make Sign Out icon red
-    final iconColor = title == 'Sign Out'
+    final iconColor = title == localizations.signOut
         ? AppColors.error
         : theme.colorScheme.primary;
 
@@ -431,9 +475,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   void _showSettingsSavedMessage() {
     final theme = Theme.of(context);
+    final localizations = AppLocalizations.of(context);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Text('Settings saved successfully'),
+        content: Text(localizations.settingsSavedSuccessfully),
         backgroundColor: theme.colorScheme.primary,
         duration: const Duration(seconds: 2),
       ),
@@ -442,10 +487,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   // Language dialog
   void _showLanguageDialog(LanguagePreferenceProvider languageProvider) {
-    // Define available languages
+    final localizations = AppLocalizations.of(context);
+
+    // Define available languages with localized names
     final availableLanguages = [
-      {'code': 'en', 'name': 'English'},
-      {'code': 'ar', 'name': 'العربية'},
+      {'code': 'en', 'name': localizations.englishLanguage},
+      {'code': 'ar', 'name': localizations.arabicLanguage},
     ];
 
     // Get current language or default to English
@@ -453,86 +500,112 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Choose Language'),
-        content: RadioGroup<String>(
-          groupValue: currentLanguage,
-          onChanged: (value) async {
-            if (value != null) {
-              final authProvider = Provider.of<AuthProvider>(
-                context,
-                listen: false,
-              );
-              final token = authProvider.token;
+      builder: (context) {
+        final dialogLocalizations = AppLocalizations.of(context);
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            String selectedLanguage = currentLanguage;
 
-              if (token != null) {
-                final navigator = Navigator.of(context);
-                final scaffoldMessenger = ScaffoldMessenger.of(context);
+            return AlertDialog(
+              title: Text(dialogLocalizations.selectLanguage),
+              content: custom.RadioGroup<String>(
+                groupValue: selectedLanguage,
+                onChanged: (value) async {
+                  if (value != null) {
+                    setDialogState(() {
+                      selectedLanguage = value;
+                    });
 
-                final success = await languageProvider.updateLanguagePreference(
-                  token,
-                  value,
-                );
-
-                if (success && mounted) {
-                  if (mounted) {
-                    navigator.pop();
-                    final languageName = availableLanguages.firstWhere(
-                      (lang) => lang['code'] == value,
-                    )['name'];
-                    scaffoldMessenger.showSnackBar(
-                      SnackBar(
-                        content: Text('Language changed to $languageName'),
-                        backgroundColor: AppColors.success,
-                      ),
+                    final authProvider = Provider.of<AuthProvider>(
+                      context,
+                      listen: false,
                     );
-                  }
-                } else if (mounted) {
-                  scaffoldMessenger.showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        languageProvider.errorMessage ??
-                            'Failed to change language',
-                      ),
-                      backgroundColor: AppColors.error,
-                    ),
-                  );
-                }
-              } else {
-                final navigator = Navigator.of(context);
-                // Update local language preference even without token
-                final translationsProvider = Provider.of<TranslationsProvider>(
-                  context,
-                  listen: false,
-                );
-                await translationsProvider.changeLocale(Locale(value));
-                if (mounted) {
-                  navigator.pop();
-                }
-              }
-            }
-          },
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: availableLanguages.map((language) {
-              final languageCode = language['code'] as String;
-              final languageName = language['name'] as String;
+                    final token = authProvider.token;
+                    final translationsProvider =
+                        Provider.of<TranslationsProvider>(
+                          context,
+                          listen: false,
+                        );
 
-              return RadioListTile<String>(
-                title: Text(languageName),
-                subtitle: Text(languageCode.toUpperCase()),
-                value: languageCode,
-              );
-            }).toList(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-        ],
-      ),
+                    if (token != null) {
+                      final navigator = Navigator.of(context);
+                      final scaffoldMessenger = ScaffoldMessenger.of(context);
+
+                      final success = await languageProvider
+                          .updateLanguagePreference(token, value);
+
+                      if (success && mounted) {
+                        // Update TranslationsProvider to change locale (RTL/LTR)
+                        // This will automatically switch UI to RTL for Arabic and LTR for English
+                        final newLocale = value == 'ar'
+                            ? const Locale('ar', 'SA')
+                            : const Locale('en', 'US');
+                        await translationsProvider.changeLocale(newLocale);
+
+                        if (mounted) {
+                          navigator.pop();
+                          scaffoldMessenger.showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                value == 'en'
+                                    ? dialogLocalizations
+                                          .languageChangedToEnglish
+                                    : dialogLocalizations
+                                          .languageChangedToArabic,
+                              ),
+                              backgroundColor: AppColors.success,
+                            ),
+                          );
+                        }
+                      } else if (mounted) {
+                        scaffoldMessenger.showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              languageProvider.errorMessage ??
+                                  dialogLocalizations.error,
+                            ),
+                            backgroundColor: AppColors.error,
+                          ),
+                        );
+                      }
+                    } else {
+                      final navigator = Navigator.of(context);
+                      // Update local language preference even without token
+                      // This will automatically switch UI to RTL for Arabic and LTR for English
+                      final newLocale = value == 'ar'
+                          ? const Locale('ar', 'SA')
+                          : const Locale('en', 'US');
+                      await translationsProvider.changeLocale(newLocale);
+                      if (mounted) {
+                        navigator.pop();
+                      }
+                    }
+                  }
+                },
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: availableLanguages.map((language) {
+                    final languageCode = language['code'] as String;
+                    final languageName = language['name'] as String;
+
+                    return custom.RadioGroupTile<String>(
+                      title: Text(languageName),
+                      subtitle: Text(languageCode.toUpperCase()),
+                      value: languageCode,
+                    );
+                  }).toList(),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text(dialogLocalizations.cancel),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -546,6 +619,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   void _showLogoutDialog(BuildContext context) {
     final theme = Theme.of(context);
+    final localizations = AppLocalizations.of(context);
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -556,7 +630,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             borderRadius: BorderRadius.circular(16),
           ),
           title: Text(
-            'Sign Out',
+            localizations.signOut,
             style: TextStyle(
               color: theme.colorScheme.onSurface,
               fontWeight: FontWeight.bold,
@@ -564,7 +638,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           content: Text(
-            'Are you sure you want to sign out?',
+            localizations.signOutConfirmation,
             style: TextStyle(
               color: theme.colorScheme.onSurfaceVariant,
               fontSize: 16,
@@ -580,9 +654,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   vertical: 12,
                 ),
               ),
-              child: const Text(
-                'Cancel',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              child: Text(
+                localizations.cancel,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
             ElevatedButton(
@@ -601,9 +678,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
-              child: const Text(
-                'Sign Out',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              child: Text(
+                localizations.signOut,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ],
@@ -626,9 +706,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
     } catch (e) {
       if (context.mounted) {
+        final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Logout failed: $e'),
+            content: Text(localizations.logoutFailed(e.toString())),
             backgroundColor: AppColors.error,
           ),
         );

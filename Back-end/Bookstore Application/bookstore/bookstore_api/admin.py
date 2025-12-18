@@ -370,22 +370,23 @@ class DiscountUsageAdmin(admin.ModelAdmin):
     """
     Custom admin for DiscountUsage model.
     Primarily for viewing usage history and statistics.
+    Supports both general and book-specific discounts.
     """
     
     # Fields to display in the usage list
     list_display = (
-        'discount_code', 'customer', 'order', 'discount_amount', 'used_at'
+        'get_discount_info', 'customer', 'order', 'discount_amount', 'used_at'
     )
     
     # Fields that can be used to filter the usage list
     list_filter = (
-        'discount_code', 'used_at', 'customer__user_type'
+        'discount_code', 'book_discount', 'used_at', 'customer__user_type'
     )
     
     # Fields that can be searched
     search_fields = (
-        'discount_code__code', 'customer__email', 'customer__first_name', 
-        'customer__last_name'
+        'discount_code__code', 'book_discount__code', 'book__name',
+        'customer__email', 'customer__first_name', 'customer__last_name'
     )
     
     # Default ordering
@@ -395,7 +396,8 @@ class DiscountUsageAdmin(admin.ModelAdmin):
     fieldsets = (
         ('Usage Information', {
             'fields': (
-                'discount_code', 'customer', 'order', 'discount_amount'
+                'discount_code', 'book_discount', 'book', 'customer', 'order',
+                'original_price', 'discount_amount', 'final_price'
             )
         }),
         ('Metadata', {
@@ -421,9 +423,20 @@ class DiscountUsageAdmin(admin.ModelAdmin):
         return request.user.is_superuser
     
     # Custom methods for display
+    def get_discount_info(self, obj):
+        """Get discount information (code or book discount)."""
+        if obj.discount_code:
+            return f"{obj.discount_code.code} (General)"
+        elif obj.book_discount:
+            return f"{obj.book_discount.code} (Book: {obj.book.name if obj.book else obj.book_discount.book.name})"
+        return "Unknown"
+    get_discount_info.short_description = 'Discount'
+    
     def get_discount_percentage(self, obj):
         """Get the discount percentage from the related discount code."""
-        return f"{obj.discount_code.discount_percentage}%"
+        if obj.discount_code:
+            return f"{obj.discount_code.discount_percentage}%"
+        return None
     get_discount_percentage.short_description = 'Discount %'
 
 

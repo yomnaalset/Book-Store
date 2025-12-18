@@ -211,7 +211,7 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
                 ),
                 _buildInfoCard(
                   title: 'Developer',
-                  value: 'E-Library Team',
+                  value: 'ReadGo Team',
                   icon: Icons.code_outlined,
                 ),
 

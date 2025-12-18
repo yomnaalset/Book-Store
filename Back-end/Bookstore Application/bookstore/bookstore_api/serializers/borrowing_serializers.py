@@ -3,7 +3,7 @@ from django.utils import timezone
 from datetime import timedelta
 from decimal import Decimal
 from ..models import (
-    BorrowRequest, BorrowExtension, BorrowFine, BorrowStatistics,
+    BorrowRequest, BorrowExtension, BorrowStatistics,
     Book, User, BorrowStatusChoices, ExtensionStatusChoices, FineStatusChoices
 )
 
@@ -343,19 +343,8 @@ class BorrowExtensionSerializer(serializers.ModelSerializer):
         ]
 
 
-class BorrowFineSerializer(serializers.ModelSerializer):
-    """
-    Serializer for fine details
-    """
-    borrow_request = BorrowRequestListSerializer(read_only=True)
-    status_display = serializers.CharField(source='get_status_display', read_only=True)
-    
-    class Meta:
-        model = BorrowFine
-        fields = [
-            'id', 'borrow_request', 'daily_rate', 'days_overdue', 'total_amount',
-            'status', 'status_display', 'created_date', 'paid_date', 'payment_reference'
-        ]
+# BorrowFineSerializer has been removed - use ReturnFineSerializer from return_serializers instead
+# This provides unified fine tracking for both borrow and return fines
 
 
 class BorrowRatingSerializer(serializers.Serializer):

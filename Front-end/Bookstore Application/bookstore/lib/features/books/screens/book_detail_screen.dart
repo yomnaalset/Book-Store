@@ -6,6 +6,7 @@ import '../../../core/constants/app_dimensions.dart';
 import '../../../core/extensions/theme_extensions.dart';
 import '../../../core/widgets/common/custom_button.dart';
 import '../../../core/widgets/common/loading_indicator.dart';
+import '../../../core/localization/app_localizations.dart';
 import '../../cart/providers/cart_provider.dart';
 import '../../favorites/providers/favorites_provider.dart';
 import '../../reviews/widgets/reviews_list.dart';
@@ -106,9 +107,10 @@ class _BookDetailScreenState extends State<BookDetailScreen>
     final book = _bookDetails ?? widget.book;
 
     if (_isLoading) {
+      final localizations = AppLocalizations.of(context);
       return Scaffold(
         appBar: AppBar(
-          title: const Text('Book Details'),
+          title: Text(localizations.bookDetailsTitle),
           backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
         ),
@@ -117,9 +119,10 @@ class _BookDetailScreenState extends State<BookDetailScreen>
     }
 
     if (_errorMessage != null) {
+      final localizations = AppLocalizations.of(context);
       return Scaffold(
         appBar: AppBar(
-          title: const Text('Book Details'),
+          title: Text(localizations.bookDetailsTitle),
           backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
         ),
@@ -130,7 +133,7 @@ class _BookDetailScreenState extends State<BookDetailScreen>
               const Icon(Icons.error_outline, size: 64, color: AppColors.error),
               const SizedBox(height: 16),
               Text(
-                'Failed to load book details',
+                localizations.failedToLoadBookDetails,
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
@@ -149,7 +152,7 @@ class _BookDetailScreenState extends State<BookDetailScreen>
               const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: _fetchBookDetails,
-                child: const Text('Retry'),
+                child: Text(localizations.retry),
               ),
             ],
           ),
@@ -248,9 +251,19 @@ class _BookDetailScreenState extends State<BookDetailScreen>
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    'by ${book.author?.name ?? 'Unknown Author'}',
-                    style: const TextStyle(color: Colors.white70, fontSize: 16),
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Text(
+                        localizations.byAuthorUnknown(
+                          book.author?.name ?? localizations.unknownAuthor,
+                        ),
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 16,
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -294,12 +307,17 @@ class _BookDetailScreenState extends State<BookDetailScreen>
                 );
               }),
               const SizedBox(width: AppDimensions.spacingS),
-              Text(
-                '${book.averageRating?.toStringAsFixed(1) ?? '0.0'} (${book.evaluationsCount} reviews)',
-                style: TextStyle(
-                  fontSize: AppDimensions.fontSizeS,
-                  color: context.secondaryTextColor,
-                ),
+              Builder(
+                builder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return Text(
+                    '${book.averageRating?.toStringAsFixed(1) ?? '0.0'} ${localizations.reviewsCountWithNumber(book.evaluationsCount ?? 0)}',
+                    style: TextStyle(
+                      fontSize: AppDimensions.fontSizeS,
+                      color: context.secondaryTextColor,
+                    ),
+                  );
+                },
               ),
             ],
           ],
@@ -337,13 +355,18 @@ class _BookDetailScreenState extends State<BookDetailScreen>
                   color: AppColors.success,
                   borderRadius: BorderRadius.circular(AppDimensions.radiusS),
                 ),
-                child: Text(
-                  'Save \$${book.savingsAmount.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    fontSize: AppDimensions.fontSizeS,
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                  ),
+                child: Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return Text(
+                      localizations.saveAmount('\$${book.savingsAmount.toStringAsFixed(2)}'),
+                      style: const TextStyle(
+                        fontSize: AppDimensions.fontSizeS,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    );
+                  },
                 ),
               ),
             ] else ...[
@@ -395,16 +418,6 @@ class _BookDetailScreenState extends State<BookDetailScreen>
                 fontWeight: FontWeight.w500,
               ),
             ),
-            if (book.availableCopies != null && book.availableCopies! > 0) ...[
-              const SizedBox(width: AppDimensions.spacingM),
-              Text(
-                '${book.availableCopies} copies available',
-                style: TextStyle(
-                  fontSize: AppDimensions.fontSizeS,
-                  color: context.secondaryTextColor,
-                ),
-              ),
-            ],
           ],
         ),
       ],
@@ -412,6 +425,7 @@ class _BookDetailScreenState extends State<BookDetailScreen>
   }
 
   Widget _buildTabs() {
+    final localizations = AppLocalizations.of(context);
     return Container(
       decoration: BoxDecoration(
         color: context.surfaceColor,
@@ -443,10 +457,10 @@ class _BookDetailScreenState extends State<BookDetailScreen>
           fontWeight: FontWeight.w500,
         ),
         dividerColor: Colors.transparent,
-        tabs: const [
-          Tab(text: 'Description'),
-          Tab(text: 'Details'),
-          Tab(text: 'Reviews'),
+        tabs: [
+          Tab(text: localizations.descriptionTab),
+          Tab(text: localizations.detailsTab),
+          Tab(text: localizations.reviewsTab),
         ],
       ),
     );
@@ -511,22 +525,33 @@ class _BookDetailScreenState extends State<BookDetailScreen>
                     color: context.secondaryTextColor.withValues(alpha: 0.5),
                   ),
                   const SizedBox(height: AppDimensions.spacingS),
-                  Text(
-                    'No description available',
-                    style: TextStyle(
-                      fontSize: AppDimensions.fontSizeM,
-                      color: context.secondaryTextColor,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: AppDimensions.spacingXS),
-                  Text(
-                    'This book doesn\'t have a description yet.',
-                    style: TextStyle(
-                      fontSize: AppDimensions.fontSizeS,
-                      color: context.secondaryTextColor.withValues(alpha: 0.7),
-                    ),
-                    textAlign: TextAlign.center,
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Column(
+                        children: [
+                          Text(
+                            localizations.noDescriptionAvailable,
+                            style: TextStyle(
+                              fontSize: AppDimensions.fontSizeM,
+                              color: context.secondaryTextColor,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: AppDimensions.spacingXS),
+                          Text(
+                            localizations.noDescriptionAvailableBook,
+                            style: TextStyle(
+                              fontSize: AppDimensions.fontSizeS,
+                              color: context.secondaryTextColor.withValues(
+                                alpha: 0.7,
+                              ),
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ],
               ),
@@ -543,8 +568,24 @@ class _BookDetailScreenState extends State<BookDetailScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildDetailRow('Author', book.author?.name ?? 'Unknown'),
-          _buildDetailRow('Category', book.category?.name ?? 'Not available'),
+          Builder(
+            builder: (context) {
+              final localizations = AppLocalizations.of(context);
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildDetailRow(
+                    localizations.authorLabel,
+                    book.author?.name ?? localizations.unknownAuthor,
+                  ),
+                  _buildDetailRow(
+                    localizations.categoryLabel,
+                    book.category?.name ?? localizations.notAvailable,
+                  ),
+                ],
+              );
+            },
+          ),
           if (book.hasDiscount) ...[
             const SizedBox(height: AppDimensions.spacingM),
             Container(
@@ -556,17 +597,26 @@ class _BookDetailScreenState extends State<BookDetailScreen>
                   color: AppColors.success.withValues(alpha: 0.3),
                 ),
               ),
-              child: const Row(
+              child: Row(
                 children: [
-                  Icon(Icons.local_offer, color: AppColors.success, size: 20),
-                  SizedBox(width: AppDimensions.spacingS),
-                  Text(
-                    'This book is currently on sale!',
-                    style: TextStyle(
-                      fontSize: AppDimensions.fontSizeM,
-                      color: AppColors.success,
-                      fontWeight: FontWeight.w600,
-                    ),
+                  const Icon(
+                    Icons.local_offer,
+                    color: AppColors.success,
+                    size: 20,
+                  ),
+                  const SizedBox(width: AppDimensions.spacingS),
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Text(
+                        localizations.thisBookOnSale,
+                        style: const TextStyle(
+                          fontSize: AppDimensions.fontSizeM,
+                          color: AppColors.success,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -627,13 +677,18 @@ class _BookDetailScreenState extends State<BookDetailScreen>
         // Quantity Selector
         Row(
           children: [
-            Text(
-              'Quantity:',
-              style: TextStyle(
-                fontSize: AppDimensions.fontSizeM,
-                fontWeight: FontWeight.w600,
-                color: context.textColor,
-              ),
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Text(
+                  localizations.quantityLabel,
+                  style: TextStyle(
+                    fontSize: AppDimensions.fontSizeM,
+                    fontWeight: FontWeight.w600,
+                    color: context.textColor,
+                  ),
+                );
+              },
             ),
             const SizedBox(width: AppDimensions.spacingM),
             Container(
@@ -667,22 +722,30 @@ class _BookDetailScreenState extends State<BookDetailScreen>
         ),
         const SizedBox(height: 8.0), // Reduced spacing before action buttons
         // Action Buttons
-        SizedBox(
-          width: double.infinity,
-          child: CustomButton(
-            text: 'Add to Cart',
-            onPressed: _canAddToCart(book) ? _addToCart : null,
-          ),
-        ),
-        const SizedBox(height: AppDimensions.spacingM),
-
-        // Borrow Button
-        SizedBox(
-          width: double.infinity,
-          child: CustomButton(
-            text: 'Borrow Book',
-            onPressed: _canBorrowBook(book) ? _borrowBook : null,
-          ),
+        Builder(
+          builder: (context) {
+            final localizations = AppLocalizations.of(context);
+            return Column(
+              children: [
+                SizedBox(
+                  width: double.infinity,
+                  child: CustomButton(
+                    text: localizations.addToCartButtonDetail,
+                    onPressed: _canAddToCart(book) ? _addToCart : null,
+                  ),
+                ),
+                const SizedBox(height: AppDimensions.spacingM),
+                // Borrow Button
+                SizedBox(
+                  width: double.infinity,
+                  child: CustomButton(
+                    text: localizations.borrowBookButton,
+                    onPressed: _canBorrowBook(book) ? _borrowBook : null,
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ],
     );
@@ -698,24 +761,25 @@ class _BookDetailScreenState extends State<BookDetailScreen>
   }
 
   String _getAvailabilityStatus(Book book) {
+    final localizations = AppLocalizations.of(context);
     // Check if book is available for purchase
     if (book.isAvailable == true && (book.quantity ?? 0) > 0) {
       if ((book.availableCopies ?? 0) == 0) {
-        return "Out of Stock";
+        return localizations.outOfStockStatus;
       } else if ((book.availableCopies ?? 0) <= 3) {
-        return "Limited Stock";
+        return localizations.limitedStock;
       } else {
-        return "In Stock";
+        return localizations.inStockStatus;
       }
     }
 
     // Check if book is available for borrowing
     if (book.isAvailableForBorrow == true && (book.availableCopies ?? 0) > 0) {
-      return "Available for Borrowing";
+      return localizations.availableForBorrowing;
     }
 
     // If neither purchase nor borrowing is available
-    return "Not Available";
+    return localizations.notAvailableStatus;
   }
 
   bool _canAddToCart(Book book) {
@@ -803,9 +867,10 @@ class _BookDetailScreenState extends State<BookDetailScreen>
       });
 
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: ${e.toString()}'),
+            content: Text('${localizations.errorOccurred}: ${e.toString()}'),
             backgroundColor: AppColors.error,
           ),
         );
@@ -816,11 +881,12 @@ class _BookDetailScreenState extends State<BookDetailScreen>
   void _addToCart() {
     final book = _bookDetails ?? widget.book;
     final cartProvider = Provider.of<CartProvider>(context, listen: false);
+    final localizations = AppLocalizations.of(context);
     cartProvider.addToCart(book, _quantity, context: context);
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Added ${book.title} to cart'),
+        content: Text('${localizations.addedToCartPlaceholder}: ${book.title}'),
         backgroundColor: AppColors.success,
       ),
     );

@@ -36,6 +36,8 @@ import 'features/admin/providers/library_manager/authors_provider.dart'
     as admin_authors;
 import 'features/admin/providers/categories_provider.dart' as admin_categories;
 import 'features/admin/providers/complaints_provider.dart';
+import 'features/complaints/providers/customer_complaints_provider.dart';
+import 'features/complaints/services/customer_complaints_api_service.dart';
 import 'features/admin/providers/reports_provider.dart';
 import 'features/admin/providers/delivery_provider.dart';
 import 'features/delivery_manager/providers/delivery_tasks_provider.dart';
@@ -59,6 +61,7 @@ import 'features/profile/providers/user_settings_provider.dart';
 import 'features/help_support/providers/help_support_provider.dart';
 import 'features/help_support/services/help_support_service.dart';
 import 'core/services/auth_service.dart';
+import 'core/services/api_client.dart';
 import 'routes/app_routes.dart';
 
 class BookstoreApp extends StatefulWidget {
@@ -112,14 +115,14 @@ class _BookstoreAppState extends State<BookstoreApp>
     // Load theme preference from storage (allows dark mode)
     await _themeService.loadThemePreference();
 
+    // Load saved language preference on startup
+    await _translationsProvider.loadSavedLocale();
+
     // Apply performance optimizations for the app startup
     Performance.scheduleForNextFrame(() {
       // This will run in the next frame when the UI is idle
       // We can pre-cache important assets here
     });
-
-    // No need to explicitly load saved language preference
-    // It's handled automatically in the TranslationsProvider constructor
   }
 
   @override
@@ -468,6 +471,11 @@ class _BookstoreAppState extends State<BookstoreApp>
             ),
           ),
         ),
+        // Customer Complaints Provider
+        ChangeNotifierProvider(
+          create: (_) =>
+              CustomerComplaintsProvider(CustomerComplaintsApiService()),
+        ),
       ],
       child: Consumer3<TranslationsProvider, ThemeService, AuthProvider>(
         builder: (context, translationsProvider, themeService, authProvider, _) {
@@ -476,6 +484,18 @@ class _BookstoreAppState extends State<BookstoreApp>
           debugPrint('Current ThemeMode: ${themeService.themeMode}');
           debugPrint('Is Dark Mode: ${themeService.isDarkMode}');
           debugPrint('==================');
+
+          // Set up token refresh callback for ApiClient
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            ApiClient.onTokenRefresh = () async {
+              debugPrint('ApiClient: Token refresh callback triggered');
+              final refreshSuccess = await authProvider.refreshAccessToken();
+              if (refreshSuccess) {
+                return authProvider.token;
+              }
+              return null;
+            };
+          });
 
           // Only update providers when token actually changes to avoid unnecessary calls
           final currentToken = authProvider.token;
@@ -511,7 +531,10 @@ class _BookstoreAppState extends State<BookstoreApp>
           }
 
           return MaterialApp(
-            title: 'E-Library',
+            key: ValueKey(
+              translationsProvider.currentLocale.languageCode,
+            ), // Force rebuild on language change
+            title: 'ReadGo',
             debugShowCheckedModeBanner: false,
             // Localization support
             locale: translationsProvider.currentLocale,
@@ -522,21 +545,29 @@ class _BookstoreAppState extends State<BookstoreApp>
               GlobalWidgetsLocalizations.delegate,
               GlobalCupertinoLocalizations.delegate,
             ],
-            // Optimize startup performance
+            // Optimize startup performance and ensure RTL support
             builder: (context, child) {
               if (child == null) return const SizedBox.shrink();
 
+              // Get current locale to determine text direction
+              final locale = translationsProvider.currentLocale;
+              final isRTL = locale.languageCode == 'ar';
+
               // Apply text scaling for accessibility while maintaining UI integrity
-              return MediaQuery(
-                // Limit text scaling for better UI consistency
-                data: MediaQuery.of(context).copyWith(
-                  textScaler: TextScaler.linear(
-                    MediaQuery.of(
-                      context,
-                    ).textScaler.scale(1.0).clamp(0.8, 1.2),
+              // Also ensure proper text direction for RTL languages
+              return Directionality(
+                textDirection: isRTL ? TextDirection.rtl : TextDirection.ltr,
+                child: MediaQuery(
+                  // Limit text scaling for better UI consistency
+                  data: MediaQuery.of(context).copyWith(
+                    textScaler: TextScaler.linear(
+                      MediaQuery.of(
+                        context,
+                      ).textScaler.scale(1.0).clamp(0.8, 1.2),
+                    ),
                   ),
+                  child: child,
                 ),
-                child: child,
               );
             },
             // Dynamic theme based on user preference

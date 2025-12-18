@@ -523,10 +523,16 @@ class ManagerApiService {
   Future<Map<String, dynamic>> startDelivery(int orderId) async {
     debugPrint('DEBUG: Starting delivery for order $orderId');
 
+    // Use unified start-delivery endpoint
+    // POST /api/delivery/start-delivery/
     final response = await _makeRequest(
-      'PATCH',
-      '/delivery/orders/$orderId/start_delivery/',
+      'POST',
+      '/delivery/start-delivery/',
       headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'delivery_type': 'order',
+        'delivery_id': orderId,
+      }),
     );
 
     debugPrint('DEBUG: Start delivery response status: ${response.statusCode}');
@@ -545,13 +551,20 @@ class ManagerApiService {
   }
 
   // Complete delivery for an assigned order (delivery manager only)
+  // Uses unified complete-delivery endpoint
   Future<Map<String, dynamic>> completeDelivery(int orderId) async {
     debugPrint('DEBUG: Completing delivery for order $orderId');
 
+    // Use unified complete-delivery endpoint
+    // POST /api/delivery/complete-delivery/
     final response = await _makeRequest(
-      'PATCH',
-      '/delivery/orders/$orderId/complete_delivery/',
+      'POST',
+      '/delivery/complete-delivery/',
       headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'delivery_type': 'order',
+        'delivery_id': orderId,
+      }),
     );
 
     debugPrint(
@@ -695,7 +708,11 @@ class ManagerApiService {
   }
 
   // Edit order notes
-  Future<void> editOrderNotes(String orderId, String notes, {int? noteId}) async {
+  Future<void> editOrderNotes(
+    String orderId,
+    String notes, {
+    int? noteId,
+  }) async {
     final body = <String, dynamic>{
       'order_id': orderId,
       'notes_content': notes,
@@ -722,10 +739,7 @@ class ManagerApiService {
 
   // Delete order notes
   Future<void> deleteOrderNotes(String orderId, {int? noteId}) async {
-    final body = <String, dynamic>{
-      'order_id': orderId,
-      'action': 'delete',
-    };
+    final body = <String, dynamic>{'order_id': orderId, 'action': 'delete'};
     if (noteId != null) {
       body['note_id'] = noteId;
     }
@@ -1498,16 +1512,12 @@ class ManagerApiService {
     int limit = 10,
     String? search,
     String? status,
-    String? type,
-    String? priority,
   }) async {
     final queryParams = {
       'page': page.toString(),
       'limit': limit.toString(),
       if (search != null && search.isNotEmpty) 'search': search,
       if (status != null && status.isNotEmpty) 'status': status,
-      if (type != null && type.isNotEmpty) 'type': type,
-      if (priority != null && priority.isNotEmpty) 'priority': priority,
     };
 
     final url = '$baseUrl/complaints/';
@@ -1515,27 +1525,93 @@ class ManagerApiService {
     final headers = _getHeaders();
 
     developer.log('ManagerApiService: Making request to: $uri');
-    developer.log('ManagerApiService: Headers: $headers');
+    developer.log('ManagerApiService: Headers: ${headers.keys.toList()}');
+    developer.log(
+      'ManagerApiService: Has Authorization: ${headers.containsKey('Authorization')}',
+    );
 
-    final response = await http.get(uri, headers: headers);
+    // Add timeout to prevent hanging
+    final response = await http
+        .get(uri, headers: headers)
+        .timeout(
+          const Duration(seconds: 30),
+          onTimeout: () {
+            developer.log(
+              'ManagerApiService: Request timed out after 30 seconds',
+            );
+            throw Exception(
+              'Request timed out. Please check your connection and try again.',
+            );
+          },
+        );
 
     developer.log('ManagerApiService: Response status: ${response.statusCode}');
-    developer.log('ManagerApiService: Response body: ${response.body}');
+    developer.log(
+      'ManagerApiService: Response body length: ${response.body.length}',
+    );
+    if (response.body.length < 500) {
+      developer.log('ManagerApiService: Response body: ${response.body}');
+    } else {
+      developer.log(
+        'ManagerApiService: Response body (first 500 chars): ${response.body.substring(0, 500)}...',
+      );
+    }
 
     if (response.statusCode == 200) {
-      final data = json.decode(response.body);
-      return ComplaintsResponse(
-        results: (data['data'] as List? ?? [])
-            .map((item) => Complaint.fromJson(item))
-            .toList(),
-        totalPages: data['total_pages'] ?? 1,
-        totalItems: data['count'] ?? 0,
-        currentPage: data['current_page'] ?? page,
-        hasNext: data['has_next'] ?? false,
-        hasPrevious: data['has_previous'] ?? false,
-      );
+      try {
+        final data = json.decode(response.body);
+        developer.log(
+          'ManagerApiService: Parsed data keys: ${data.keys.toList()}',
+        );
+
+        // Handle both response formats: direct data array or paginated response
+        List<dynamic> complaintsData;
+        if (data['data'] != null) {
+          complaintsData = data['data'] as List? ?? [];
+        } else if (data['results'] != null) {
+          complaintsData = data['results'] as List? ?? [];
+        } else if (data is List) {
+          complaintsData = data;
+        } else {
+          complaintsData = [];
+        }
+
+        developer.log(
+          'ManagerApiService: Found ${complaintsData.length} complaints',
+        );
+
+        return ComplaintsResponse(
+          results: complaintsData.map((item) {
+            try {
+              return Complaint.fromJson(item);
+            } catch (e) {
+              developer.log(
+                'ManagerApiService: Error parsing complaint item: $e',
+              );
+              developer.log('ManagerApiService: Item data: $item');
+              rethrow;
+            }
+          }).toList(),
+          totalPages: data['total_pages'] ?? data['totalPages'] ?? 1,
+          totalItems:
+              data['count'] ?? data['totalItems'] ?? complaintsData.length,
+          currentPage: data['current_page'] ?? data['currentPage'] ?? page,
+          hasNext: data['has_next'] ?? data['hasNext'] ?? false,
+          hasPrevious: data['has_previous'] ?? data['hasPrevious'] ?? false,
+        );
+      } catch (e) {
+        developer.log('ManagerApiService: Error parsing response: $e');
+        developer.log('ManagerApiService: Response body: ${response.body}');
+        throw Exception('Failed to parse complaints response: $e');
+      }
+    } else if (response.statusCode == 401 || response.statusCode == 403) {
+      throw Exception('Authentication failed. Please log in again.');
     } else {
-      throw Exception('Failed to load complaints: ${response.statusCode}');
+      final errorBody = response.body;
+      developer.log('ManagerApiService: Error response body: $errorBody');
+      throw Exception(
+        'Failed to load complaints: ${response.statusCode}. ${errorBody.length > 100 ? errorBody.substring(0, 100) : errorBody}',
+      );
     }
   }
 
@@ -1569,6 +1645,38 @@ class ManagerApiService {
     }
   }
 
+  Future<void> updateComplaintStatusViaPost(int id, String status) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/complaints/$id/update_status/'),
+      headers: {..._getHeaders(), 'Content-Type': 'application/json'},
+      body: json.encode({'status': status}),
+    );
+
+    if (response.statusCode != 200) {
+      final errorBody = json.decode(response.body);
+      throw Exception(
+        errorBody['message'] ??
+            'Failed to update complaint status: ${response.statusCode}',
+      );
+    }
+  }
+
+  Future<void> sendComplaintReply(int id, String response) async {
+    final responseData = await http.post(
+      Uri.parse('$baseUrl/complaints/$id/reply/'),
+      headers: {..._getHeaders(), 'Content-Type': 'application/json'},
+      body: json.encode({'response': response}),
+    );
+
+    if (responseData.statusCode != 200) {
+      final errorBody = json.decode(responseData.body);
+      throw Exception(
+        errorBody['message'] ??
+            'Failed to send reply: ${responseData.statusCode}',
+      );
+    }
+  }
+
   Future<void> assignComplaint(int id, int staffId) async {
     final response = await http.patch(
       Uri.parse('$baseUrl/complaints/$id/'),
@@ -1595,15 +1703,12 @@ class ManagerApiService {
     }
   }
 
-  Future<void> resolveComplaint(int id, String resolution) async {
+  Future<void> resolveComplaint(int id) async {
+    // Resolution field has been removed, so we just update status to resolved
     final response = await http.patch(
-      Uri.parse('$baseUrl/complaints/$id/'),
+      Uri.parse('$baseUrl/complaints/$id/resolve/'),
       headers: {...headers, 'Content-Type': 'application/json'},
-      body: json.encode({
-        'status': 'resolved',
-        'resolution': resolution,
-        'resolved_at': DateTime.now().toIso8601String(),
-      }),
+      body: json.encode({}),
     );
 
     if (response.statusCode != 200) {
@@ -1780,7 +1885,9 @@ class ManagerApiService {
           'Successfully deleted all notifications: ${data['deleted_count'] ?? 0}',
         );
       } else {
-        debugPrint('Failed to delete all notifications: ${response.statusCode}');
+        debugPrint(
+          'Failed to delete all notifications: ${response.statusCode}',
+        );
         throw Exception(
           'Failed to delete all notifications: ${response.statusCode}',
         );
@@ -2386,14 +2493,73 @@ class ManagerApiService {
     }
   }
 
-  Future<Book> createBook(Book book) async {
+  Future<Book> createBook(
+    Book book, {
+    File? imageFile,
+    Uint8List? imageBytes,
+    String? imageFileName,
+  }) async {
     try {
-      final response = await _makeRequest(
-        'POST',
-        '/library/books/create/',
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode(book.toJson()),
-      );
+      late http.Response response;
+
+      // Check if we have an image to upload
+      final hasImage = imageFile != null || (kIsWeb && imageBytes != null);
+
+      if (hasImage) {
+        // Use multipart request for file upload
+        var request = http.MultipartRequest(
+          'POST',
+          Uri.parse('$baseUrl/library/books/create/'),
+        );
+
+        // Add headers
+        request.headers.addAll(_getHeaders());
+
+        // Add book fields
+        final bookJson = book.toJson();
+        // Remove primaryImageUrl if we're uploading a file
+        bookJson.remove('primary_image_url');
+
+        for (var entry in bookJson.entries) {
+          if (entry.value != null) {
+            if (entry.value is List) {
+              // Handle list fields
+              for (var item in entry.value as List) {
+                request.fields.addAll({'${entry.key}[]': item.toString()});
+              }
+            } else {
+              request.fields[entry.key] = entry.value.toString();
+            }
+          }
+        }
+
+        // Add image file
+        if (kIsWeb && imageBytes != null && imageFileName != null) {
+          request.files.add(
+            http.MultipartFile.fromBytes(
+              'images',
+              imageBytes,
+              filename: imageFileName,
+            ),
+          );
+        } else if (imageFile != null) {
+          request.files.add(
+            await http.MultipartFile.fromPath('images', imageFile.path),
+          );
+        }
+
+        debugPrint('DEBUG: CreateBook - Uploading with multipart request');
+        var streamedResponse = await request.send();
+        response = await http.Response.fromStream(streamedResponse);
+      } else {
+        // Use regular JSON request when no image
+        response = await _makeRequest(
+          'POST',
+          '/library/books/create/',
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode(book.toJson()),
+        );
+      }
 
       debugPrint('DEBUG: CreateBook response status: ${response.statusCode}');
       debugPrint('DEBUG: CreateBook response body: ${response.body}');
@@ -2419,12 +2585,74 @@ class ManagerApiService {
     }
   }
 
-  Future<Book> updateBook(Book book) async {
-    final response = await http.put(
-      Uri.parse('$baseUrl/library/books/${book.id}/update/'),
-      headers: {..._getHeaders(), 'Content-Type': 'application/json'},
-      body: json.encode(book.toJson()),
-    );
+  Future<Book> updateBook(
+    Book book, {
+    File? imageFile,
+    Uint8List? imageBytes,
+    String? imageFileName,
+  }) async {
+    late http.Response response;
+
+    // Check if we have an image to upload
+    final hasImage = imageFile != null || (kIsWeb && imageBytes != null);
+
+    if (hasImage) {
+      // Use multipart request for file upload
+      var request = http.MultipartRequest(
+        'PUT',
+        Uri.parse('$baseUrl/library/books/${book.id}/update/'),
+      );
+
+      // Add headers
+      request.headers.addAll(_getHeaders());
+
+      // Add book fields
+      final bookJson = book.toJson();
+      // Remove primaryImageUrl if we're uploading a file
+      bookJson.remove('primary_image_url');
+
+      for (var entry in bookJson.entries) {
+        if (entry.value != null) {
+          if (entry.value is List) {
+            // Handle list fields
+            for (var item in entry.value as List) {
+              request.fields.addAll({'${entry.key}[]': item.toString()});
+            }
+          } else {
+            request.fields[entry.key] = entry.value.toString();
+          }
+        }
+      }
+
+      // Add image file
+      if (kIsWeb && imageBytes != null && imageFileName != null) {
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'images',
+            imageBytes,
+            filename: imageFileName,
+          ),
+        );
+      } else if (imageFile != null) {
+        request.files.add(
+          await http.MultipartFile.fromPath('images', imageFile.path),
+        );
+      }
+
+      debugPrint('DEBUG: UpdateBook - Uploading with multipart request');
+      var streamedResponse = await request.send();
+      response = await http.Response.fromStream(streamedResponse);
+    } else {
+      // Use regular JSON request when no image
+      response = await http.put(
+        Uri.parse('$baseUrl/library/books/${book.id}/update/'),
+        headers: {..._getHeaders(), 'Content-Type': 'application/json'},
+        body: json.encode(book.toJson()),
+      );
+    }
+
+    debugPrint('DEBUG: UpdateBook response status: ${response.statusCode}');
+    debugPrint('DEBUG: UpdateBook response body: ${response.body}');
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
@@ -2434,7 +2662,10 @@ class ManagerApiService {
         throw Exception('Invalid response format from server');
       }
     } else {
-      throw Exception('Failed to update book: ${response.statusCode}');
+      final errorData = json.decode(response.body);
+      throw Exception(
+        'Failed to update book: ${errorData['message'] ?? 'Unknown error'}',
+      );
     }
   }
 

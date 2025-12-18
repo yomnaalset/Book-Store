@@ -1,6 +1,6 @@
 from rest_framework import serializers
 import logging
-from ..models.return_model import ReturnRequest, ReturnStatus
+from ..models.return_model import ReturnRequest, ReturnStatus, ReturnFine
 from ..models.borrowing_model import BorrowRequest
 from ..models.user_model import User
 from .borrowing_serializers import BorrowRequestDetailSerializer
@@ -53,7 +53,8 @@ class ReturnRequestSerializer(serializers.ModelSerializer):
         except Exception as e:
             logger = logging.getLogger(__name__)
             logger.debug(f"Error getting customer phone: {str(e)}")
-        return None
+        # Return "not found" instead of None when phone number is not available
+        return "not found"
     
     def get_delivery_manager_phone(self, obj):
         """Get phone number from delivery manager's profile if available"""
@@ -77,7 +78,8 @@ class ReturnRequestSerializer(serializers.ModelSerializer):
         except Exception as e:
             logger = logging.getLogger(__name__)
             logger.debug(f"Error getting delivery manager phone: {str(e)}")
-        return None
+        # Return "not found" instead of None when phone number is not available
+        return "not found"
 
 
 class ReturnRequestCreateSerializer(serializers.ModelSerializer):
@@ -100,8 +102,24 @@ class ReturnRequestCreateSerializer(serializers.ModelSerializer):
         
         # Check if borrowing is in a valid state for return request
         from ..models.borrowing_model import BorrowStatusChoices
-        if borrowing.status not in [BorrowStatusChoices.ACTIVE, BorrowStatusChoices.EXTENDED]:
-            raise serializers.ValidationError("Borrowing must be active to request return")
+        from django.utils import timezone
+        
+        # Allow return requests for:
+        # 1. ACTIVE or EXTENDED status (normal case)
+        # 2. DELIVERED status if the book is overdue (overdue case)
+        is_valid_status = borrowing.status in [
+            BorrowStatusChoices.ACTIVE, 
+            BorrowStatusChoices.EXTENDED
+        ]
+        
+        # If status is DELIVERED, check if book is overdue
+        is_overdue_delivered = False
+        if borrowing.status == BorrowStatusChoices.DELIVERED:
+            if borrowing.expected_return_date:
+                is_overdue_delivered = timezone.now() > borrowing.expected_return_date
+        
+        if not is_valid_status and not is_overdue_delivered:
+            raise serializers.ValidationError("Borrowing must be active, extended, or delivered and overdue to request return")
         
         # Check if there's already a pending return request
         existing_request = ReturnRequest.objects.filter(
@@ -152,4 +170,42 @@ class ReturnRequestAssignSerializer(serializers.Serializer):
             raise serializers.ValidationError("Delivery manager not found or inactive")
         
         return value
+
+
+class ReturnFineSerializer(serializers.ModelSerializer):
+    """
+    Serializer for ReturnFine model - represents fines for return requests only.
+    """
+    borrow_request = serializers.SerializerMethodField()
+    total_amount = serializers.DecimalField(source='fine_amount', max_digits=8, decimal_places=2, read_only=True)
+    status = serializers.SerializerMethodField()
+    status_display = serializers.SerializerMethodField()
+    created_date = serializers.DateTimeField(source='created_at', read_only=True)
+    paid_date = serializers.DateTimeField(source='paid_at', read_only=True)
+    payment_reference = serializers.CharField(source='transaction_id', read_only=True)
+    
+    class Meta:
+        model = ReturnFine
+        fields = [
+            'id', 'return_request', 'borrow_request', 'fine_amount', 'total_amount',
+            'fine_reason', 'late_return', 'damaged', 'lost', 'days_late',
+            'is_paid', 'status', 'status_display', 'created_date', 'paid_date',
+            'payment_reference', 'payment_method', 'is_finalized'
+        ]
+        read_only_fields = ['created_at', 'updated_at']
+    
+    def get_borrow_request(self, obj):
+        """Return borrowing information from the return request"""
+        from .borrowing_serializers import BorrowRequestListSerializer
+        if obj.return_request and obj.return_request.borrowing:
+            return BorrowRequestListSerializer(obj.return_request.borrowing).data
+        return None
+    
+    def get_status(self, obj):
+        """Return payment status as string for backward compatibility"""
+        return 'paid' if obj.is_paid else 'pending'
+    
+    def get_status_display(self, obj):
+        """Return human-readable payment status"""
+        return 'Paid' if obj.is_paid else 'Pending'
 

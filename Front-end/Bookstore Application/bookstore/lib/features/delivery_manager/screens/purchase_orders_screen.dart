@@ -133,7 +133,7 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
             children: [
               // Search and Filter Bar
               SearchFilterBar(
-                searchHint: 'Search purchase requests...',
+                searchHint: AppLocalizations.of(context).searchPurchaseRequests,
                 filterLabel: 'Status',
                 filterOptions: statusFilterOptions,
                 onSearchChanged: _onSearchChanged,

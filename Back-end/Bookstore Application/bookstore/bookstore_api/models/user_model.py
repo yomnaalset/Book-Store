@@ -247,16 +247,40 @@ class User(AbstractUser):
         return LocationHistory.get_movement_summary(self, hours)
     
     def has_unpaid_fines(self):
-        """Check if user has any unpaid fines."""
+        """Check if user has any unpaid fines (including pending_payment status)."""
         if not self.is_customer():
             return False
         
         from .borrowing_model import BorrowRequest, FineStatusChoices
-        return BorrowRequest.objects.filter(
+        from .return_model import ReturnRequest, ReturnFine, ReturnFinePaymentStatus
+        
+        # Check BorrowFine (legacy fines)
+        from ..models.return_model import ReturnFine, ReturnFinePaymentStatus
+        
+        # Check borrow fines (using unified ReturnFine with fine_type='borrow')
+        has_borrow_fine = ReturnFine.objects.filter(
+            fine_type='borrow',
+            borrow_request__customer=self,
+            payment_status__in=[ReturnFinePaymentStatus.PENDING, ReturnFinePaymentStatus.PENDING_PAYMENT],
+            fine_amount__gt=0
+        ).exists()
+        
+        # Check return fines
+        has_return_fine = ReturnFine.objects.filter(
+            fine_type='return',
+            return_request__borrowing__customer=self,
+            payment_status=ReturnFinePaymentStatus.PENDING_PAYMENT,
+            fine_amount__gt=0
+        ).exists()
+        
+        # Also check BorrowRequest.fine_amount for legacy compatibility
+        has_legacy_fine = BorrowRequest.objects.filter(
             customer=self,
             fine_status=FineStatusChoices.UNPAID,
             fine_amount__gt=0
         ).exists()
+        
+        return has_borrow_fine or has_return_fine or has_legacy_fine
     
     def get_total_unpaid_fines(self):
         """Get total amount of unpaid fines."""
@@ -278,7 +302,7 @@ class User(AbstractUser):
             return False, "Only customers can submit borrow requests"
         
         if self.has_unpaid_fines():
-            return False, "You cannot submit a new borrowing request until your pending fine is paid."
+            return False, "You cannot borrow new books until your outstanding fine is paid."
         
         return True, "Can submit borrow request"
     

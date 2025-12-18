@@ -6,7 +6,7 @@ from django.core.exceptions import PermissionDenied
 from django.db import IntegrityError
 from django.utils.translation import gettext as _
 import logging
-from ..models import Library, Book, BookImage, Category, Author, BookEvaluation, Favorite, ReviewLike, ReviewReply, ReplyLike
+from ..models import Library, Book, BookImage, Category, Author, BookEvaluation, Favorite, Like, ReviewReply
 from ..serializers import (
     LibraryCreateSerializer,
     LibraryUpdateSerializer,
@@ -1782,11 +1782,19 @@ class CategoryListView(generics.ListAPIView):
             page = self.paginate_queryset(queryset)
             if page is not None:
                 serializer = self.get_serializer(page, many=True)
-                return self.get_paginated_response({
+                paginated_response = self.get_paginated_response(serializer.data)
+                # Wrap paginated response with success wrapper
+                paginated_response.data = {
                     'success': True,
                     'message': 'Categories retrieved successfully',
-                    'data': serializer.data
-                })
+                    'data': paginated_response.data.get('results', serializer.data),
+                    'pagination': {
+                        'count': paginated_response.data.get('count', 0),
+                        'next': paginated_response.data.get('next'),
+                        'previous': paginated_response.data.get('previous'),
+                    }
+                }
+                return paginated_response
             
             serializer = self.get_serializer(queryset, many=True)
             return Response({
@@ -2119,11 +2127,19 @@ class AuthorListView(generics.ListAPIView):
             page = self.paginate_queryset(queryset)
             if page is not None:
                 serializer = self.get_serializer(page, many=True)
-                return self.get_paginated_response({
+                paginated_response = self.get_paginated_response(serializer.data)
+                # Wrap paginated response with success wrapper
+                paginated_response.data = {
                     'success': True,
                     'message': 'Authors retrieved successfully',
-                    'data': serializer.data
-                })
+                    'data': paginated_response.data.get('results', serializer.data),
+                    'pagination': {
+                        'count': paginated_response.data.get('count', 0),
+                        'next': paginated_response.data.get('next'),
+                        'previous': paginated_response.data.get('previous'),
+                    }
+                }
+                return paginated_response
             
             serializer = self.get_serializer(queryset, many=True)
             return Response({
@@ -3065,7 +3081,8 @@ class ReviewLikeView(APIView):
             review = get_object_or_404(BookEvaluation, id=review_id)
             
             # Check if user already liked this review
-            like, created = ReviewLike.objects.get_or_create(
+            like, created = Like.objects.get_or_create(
+                target_type='review',
                 review=review,
                 user=request.user
             )
@@ -3080,7 +3097,7 @@ class ReviewLikeView(APIView):
                 action = 'unliked'
             
             # Get updated like count
-            likes_count = review.likes.count()
+            likes_count = review.likes.filter(target_type='review').count()
             
             return Response({
                 'success': True,
@@ -3196,7 +3213,8 @@ class ReplyLikeView(APIView):
             reply = get_object_or_404(ReviewReply, id=reply_id)
             
             # Check if user already liked this reply
-            like, created = ReplyLike.objects.get_or_create(
+            like, created = Like.objects.get_or_create(
+                target_type='reply',
                 reply=reply,
                 user=request.user
             )
@@ -3211,7 +3229,7 @@ class ReplyLikeView(APIView):
                 action = 'unliked'
             
             # Get updated like count
-            likes_count = reply.likes.count()
+            likes_count = reply.likes.filter(target_type='reply').count()
             
             return Response({
                 'success': True,

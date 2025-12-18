@@ -48,6 +48,7 @@ class DeliveryStatusProvider extends ChangeNotifier {
       final statusData = await DeliveryStatusService.getCurrentStatus();
 
       if (statusData != null) {
+        final previousStatus = _currentStatus;
         _currentStatus = statusData['delivery_status'] ?? 'offline';
         _canChangeManually = statusData['can_change_manually'] ?? true;
 
@@ -56,38 +57,18 @@ class DeliveryStatusProvider extends ChangeNotifier {
           'DeliveryStatusProvider: Can change manually: $_canChangeManually',
         );
 
-        // If status is busy, try to reset it (backend should handle this, but this is a safety check)
-        // This ensures the status is reset even if backend auto-reset didn't work
-        if (_currentStatus == 'busy') {
+        // Notify listeners if status changed
+        if (previousStatus != _currentStatus) {
+          notifyListeners();
           debugPrint(
-            'DeliveryStatusProvider: Status is busy, attempting reset as safety check...',
+            'DeliveryStatusProvider: Status changed from $previousStatus to $_currentStatus - notifying listeners',
           );
-          // Try reset and reload status after to ensure we have the latest value
-          try {
-            final resetSuccess = await resetStatusIfNoActiveDeliveries();
-            if (resetSuccess) {
-              debugPrint(
-                'DeliveryStatusProvider: Status successfully reset from busy to online',
-              );
-              // Reload status to get the updated value from backend
-              final updatedStatusData =
-                  await DeliveryStatusService.getCurrentStatus();
-              if (updatedStatusData != null) {
-                _currentStatus =
-                    updatedStatusData['delivery_status'] ?? 'offline';
-                _canChangeManually =
-                    updatedStatusData['can_change_manually'] ?? true;
-                notifyListeners();
-              }
-            }
-          } catch (e) {
-            debugPrint(
-              'DeliveryStatusProvider: Reset attempt failed (non-critical): $e',
-            );
-            // Even if reset fails, the backend should have already handled it
-            // So we can continue with the current status
-          }
         }
+
+        // CRITICAL: Frontend only reads state from backend, never modifies it
+        // Backend is the single source of truth for delivery manager status
+        // If status is busy, that's what the backend says - we trust it
+        // Backend's complete_delivery_task() handles status changes automatically
       } else {
         _setError('Failed to load current status');
       }
@@ -215,18 +196,18 @@ class DeliveryStatusProvider extends ChangeNotifier {
     }
   }
 
-  /// Set status locally (for automatic changes from backend)
+  /// DEPRECATED: Do not use setStatusLocally - always reload from server
+  /// Frontend should never modify status locally - backend is single source of truth
+  /// Use loadCurrentStatus() instead to get fresh data from server
+  @Deprecated(
+    'Use loadCurrentStatus() instead - backend is single source of truth',
+  )
   void setStatusLocally(String status) {
-    if (['online', 'offline', 'busy'].contains(status) &&
-        status != _currentStatus) {
-      _currentStatus = status;
-      _canChangeManually = status != 'busy';
-
-      debugPrint(
-        'DeliveryStatusProvider: Status set locally to $_currentStatus',
-      );
-      notifyListeners();
-    }
+    // This method is deprecated - status should only come from backend
+    // Keeping for backward compatibility but should not be used
+    debugPrint(
+      'WARNING: setStatusLocally called - this should not be used. Use loadCurrentStatus() instead.',
+    );
   }
 
   /// Clear error message

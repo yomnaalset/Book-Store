@@ -4,6 +4,7 @@ import '../../../providers/reports_provider.dart';
 import '../../../models/dashboard_card.dart';
 import '../../../widgets/empty_state.dart';
 import '../../../../auth/providers/auth_provider.dart';
+import '../../../../../core/localization/app_localizations.dart';
 
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
@@ -139,6 +140,127 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }
   }
 
+  // Helper methods
+  String _formatDate(DateTime date) {
+    return '${date.day}/${date.month}/${date.year}';
+  }
+
+  String _getLocalizedDashboardTitle(
+    String title,
+    AppLocalizations localizations,
+  ) {
+    switch (title.toLowerCase()) {
+      case 'total users':
+        return localizations.totalUsers;
+      case 'total revenue':
+        return localizations.totalRevenue;
+      case 'total orders':
+        return localizations.totalOrders;
+      case 'total books':
+        return localizations.totalBooks;
+      case 'total categories':
+        return localizations.totalCategories;
+      case 'total authors':
+        return localizations.totalAuthors;
+      case 'book ratings':
+        return localizations.bookRatings;
+      default:
+        return title;
+    }
+  }
+
+  IconData _getStatIcon(String title) {
+    switch (title.toLowerCase()) {
+      case 'total books':
+        return Icons.book;
+      case 'active borrowings':
+        return Icons.library_books;
+      case 'pending requests':
+        return Icons.pending;
+      case 'total customers':
+      case 'total users':
+        return Icons.people;
+      case 'revenue':
+      case 'total revenue':
+        return Icons.attach_money;
+      case 'overdue books':
+        return Icons.warning;
+      case 'total authors':
+        return Icons.person;
+      case 'total categories':
+        return Icons.category;
+      case 'book ratings':
+        return Icons.star;
+      case 'total orders':
+        return Icons.shopping_cart;
+      default:
+        return Icons.analytics;
+    }
+  }
+
+  Color _getStatColor(String title) {
+    switch (title.toLowerCase()) {
+      case 'total books':
+        return Colors.blue;
+      case 'active borrowings':
+        return Colors.green;
+      case 'pending requests':
+        return Colors.orange;
+      case 'total customers':
+      case 'total users':
+        return Colors.purple;
+      case 'revenue':
+      case 'total revenue':
+        return Colors.green;
+      case 'overdue books':
+        return Colors.red;
+      case 'total authors':
+        return Colors.indigo;
+      case 'total categories':
+        return Colors.teal;
+      case 'book ratings':
+        return Colors.amber;
+      case 'total orders':
+        return Colors.cyan;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  IconData _getReportIcon(String reportType) {
+    switch (reportType) {
+      case 'borrowing':
+        return Icons.library_books;
+      case 'delivery':
+        return Icons.local_shipping;
+      case 'fines':
+        return Icons.money_off;
+      case 'books':
+        return Icons.book;
+      case 'authors':
+        return Icons.person;
+      default:
+        return Icons.analytics;
+    }
+  }
+
+  String _getReportTitle(String reportType, AppLocalizations localizations) {
+    switch (reportType) {
+      case 'borrowing':
+        return localizations.borrowingReport;
+      case 'delivery':
+        return localizations.deliveryReport;
+      case 'fines':
+        return localizations.finesReport;
+      case 'books':
+        return localizations.bookPopularity;
+      case 'authors':
+        return localizations.authorPopularity;
+      default:
+        return localizations.reports;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<ReportsProvider>(
@@ -153,9 +275,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
           });
         }
 
+        final localizations = AppLocalizations.of(context);
         return Scaffold(
           appBar: AppBar(
-            title: const Text('Reports & Analytics'),
+            title: Text(localizations.reportsAndAnalytics),
             actions: [
               IconButton(
                 onPressed: () => _loadDashboardStats(provider),
@@ -184,7 +307,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     Row(
                       children: [
                         Text(
-                          'Report Type:',
+                          '${localizations.reportType}:',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             color: Theme.of(context).colorScheme.onSurface,
@@ -225,7 +348,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                               DropdownMenuItem(
                                 value: 'dashboard',
                                 child: Text(
-                                  'Dashboard Overview',
+                                  localizations.dashboardOverview,
                                   style: TextStyle(
                                     color: Theme.of(
                                       context,
@@ -236,7 +359,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                               DropdownMenuItem(
                                 value: 'borrowing',
                                 child: Text(
-                                  'Borrowing Report',
+                                  localizations.borrowingReport,
                                   style: TextStyle(
                                     color: Theme.of(
                                       context,
@@ -247,7 +370,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                               DropdownMenuItem(
                                 value: 'delivery',
                                 child: Text(
-                                  'Delivery Report',
+                                  localizations.deliveryReport,
                                   style: TextStyle(
                                     color: Theme.of(
                                       context,
@@ -258,7 +381,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                               DropdownMenuItem(
                                 value: 'fines',
                                 child: Text(
-                                  'Fines Report',
+                                  localizations.finesReport,
                                   style: TextStyle(
                                     color: Theme.of(
                                       context,
@@ -269,7 +392,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                               DropdownMenuItem(
                                 value: 'books',
                                 child: Text(
-                                  'Book Popularity',
+                                  localizations.bookPopularity,
                                   style: TextStyle(
                                     color: Theme.of(
                                       context,
@@ -280,7 +403,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                               DropdownMenuItem(
                                 value: 'authors',
                                 child: Text(
-                                  'Author Popularity',
+                                  localizations.authorPopularity,
                                   style: TextStyle(
                                     color: Theme.of(
                                       context,
@@ -309,7 +432,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     Row(
                       children: [
                         Text(
-                          'Date Range:',
+                          '${localizations.dateRange}:',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             color: Theme.of(context).colorScheme.onSurface,
@@ -359,19 +482,20 @@ class _ReportsScreenState extends State<ReportsScreen> {
   }
 
   Widget _buildReportContent(ReportsProvider provider) {
+    final localizations = AppLocalizations.of(context);
     if (provider.error != null) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
-              'Error: ${provider.error}',
+              '${localizations.error}: ${provider.error}',
               style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: () => _loadDashboardStats(provider),
-              child: const Text('Retry'),
+              child: Text(localizations.retry),
             ),
           ],
         ),
@@ -386,22 +510,24 @@ class _ReportsScreenState extends State<ReportsScreen> {
   }
 
   Widget _buildDashboardView(ReportsProvider provider) {
+    final localizations = AppLocalizations.of(context);
     if (provider.dashboardCards.isEmpty) {
-      return const EmptyState(
-        title: 'No Dashboard Data',
-        message: 'No dashboard data available',
+      return EmptyState(
+        title: localizations.noDashboardData,
+        message: localizations.noDashboardDataAvailable,
         icon: Icons.analytics,
       );
     }
 
     return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Dashboard Overview',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          Text(
+            localizations.dashboardOverview,
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 24),
 
@@ -427,74 +553,100 @@ class _ReportsScreenState extends State<ReportsScreen> {
   }
 
   Widget _buildDashboardCard(DashboardCard stat) {
-    return Card(
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
+    return Builder(
+      builder: (context) {
+        final localizations = AppLocalizations.of(context);
+        return Card(
+          elevation: 2,
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Icon(
-                  _getStatIcon(stat.title),
-                  color: _getStatColor(stat.title),
-                  size: 24,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    stat.title,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
+                Row(
+                  children: [
+                    Icon(
+                      _getStatIcon(stat.title),
+                      color: _getStatColor(stat.title),
+                      size: 24,
                     ),
-                    overflow: TextOverflow.ellipsis,
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _getLocalizedDashboardTitle(stat.title, localizations),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  stat.value,
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue,
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              stat.value,
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.blue,
-              ),
-            ),
-            if (stat.trendValue != null) ...[
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  Icon(
-                    stat.trendValue! > 0
-                        ? Icons.trending_up
-                        : Icons.trending_down,
-                    color: stat.trendValue! > 0 ? Colors.green : Colors.red,
-                    size: 16,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    '${stat.trendValue!.abs().toStringAsFixed(1)}%',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: stat.trendValue! > 0 ? Colors.green : Colors.red,
-                      fontWeight: FontWeight.bold,
-                    ),
+                if (stat.trendValue != null) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(
+                        stat.trendValue! > 0
+                            ? Icons.trending_up
+                            : Icons.trending_down,
+                        color: stat.trendValue! > 0 ? Colors.green : Colors.red,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${stat.trendValue!.abs().toStringAsFixed(1)}%',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: stat.trendValue! > 0
+                              ? Colors.green
+                              : Colors.red,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
-              ),
-            ],
-          ],
-        ),
-      ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
   Widget _buildReportView(ReportsProvider provider) {
-    // Display specific report data based on type
+    final localizations = AppLocalizations.of(context);
+    if (provider.error != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              '${localizations.error}: ${provider.error}',
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => _loadDashboardStats(provider),
+              child: Text(localizations.retry),
+            ),
+          ],
+        ),
+      );
+    }
+
     if (_selectedReportType == 'dashboard') {
       return _buildDashboardReport(provider);
     } else if (_selectedReportType == 'authors') {
@@ -507,70 +659,104 @@ class _ReportsScreenState extends State<ReportsScreen> {
       return _buildDeliveryReport(provider);
     } else if (_selectedReportType == 'borrowing') {
       return _buildBorrowingReport(provider);
+    } else {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              _getReportIcon(_selectedReportType),
+              size: 64,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(height: 16),
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Text(
+                  _getReportTitle(_selectedReportType, localizations),
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 8),
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Text(
+                  localizations.dataFor(
+                    _formatDate(_startDate),
+                    _formatDate(_endDate),
+                  ),
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 24),
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Text(
+                  localizations.reportDataWillBeDisplayedHere,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      );
     }
-
-    // For other report types, show placeholder
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            _getReportIcon(_selectedReportType),
-            size: 64,
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            '${_getReportTitle(_selectedReportType)} Report',
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Data for ${_formatDate(_startDate)} to ${_formatDate(_endDate)}',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 24),
-          Text(
-            'Report data will be displayed here',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _buildDashboardReport(ReportsProvider provider) {
     return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Report Header
-          const Row(
-            children: [
-              Icon(Icons.dashboard, size: 32, color: Colors.blue),
-              SizedBox(width: 12),
-              Text(
-                'Dashboard Overview',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.blue,
-                ),
-              ),
-            ],
+          Builder(
+            builder: (context) {
+              final localizations = AppLocalizations.of(context);
+              return Row(
+                children: [
+                  const Icon(Icons.dashboard, size: 32, color: Colors.blue),
+                  const SizedBox(width: 12),
+                  Text(
+                    localizations.dashboardOverview,
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blue,
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 8),
-          Text(
-            'Data for ${_formatDate(_startDate)} to ${_formatDate(_endDate)}',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-              fontSize: 16,
-            ),
+          Builder(
+            builder: (context) {
+              final localizations = AppLocalizations.of(context);
+              return Text(
+                localizations.dataFor(
+                  _formatDate(_startDate),
+                  _formatDate(_endDate),
+                ),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontSize: 16,
+                ),
+              );
+            },
           ),
           const SizedBox(height: 24),
 
@@ -591,92 +777,48 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  Widget buildDashboardCard(DashboardCard card) {
-    return Card(
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(card.icon, color: card.color, size: 24),
-                const Spacer(),
-                if (card.trend != null)
-                  Icon(
-                    card.trend == 'up'
-                        ? Icons.trending_up
-                        : card.trend == 'down'
-                        ? Icons.trending_down
-                        : Icons.trending_flat,
-                    color: card.trend == 'up'
-                        ? Colors.green
-                        : card.trend == 'down'
-                        ? Colors.red
-                        : Colors.grey,
-                    size: 16,
-                  ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              card.value,
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: card.color,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              card.title,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-            ),
-            if (card.subtitle != null) ...[
-              const SizedBox(height: 2),
-              Text(
-                card.subtitle!,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildAuthorPopularityReport(ReportsProvider provider) {
     return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Report Header
-          const Row(
-            children: [
-              Icon(Icons.person, size: 32, color: Colors.indigo),
-              SizedBox(width: 12),
-              Text(
-                'Author Popularity Report',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.indigo,
-                ),
-              ),
-            ],
+          Builder(
+            builder: (context) {
+              final localizations = AppLocalizations.of(context);
+              return Row(
+                children: [
+                  const Icon(Icons.person, size: 32, color: Colors.indigo),
+                  const SizedBox(width: 12),
+                  Text(
+                    localizations.authorPopularity,
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.indigo,
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 8),
-          Text(
-            'Data for ${_formatDate(_startDate)} to ${_formatDate(_endDate)}',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-              fontSize: 16,
-            ),
+          Builder(
+            builder: (context) {
+              final localizations = AppLocalizations.of(context);
+              return Text(
+                localizations.dataFor(
+                  _formatDate(_startDate),
+                  _formatDate(_endDate),
+                ),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontSize: 16,
+                ),
+              );
+            },
           ),
           const SizedBox(height: 24),
 
@@ -688,29 +830,42 @@ class _ReportsScreenState extends State<ReportsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Author Statistics',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Text(
+                        localizations.authorStatistics,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      );
+                    },
                   ),
                   const SizedBox(height: 16),
 
                   // Total Authors
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Total Authors:',
-                        style: TextStyle(fontSize: 16),
-                      ),
-                      Text(
-                        '${provider.authorStats['total_authors'] ?? 0}',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.indigo,
-                        ),
-                      ),
-                    ],
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            '${localizations.totalAuthorsLabel}:',
+                            style: const TextStyle(fontSize: 16),
+                          ),
+                          Text(
+                            '${provider.authorStats['total_authors'] ?? 0}',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.indigo,
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ],
               ),
@@ -722,18 +877,20 @@ class _ReportsScreenState extends State<ReportsScreen> {
   }
 
   Widget _buildBookPopularityReport(ReportsProvider provider) {
+    final localizations = AppLocalizations.of(context);
     return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Report Header
-          const Row(
+          Row(
             children: [
               Icon(Icons.book, size: 32, color: Colors.blue),
               SizedBox(width: 12),
               Text(
-                'Book Popularity Report',
+                localizations.bookPopularityReport,
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
@@ -744,7 +901,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Data for ${_formatDate(_startDate)} to ${_formatDate(_endDate)}',
+            localizations.dataFor(
+              _formatDate(_startDate),
+              _formatDate(_endDate),
+            ),
             style: TextStyle(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
               fontSize: 16,
@@ -753,78 +913,83 @@ class _ReportsScreenState extends State<ReportsScreen> {
           const SizedBox(height: 24),
 
           // 6 Cards Grid
-          GridView.count(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: 2,
-            crossAxisSpacing: 16,
-            mainAxisSpacing: 16,
-            childAspectRatio: 1.3,
-            children: [
-              // Total Books Card
-              _buildBookStatCard(
-                title: 'Total Books',
-                value: '${provider.bookStats['total_books'] ?? 0}',
-                subtitle: 'All books in system',
-                icon: Icons.library_books,
-                color: Colors.blue,
-                trend: provider.bookStats['book_trend'],
-                trendValue: (provider.bookStats['book_trend_value'] as num?)
-                    ?.toDouble(),
-              ),
-
-              // Available Books Card
-              _buildBookStatCard(
-                title: 'Available Books',
-                value: '${provider.bookStats['available_books'] ?? 0}',
-                subtitle: 'Currently available',
-                icon: Icons.check_circle,
-                color: Colors.green,
-              ),
-
-              // Borrowed Books Card
-              _buildBookStatCard(
-                title: 'Borrowed Books',
-                value: '${provider.bookStats['borrowed_books'] ?? 0}',
-                subtitle: 'Currently borrowed',
-                icon: Icons.book_online,
-                color: Colors.orange,
-              ),
-
-              // Most Borrowed Books Card
-              _buildBookStatCard(
-                title: 'Most Borrowed',
-                value:
-                    '${(provider.bookStats['most_borrowed_books'] as List?)?.length ?? 0}',
-                subtitle: 'Top borrowed books',
-                icon: Icons.trending_up,
-                color: Colors.purple,
-              ),
-
-              // Best Sellers Card
-              _buildBookStatCard(
-                title: 'Best Sellers',
-                value:
-                    '${(provider.bookStats['best_sellers'] as List?)?.length ?? 0}',
-                subtitle: 'Most requested books',
-                icon: Icons.star,
-                color: Colors.amber,
-              ),
-
-              // Book Trends Card
-              _buildBookStatCard(
-                title: 'Book Trends',
-                value:
-                    '${provider.bookStats['borrowing_trend_value']?.toStringAsFixed(1) ?? '0.0'}%',
-                subtitle: 'Borrowing growth',
-                icon: Icons.trending_up,
-                color: Colors.teal,
-                trend: provider.bookStats['borrowing_trend'],
-                trendValue:
-                    (provider.bookStats['borrowing_trend_value'] as num?)
+          Builder(
+            builder: (context) {
+              final localizations = AppLocalizations.of(context);
+              return GridView.count(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisCount: 2,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+                childAspectRatio: 1.3,
+                children: [
+                  // Total Books Card
+                  _buildBookStatCard(
+                    title: localizations.totalBooks,
+                    value: '${provider.bookStats['total_books'] ?? 0}',
+                    subtitle: localizations.allBooksInSystem,
+                    icon: Icons.library_books,
+                    color: Colors.blue,
+                    trend: provider.bookStats['book_trend'],
+                    trendValue: (provider.bookStats['book_trend_value'] as num?)
                         ?.toDouble(),
-              ),
-            ],
+                  ),
+
+                  // Available Books Card
+                  _buildBookStatCard(
+                    title: localizations.availableBooks,
+                    value: '${provider.bookStats['available_books'] ?? 0}',
+                    subtitle: localizations.currentlyAvailable,
+                    icon: Icons.check_circle,
+                    color: Colors.green,
+                  ),
+
+                  // Borrowed Books Card
+                  _buildBookStatCard(
+                    title: localizations.borrowedBooks,
+                    value: '${provider.bookStats['borrowed_books'] ?? 0}',
+                    subtitle: localizations.currentlyBorrowed,
+                    icon: Icons.book_online,
+                    color: Colors.orange,
+                  ),
+
+                  // Most Borrowed Books Card
+                  _buildBookStatCard(
+                    title: localizations.mostBorrowed,
+                    value:
+                        '${(provider.bookStats['most_borrowed_books'] as List?)?.length ?? 0}',
+                    subtitle: localizations.topBorrowedBooks,
+                    icon: Icons.trending_up,
+                    color: Colors.purple,
+                  ),
+
+                  // Best Sellers Card
+                  _buildBookStatCard(
+                    title: localizations.bestSellers,
+                    value:
+                        '${(provider.bookStats['best_sellers'] as List?)?.length ?? 0}',
+                    subtitle: localizations.mostRequestedBooks,
+                    icon: Icons.star,
+                    color: Colors.amber,
+                  ),
+
+                  // Book Trends Card
+                  _buildBookStatCard(
+                    title: localizations.bookTrends,
+                    value:
+                        '${provider.bookStats['borrowing_trend_value']?.toStringAsFixed(1) ?? '0.0'}%',
+                    subtitle: localizations.borrowingGrowth,
+                    icon: Icons.trending_up,
+                    color: Colors.teal,
+                    trend: provider.bookStats['borrowing_trend'],
+                    trendValue:
+                        (provider.bookStats['borrowing_trend_value'] as num?)
+                            ?.toDouble(),
+                  ),
+                ],
+              );
+            },
           ),
 
           const SizedBox(height: 24),
@@ -950,21 +1115,36 @@ class _ReportsScreenState extends State<ReportsScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                book['title'] ?? 'Unknown Title',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 14,
-                                ),
-                              ),
-                              Text(
-                                book['author'] ?? 'Unknown Author',
-                                style: TextStyle(
-                                  color: Theme.of(
+                              Builder(
+                                builder: (context) {
+                                  final localizations = AppLocalizations.of(
                                     context,
-                                  ).colorScheme.onSurfaceVariant,
-                                  fontSize: 12,
-                                ),
+                                  );
+                                  return Text(
+                                    book['title'] ?? localizations.unknownTitle,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14,
+                                    ),
+                                  );
+                                },
+                              ),
+                              Builder(
+                                builder: (context) {
+                                  final localizations = AppLocalizations.of(
+                                    context,
+                                  );
+                                  return Text(
+                                    book['author'] ??
+                                        localizations.unknownAuthor,
+                                    style: TextStyle(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onSurfaceVariant,
+                                      fontSize: 12,
+                                    ),
+                                  );
+                                },
                               ),
                             ],
                           ),
@@ -998,18 +1178,20 @@ class _ReportsScreenState extends State<ReportsScreen> {
   }
 
   Widget _buildFinesReport(ReportsProvider provider) {
+    final localizations = AppLocalizations.of(context);
     return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Report Header
-          const Row(
+          Row(
             children: [
               Icon(Icons.money_off, size: 32, color: Colors.red),
               SizedBox(width: 12),
               Text(
-                'Fines Report',
+                localizations.finesReport,
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
@@ -1020,7 +1202,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Data for ${_formatDate(_startDate)} to ${_formatDate(_endDate)}',
+            localizations.dataFor(
+              _formatDate(_startDate),
+              _formatDate(_endDate),
+            ),
             style: TextStyle(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
               fontSize: 16,
@@ -1037,52 +1222,69 @@ class _ReportsScreenState extends State<ReportsScreen> {
             mainAxisSpacing: 19,
             childAspectRatio: 1.5,
             children: [
-              // Late Book Statistics Card
-              _buildFineStatCard(
-                title: 'Late Book Statistics',
-                value: '${provider.finesStats['total_overdue_books'] ?? 0}',
-                subtitle: 'Overdue books',
-                icon: Icons.warning,
-                color: Colors.orange,
-                additionalInfo:
-                    '${provider.finesStats['avg_days_overdue'] ?? 0} avg days',
+              Builder(
+                builder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return _buildFineStatCard(
+                    title: localizations.lateBookStatistics,
+                    value: '${provider.finesStats['total_overdue_books'] ?? 0}',
+                    subtitle: localizations.overdueBooks,
+                    icon: Icons.warning,
+                    color: Colors.orange,
+                    additionalInfo:
+                        '${provider.finesStats['avg_days_overdue'] ?? 0} ${localizations.avgDays}',
+                  );
+                },
               ),
 
-              // Fine Collection Data Card
-              _buildFineStatCard(
-                title: 'Fine Collection Data',
-                value:
-                    '\$${provider.finesStats['total_fine_amount']?.toStringAsFixed(2) ?? '0.00'}',
-                subtitle: 'Total fines issued',
-                icon: Icons.attach_money,
-                color: Colors.red,
-                additionalInfo:
-                    '${provider.finesStats['total_fines_issued'] ?? 0} fines',
+              Builder(
+                builder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return _buildFineStatCard(
+                    title: localizations.fineCollectionData,
+                    value:
+                        '\$${provider.finesStats['total_fine_amount']?.toStringAsFixed(2) ?? '0.00'}',
+                    subtitle: localizations.totalFinesIssued,
+                    icon: Icons.attach_money,
+                    color: Colors.red,
+                    additionalInfo:
+                        '${provider.finesStats['total_fines_issued'] ?? 0} ${localizations.fines}',
+                  );
+                },
               ),
 
-              // Fine Payment Status Card
-              _buildFineStatCard(
-                title: 'Fine Payment Status',
-                value:
-                    '${provider.finesStats['payment_rate']?.toStringAsFixed(1) ?? '0.0'}%',
-                subtitle: 'Payment rate',
-                icon: Icons.payment,
-                color: Colors.green,
-                additionalInfo:
-                    '\$${provider.finesStats['total_paid_amount']?.toStringAsFixed(2) ?? '0.00'} paid',
+              Builder(
+                builder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return _buildFineStatCard(
+                    title: localizations.finePaymentStatus,
+                    value:
+                        '${provider.finesStats['payment_rate']?.toStringAsFixed(1) ?? '0.0'}%',
+                    subtitle: localizations.paymentRate,
+                    icon: Icons.payment,
+                    color: Colors.green,
+                    additionalInfo:
+                        '\$${provider.finesStats['total_paid_amount']?.toStringAsFixed(2) ?? '0.00'} ${localizations.paid}',
+                  );
+                },
               ),
 
-              // Historical Fine Trends Card
-              _buildFineStatCard(
-                title: 'Historical Fine Trends',
-                value:
-                    '${provider.finesStats['fine_trend_value']?.toStringAsFixed(1) ?? '0.0'}%',
-                subtitle: 'Trend this month',
-                icon: Icons.trending_up,
-                color: Colors.purple,
-                trend: provider.finesStats['fine_trend'],
-                trendValue: (provider.finesStats['fine_trend_value'] as num?)
-                    ?.toDouble(),
+              Builder(
+                builder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return _buildFineStatCard(
+                    title: localizations.historicalFineTrends,
+                    value:
+                        '${provider.finesStats['fine_trend_value']?.toStringAsFixed(1) ?? '0.0'}%',
+                    subtitle: localizations.trendThisMonth,
+                    icon: Icons.trending_up,
+                    color: Colors.purple,
+                    trend: provider.finesStats['fine_trend'],
+                    trendValue:
+                        (provider.finesStats['fine_trend_value'] as num?)
+                            ?.toDouble(),
+                  );
+                },
               ),
             ],
           ),
@@ -1187,6 +1389,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   }
 
   Widget _buildFinesDetailSection(ReportsProvider provider) {
+    final localizations = AppLocalizations.of(context);
     return Card(
       elevation: 2,
       child: Padding(
@@ -1194,9 +1397,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Detailed Statistics',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            Text(
+              localizations.detailedStatistics,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
 
@@ -1205,14 +1408,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
               children: [
                 Expanded(
                   child: _buildDetailItem(
-                    'Overdue with Fines',
+                    localizations.overdueWithFines,
                     '${provider.finesStats['overdue_books_with_fines'] ?? 0}',
                     Colors.orange,
                   ),
                 ),
                 Expanded(
                   child: _buildDetailItem(
-                    'Unpaid Fines',
+                    localizations.unpaidFines,
                     '${provider.finesStats['unpaid_fines'] ?? 0}',
                     Colors.red,
                   ),
@@ -1227,14 +1430,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
               children: [
                 Expanded(
                   child: _buildDetailItem(
-                    'Paid Fines',
+                    localizations.paidFines,
                     '${provider.finesStats['paid_fines'] ?? 0}',
                     Colors.green,
                   ),
                 ),
                 Expanded(
                   child: _buildDetailItem(
-                    'Unpaid Amount',
+                    localizations.unpaidAmount,
                     '\$${provider.finesStats['total_unpaid_amount']?.toStringAsFixed(2) ?? '0.00'}',
                     Colors.red,
                   ),
@@ -1297,21 +1500,37 @@ class _ReportsScreenState extends State<ReportsScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                fine['book_title'] ?? 'Unknown Book',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 14,
-                                ),
-                              ),
-                              Text(
-                                fine['customer_name'] ?? 'Unknown Customer',
-                                style: TextStyle(
-                                  color: Theme.of(
+                              Builder(
+                                builder: (context) {
+                                  final localizations = AppLocalizations.of(
                                     context,
-                                  ).colorScheme.onSurfaceVariant,
-                                  fontSize: 12,
-                                ),
+                                  );
+                                  return Text(
+                                    fine['book_title'] ??
+                                        localizations.unknownBook,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14,
+                                    ),
+                                  );
+                                },
+                              ),
+                              Builder(
+                                builder: (context) {
+                                  final localizations = AppLocalizations.of(
+                                    context,
+                                  );
+                                  return Text(
+                                    fine['customer_name'] ??
+                                        localizations.unknownCustomer,
+                                    style: TextStyle(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onSurfaceVariant,
+                                      fontSize: 12,
+                                    ),
+                                  );
+                                },
                               ),
                             ],
                           ),
@@ -1349,18 +1568,20 @@ class _ReportsScreenState extends State<ReportsScreen> {
   }
 
   Widget _buildDeliveryReport(ReportsProvider provider) {
+    final localizations = AppLocalizations.of(context);
     return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Report Header
-          const Row(
+          Row(
             children: [
               Icon(Icons.local_shipping, size: 32, color: Colors.blue),
               SizedBox(width: 12),
               Text(
-                'Delivery Report',
+                localizations.deliveryReport,
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
@@ -1371,7 +1592,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Data for ${_formatDate(_startDate)} to ${_formatDate(_endDate)}',
+            localizations.dataFor(
+              _formatDate(_startDate),
+              _formatDate(_endDate),
+            ),
             style: TextStyle(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
               fontSize: 16,
@@ -1386,64 +1610,91 @@ class _ReportsScreenState extends State<ReportsScreen> {
             crossAxisCount: 2,
             crossAxisSpacing: 16,
             mainAxisSpacing: 16,
-            childAspectRatio: 1.3,
+            childAspectRatio: 1.25,
             children: [
-              // Total Deliveries Card
-              _buildDeliveryStatCard(
-                title: 'Total Deliveries',
-                value: '${provider.deliveryStats['total_deliveries'] ?? 0}',
-                subtitle: 'All delivery tasks',
-                icon: Icons.local_shipping,
-                color: Colors.blue,
+              Builder(
+                builder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return _buildDeliveryStatCard(
+                    title: localizations.totalDeliveries,
+                    value: '${provider.deliveryStats['total_deliveries'] ?? 0}',
+                    subtitle: localizations.allDeliveryTasks,
+                    icon: Icons.local_shipping,
+                    color: Colors.blue,
+                  );
+                },
               ),
 
-              // Completed Deliveries Card
-              _buildDeliveryStatCard(
-                title: 'Completed Deliveries',
-                value: '${provider.deliveryStats['completed_deliveries'] ?? 0}',
-                subtitle: 'Successfully completed',
-                icon: Icons.check_circle,
-                color: Colors.green,
-                additionalInfo:
-                    '${provider.deliveryStats['overall_completion_rate']?.toStringAsFixed(1) ?? '0.0'}% rate',
+              Builder(
+                builder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return _buildDeliveryStatCard(
+                    title: localizations.completedDeliveries,
+                    value:
+                        '${provider.deliveryStats['completed_deliveries'] ?? 0}',
+                    subtitle: localizations.successfullyCompleted,
+                    icon: Icons.check_circle,
+                    color: Colors.green,
+                    additionalInfo:
+                        '${provider.deliveryStats['overall_completion_rate']?.toStringAsFixed(1) ?? '0.0'}% ${localizations.rate}',
+                  );
+                },
               ),
 
-              // Pending Deliveries Card
-              _buildDeliveryStatCard(
-                title: 'Pending Deliveries',
-                value: '${provider.deliveryStats['pending_deliveries'] ?? 0}',
-                subtitle: 'Awaiting pickup',
-                icon: Icons.schedule,
-                color: Colors.orange,
+              Builder(
+                builder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return _buildDeliveryStatCard(
+                    title: localizations.pendingDeliveries,
+                    value:
+                        '${provider.deliveryStats['pending_deliveries'] ?? 0}',
+                    subtitle: localizations.awaitingPickup,
+                    icon: Icons.schedule,
+                    color: Colors.orange,
+                  );
+                },
               ),
 
-              // Deliveries in Progress Card
-              _buildDeliveryStatCard(
-                title: 'Deliveries in Progress',
-                value:
-                    '${provider.deliveryStats['in_progress_deliveries'] ?? 0}',
-                subtitle: 'Currently being delivered',
-                icon: Icons.delivery_dining,
-                color: Colors.purple,
+              Builder(
+                builder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return _buildDeliveryStatCard(
+                    title: localizations.deliveriesInProgress,
+                    value:
+                        '${provider.deliveryStats['in_progress_deliveries'] ?? 0}',
+                    subtitle: localizations.currentlyBeingDelivered,
+                    icon: Icons.delivery_dining,
+                    color: Colors.purple,
+                  );
+                },
               ),
 
-              // Failed Deliveries Card
-              _buildDeliveryStatCard(
-                title: 'Failed Deliveries',
-                value: '${provider.deliveryStats['failed_deliveries'] ?? 0}',
-                subtitle: 'Not completed',
-                icon: Icons.error,
-                color: Colors.red,
+              Builder(
+                builder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return _buildDeliveryStatCard(
+                    title: localizations.failedDeliveries,
+                    value:
+                        '${provider.deliveryStats['failed_deliveries'] ?? 0}',
+                    subtitle: localizations.notCompleted,
+                    icon: Icons.error,
+                    color: Colors.red,
+                  );
+                },
               ),
 
-              // Agent Performance Card
-              _buildDeliveryStatCard(
-                title: 'Agent Performance',
-                value: '${provider.deliveryStats['top_agents_count'] ?? 0}',
-                subtitle: 'Top performing agents',
-                icon: Icons.people,
-                color: Colors.teal,
-                additionalInfo: 'Top 10 agents',
+              Builder(
+                builder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return _buildDeliveryStatCard(
+                    title: localizations.agentPerformance,
+                    value: '${provider.deliveryStats['top_agents_count'] ?? 0}',
+                    subtitle: localizations.topPerformingAgents,
+                    icon: Icons.people,
+                    color: Colors.teal,
+                    additionalInfo: localizations.top10Agents,
+                  );
+                },
               ),
             ],
           ),
@@ -1471,49 +1722,51 @@ class _ReportsScreenState extends State<ReportsScreen> {
     return Card(
       elevation: 2,
       child: Padding(
-        padding: const EdgeInsets.all(12.0),
+        padding: const EdgeInsets.all(10.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
             Row(
               children: [
-                Icon(icon, color: color, size: 20),
+                Icon(icon, color: color, size: 18),
                 const Spacer(),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Text(
               value,
               style: TextStyle(
-                fontSize: 20,
+                fontSize: 18,
                 fontWeight: FontWeight.bold,
                 color: color,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
             const SizedBox(height: 2),
             Text(
               title,
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-              maxLines: 1,
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
             const SizedBox(height: 1),
             Text(
               subtitle,
               style: TextStyle(
-                fontSize: 10,
+                fontSize: 9,
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
             if (additionalInfo != null) ...[
-              const SizedBox(height: 2),
+              const SizedBox(height: 1),
               Text(
                 additionalInfo,
                 style: TextStyle(
-                  fontSize: 9,
+                  fontSize: 8,
                   color: color.withValues(alpha: 0.7),
                   fontWeight: FontWeight.w500,
                 ),
@@ -1538,9 +1791,17 @@ class _ReportsScreenState extends State<ReportsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Top 10 Performing Delivery Agents',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Text(
+                  localizations.top10PerformingDeliveryAgents,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 16),
 
@@ -1558,22 +1819,37 @@ class _ReportsScreenState extends State<ReportsScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                agent['agent_name'] ?? 'Unknown Agent',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 14,
-                                ),
+                              Builder(
+                                builder: (context) {
+                                  final localizations = AppLocalizations.of(
+                                    context,
+                                  );
+                                  return Text(
+                                    agent['agent_name'] ??
+                                        localizations.unknownAgent,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14,
+                                    ),
+                                  );
+                                },
                               ),
                               const SizedBox(height: 2),
-                              Text(
-                                '${agent['delivery_count'] ?? 0} deliveries',
-                                style: TextStyle(
-                                  color: Theme.of(
+                              Builder(
+                                builder: (context) {
+                                  final localizations = AppLocalizations.of(
                                     context,
-                                  ).colorScheme.onSurfaceVariant,
-                                  fontSize: 12,
-                                ),
+                                  );
+                                  return Text(
+                                    '${agent['delivery_count'] ?? 0} ${localizations.deliveries}',
+                                    style: TextStyle(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onSurfaceVariant,
+                                      fontSize: 12,
+                                    ),
+                                  );
+                                },
                               ),
                             ],
                           ),
@@ -1597,12 +1873,19 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                       : Colors.red,
                                 ),
                               ),
-                              const Text(
-                                'completion rate',
-                                style: TextStyle(
-                                  color: Colors.grey,
-                                  fontSize: 10,
-                                ),
+                              Builder(
+                                builder: (context) {
+                                  final localizations = AppLocalizations.of(
+                                    context,
+                                  );
+                                  return Text(
+                                    localizations.completionRate,
+                                    style: const TextStyle(
+                                      color: Colors.grey,
+                                      fontSize: 10,
+                                    ),
+                                  );
+                                },
                               ),
                             ],
                           ),
@@ -1639,120 +1922,146 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   Widget _buildBorrowingReport(ReportsProvider provider) {
     return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Report Header
-          const Row(
-            children: [
-              Icon(Icons.library_books, size: 32, color: Colors.indigo),
-              SizedBox(width: 12),
-              Text(
-                'Borrowing Report',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.indigo,
-                ),
-              ),
-            ],
+          Builder(
+            builder: (context) {
+              final localizations = AppLocalizations.of(context);
+              return Row(
+                children: [
+                  const Icon(
+                    Icons.library_books,
+                    size: 32,
+                    color: Colors.indigo,
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    localizations.borrowingReport,
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.indigo,
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 8),
-          Text(
-            'Data for ${_formatDate(_startDate)} to ${_formatDate(_endDate)}',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-              fontSize: 16,
-            ),
+          Builder(
+            builder: (context) {
+              final localizations = AppLocalizations.of(context);
+              return Text(
+                localizations.dataFor(
+                  _formatDate(_startDate),
+                  _formatDate(_endDate),
+                ),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontSize: 16,
+                ),
+              );
+            },
           ),
           const SizedBox(height: 24),
 
           // 7 Cards Grid
-          GridView.count(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: 2,
-            crossAxisSpacing: 16,
-            mainAxisSpacing: 16,
-            childAspectRatio: 1.2,
-            children: [
-              // Total Requests Card
-              _buildBorrowingStatCard(
-                title: 'Total Requests',
-                value: '${provider.borrowingStats['total_requests'] ?? 0}',
-                subtitle: 'All borrow requests',
-                icon: Icons.library_books,
-                color: Colors.indigo,
-              ),
+          Builder(
+            builder: (context) {
+              final localizations = AppLocalizations.of(context);
+              return GridView.count(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisCount: 2,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+                childAspectRatio: 1.2,
+                children: [
+                  // Total Requests Card
+                  _buildBorrowingStatCard(
+                    title: localizations.totalRequests,
+                    value: '${provider.borrowingStats['total_requests'] ?? 0}',
+                    subtitle: localizations.allBorrowRequests,
+                    icon: Icons.library_books,
+                    color: Colors.indigo,
+                  ),
 
-              // Approved Requests Card
-              _buildBorrowingStatCard(
-                title: 'Approved Requests',
-                value: '${provider.borrowingStats['approved_requests'] ?? 0}',
-                subtitle: 'Requests approved',
-                icon: Icons.check_circle,
-                color: Colors.green,
-                additionalInfo:
-                    '${(provider.borrowingStats['approval_rate'] ?? 0.0).toStringAsFixed(1)}% rate',
-              ),
+                  // Approved Requests Card
+                  _buildBorrowingStatCard(
+                    title: localizations.approvedRequests,
+                    value:
+                        '${provider.borrowingStats['approved_requests'] ?? 0}',
+                    subtitle: localizations.requestsApproved,
+                    icon: Icons.check_circle,
+                    color: Colors.green,
+                    additionalInfo:
+                        '${localizations.rate} ${(provider.borrowingStats['approval_rate'] ?? 0.0).toStringAsFixed(1)}%',
+                  ),
 
-              // Pending Requests Card
-              _buildBorrowingStatCard(
-                title: 'Pending Requests',
-                value: '${provider.borrowingStats['pending_requests'] ?? 0}',
-                subtitle: 'Awaiting approval',
-                icon: Icons.schedule,
-                color: Colors.orange,
-              ),
+                  // Pending Requests Card
+                  _buildBorrowingStatCard(
+                    title: localizations.pendingRequests,
+                    value:
+                        '${provider.borrowingStats['pending_requests'] ?? 0}',
+                    subtitle: localizations.awaitingApproval,
+                    icon: Icons.schedule,
+                    color: Colors.orange,
+                  ),
 
-              // Late Requests Card
-              _buildBorrowingStatCard(
-                title: 'Late Requests',
-                value: '${provider.borrowingStats['late_requests'] ?? 0}',
-                subtitle: 'Past due date',
-                icon: Icons.warning,
-                color: Colors.red,
-              ),
+                  // Late Requests Card
+                  _buildBorrowingStatCard(
+                    title: localizations.lateRequests,
+                    value: '${provider.borrowingStats['late_requests'] ?? 0}',
+                    subtitle: localizations.pastDueDate,
+                    icon: Icons.warning,
+                    color: Colors.red,
+                  ),
 
-              // Returned Requests Card
-              _buildBorrowingStatCard(
-                title: 'Returned Requests',
-                value: '${provider.borrowingStats['returned_requests'] ?? 0}',
-                subtitle: 'Successfully returned',
-                icon: Icons.assignment_turned_in,
-                color: Colors.teal,
-                additionalInfo:
-                    '${(provider.borrowingStats['return_rate'] ?? 0.0).toStringAsFixed(1)}% rate',
-              ),
+                  // Returned Requests Card
+                  _buildBorrowingStatCard(
+                    title: localizations.returnedRequests,
+                    value:
+                        '${provider.borrowingStats['returned_requests'] ?? 0}',
+                    subtitle: localizations.successfullyReturned,
+                    icon: Icons.assignment_turned_in,
+                    color: Colors.teal,
+                    additionalInfo:
+                        '${localizations.rate} ${(provider.borrowingStats['return_rate'] ?? 0.0).toStringAsFixed(1)}%',
+                  ),
 
-              // Period Analysis Card
-              _buildBorrowingStatCard(
-                title: 'Period Analysis',
-                value:
-                    '${(provider.borrowingStats['trend_value'] ?? 0.0).toStringAsFixed(1)}%',
-                subtitle: 'Trend this period',
-                icon: Icons.trending_up,
-                color: Colors.purple,
-                trend: provider.borrowingStats['trend'],
-                trendValue:
-                    (provider.borrowingStats['trend_value'] as num?)
-                        ?.toDouble() ??
-                    0.0,
-                additionalInfo:
-                    '${provider.borrowingStats['period'] ?? 'monthly'} view',
-              ),
+                  // Period Analysis Card
+                  _buildBorrowingStatCard(
+                    title: localizations.periodAnalysis,
+                    value:
+                        '${(provider.borrowingStats['trend_value'] ?? 0.0).toStringAsFixed(1)}%',
+                    subtitle: localizations.trendThisPeriod,
+                    icon: Icons.trending_up,
+                    color: Colors.purple,
+                    trend: provider.borrowingStats['trend'],
+                    trendValue:
+                        (provider.borrowingStats['trend_value'] as num?)
+                            ?.toDouble() ??
+                        0.0,
+                    additionalInfo:
+                        '${localizations.view} ${provider.borrowingStats['period'] == 'custom' ? localizations.custom : (provider.borrowingStats['period'] ?? localizations.monthly)}',
+                  ),
 
-              // Most Borrowed Books Card
-              _buildBorrowingStatCard(
-                title: 'Most Borrowed Books',
-                value: '${provider.borrowingStats['top_books_count'] ?? 0}',
-                subtitle: 'Top borrowed books',
-                icon: Icons.star,
-                color: Colors.amber,
-                additionalInfo: 'Top 10 books',
-              ),
-            ],
+                  // Most Borrowed Books Card
+                  _buildBorrowingStatCard(
+                    title: localizations.mostBorrowedBooks,
+                    value: '${provider.borrowingStats['top_books_count'] ?? 0}',
+                    subtitle: localizations.topBorrowedBooks,
+                    icon: Icons.star,
+                    color: Colors.amber,
+                    additionalInfo: localizations.top10Books,
+                  ),
+                ],
+              );
+            },
           ),
 
           const SizedBox(height: 24),
@@ -1861,9 +2170,17 @@ class _ReportsScreenState extends State<ReportsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Most Borrowed Books',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Text(
+                  localizations.mostBorrowedBooks,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 16),
 
@@ -1881,22 +2198,37 @@ class _ReportsScreenState extends State<ReportsScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                book['title'] ?? 'Unknown Book',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 14,
-                                ),
+                              Builder(
+                                builder: (context) {
+                                  final localizations = AppLocalizations.of(
+                                    context,
+                                  );
+                                  return Text(
+                                    book['title'] ?? localizations.unknownBook,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14,
+                                    ),
+                                  );
+                                },
                               ),
                               const SizedBox(height: 2),
-                              Text(
-                                book['author'] ?? 'Unknown Author',
-                                style: TextStyle(
-                                  color: Theme.of(
+                              Builder(
+                                builder: (context) {
+                                  final localizations = AppLocalizations.of(
                                     context,
-                                  ).colorScheme.onSurfaceVariant,
-                                  fontSize: 12,
-                                ),
+                                  );
+                                  return Text(
+                                    book['author'] ??
+                                        localizations.unknownAuthor,
+                                    style: TextStyle(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onSurfaceVariant,
+                                      fontSize: 12,
+                                    ),
+                                  );
+                                },
                               ),
                             ],
                           ),
@@ -1929,101 +2261,5 @@ class _ReportsScreenState extends State<ReportsScreen> {
         ),
       ),
     );
-  }
-
-  IconData _getStatIcon(String title) {
-    switch (title.toLowerCase()) {
-      case 'total books':
-        return Icons.book;
-      case 'active borrowings':
-        return Icons.library_books;
-      case 'pending requests':
-        return Icons.pending;
-      case 'total customers':
-      case 'total users':
-        return Icons.people;
-      case 'revenue':
-      case 'total revenue':
-        return Icons.attach_money;
-      case 'overdue books':
-        return Icons.warning;
-      case 'total authors':
-        return Icons.person;
-      case 'total categories':
-        return Icons.category;
-      case 'book ratings':
-        return Icons.star;
-      case 'total orders':
-        return Icons.shopping_cart;
-      default:
-        return Icons.analytics;
-    }
-  }
-
-  Color _getStatColor(String title) {
-    switch (title.toLowerCase()) {
-      case 'total books':
-        return Colors.blue;
-      case 'active borrowings':
-        return Colors.green;
-      case 'pending requests':
-        return Colors.orange;
-      case 'total customers':
-      case 'total users':
-        return Colors.purple;
-      case 'revenue':
-      case 'total revenue':
-        return Colors.green;
-      case 'overdue books':
-        return Colors.red;
-      case 'total authors':
-        return Colors.indigo;
-      case 'total categories':
-        return Colors.teal;
-      case 'book ratings':
-        return Colors.amber;
-      case 'total orders':
-        return Colors.cyan;
-      default:
-        return Colors.grey;
-    }
-  }
-
-  IconData _getReportIcon(String reportType) {
-    switch (reportType) {
-      case 'borrowing':
-        return Icons.library_books;
-      case 'delivery':
-        return Icons.local_shipping;
-      case 'fines':
-        return Icons.money_off;
-      case 'books':
-        return Icons.book;
-      case 'authors':
-        return Icons.person;
-      default:
-        return Icons.analytics;
-    }
-  }
-
-  String _getReportTitle(String reportType) {
-    switch (reportType) {
-      case 'borrowing':
-        return 'Borrowing Report';
-      case 'delivery':
-        return 'Delivery Report';
-      case 'fines':
-        return 'Fines Report';
-      case 'books':
-        return 'Book Popularity';
-      case 'authors':
-        return 'Author Popularity';
-      default:
-        return 'Report';
-    }
-  }
-
-  String _formatDate(DateTime date) {
-    return '${date.day}/${date.month}/${date.year}';
   }
 }

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from ..models import Complaint, ComplaintResponse, User, Order, BorrowRequest
+from ..models import Complaint, ComplaintResponse, User
 
 
 class ComplaintResponseSerializer(serializers.ModelSerializer):
@@ -24,18 +24,13 @@ class ComplaintListSerializer(serializers.ModelSerializer):
     """
     customer_name = serializers.CharField(source='customer.get_full_name', read_only=True)
     customer_email = serializers.CharField(source='customer.email', read_only=True)
-    assigned_to_name = serializers.CharField(source='assigned_to.get_full_name', read_only=True)
-    assigned_to_email = serializers.CharField(source='assigned_to.email', read_only=True)
-    order_number = serializers.CharField(source='related_order.order_number', read_only=True)
     
     class Meta:
         model = Complaint
         fields = [
             'id', 'complaint_id', 'customer', 'customer_name', 'customer_email',
-            'title', 'description', 'complaint_type', 'priority', 'status',
-            'assigned_to', 'assigned_to_name', 'assigned_to_email',
-            'related_order', 'order_number', 'related_borrow_request',
-            'resolution', 'resolved_at', 'created_at', 'updated_at'
+            'title', 'description', 'complaint_type', 'status',
+            'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'complaint_id', 'created_at', 'updated_at']
 
@@ -43,24 +38,42 @@ class ComplaintListSerializer(serializers.ModelSerializer):
 class ComplaintDetailSerializer(serializers.ModelSerializer):
     """
     Serializer for complaint detail view (includes responses).
+    Filters responses based on user type - customers only see non-internal responses.
     """
     customer_name = serializers.CharField(source='customer.get_full_name', read_only=True)
     customer_email = serializers.CharField(source='customer.email', read_only=True)
-    assigned_to_name = serializers.CharField(source='assigned_to.get_full_name', read_only=True)
-    assigned_to_email = serializers.CharField(source='assigned_to.email', read_only=True)
-    order_number = serializers.CharField(source='related_order.order_number', read_only=True)
-    responses = ComplaintResponseSerializer(many=True, read_only=True)
+    responses = serializers.SerializerMethodField()
     
     class Meta:
         model = Complaint
         fields = [
             'id', 'complaint_id', 'customer', 'customer_name', 'customer_email',
-            'title', 'description', 'complaint_type', 'priority', 'status',
-            'assigned_to', 'assigned_to_name', 'assigned_to_email',
-            'related_order', 'order_number', 'related_borrow_request',
-            'resolution', 'resolved_at', 'responses', 'created_at', 'updated_at'
+            'title', 'description', 'complaint_type', 'status',
+            'responses', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'complaint_id', 'created_at', 'updated_at']
+    
+    def get_responses(self, obj):
+        """
+        Filter responses based on user type.
+        Customers only see non-internal responses.
+        Admins see all responses.
+        Responses are ordered by creation date (oldest first).
+        """
+        request = self.context.get('request')
+        if request and request.user:
+            user = request.user
+            if user.user_type == 'customer':
+                # Customers only see non-internal responses
+                responses = obj.responses.filter(is_internal=False).order_by('created_at')
+            else:
+                # Admins see all responses
+                responses = obj.responses.all().order_by('created_at')
+        else:
+            # Default: show all responses (for backward compatibility)
+            responses = obj.responses.all().order_by('created_at')
+        
+        return ComplaintResponseSerializer(responses, many=True, context=self.context).data
 
 
 class ComplaintCreateSerializer(serializers.ModelSerializer):
@@ -70,8 +83,7 @@ class ComplaintCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Complaint
         fields = [
-            'title', 'description', 'complaint_type', 'priority',
-            'related_order', 'related_borrow_request'
+            'title', 'description', 'complaint_type'
         ]
     
     def create(self, validated_data):
@@ -87,14 +99,33 @@ class ComplaintUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Complaint
         fields = [
-            'status', 'priority', 'assigned_to', 'resolution'
+            'status'
         ]
     
     def update(self, instance, validated_data):
-        # Set resolved_at when status is changed to resolved
-        if validated_data.get('status') == 'resolved' and instance.status != 'resolved':
-            from django.utils import timezone
-            validated_data['resolved_at'] = timezone.now()
+        return super().update(instance, validated_data)
+
+
+class ComplaintCustomerUpdateSerializer(serializers.ModelSerializer):
+    """
+    Serializer for customers to update their own complaints.
+    Only allows updating title and description if status is 'open'.
+    """
+    class Meta:
+        model = Complaint
+        fields = [
+            'title', 'description', 'complaint_type'
+        ]
+    
+    def validate(self, attrs):
+        # Customers can only update complaints with status 'open'
+        if self.instance.status != 'open':
+            raise serializers.ValidationError(
+                "You can only update complaints that are still open."
+            )
+        return attrs
+    
+    def update(self, instance, validated_data):
         return super().update(instance, validated_data)
 
 

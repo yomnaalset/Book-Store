@@ -9,13 +9,15 @@ from django.utils import timezone, translation
 from decimal import Decimal
 
 from ..models import (
-    BorrowRequest, BorrowExtension, BorrowFine, BorrowStatistics,
+    BorrowRequest, BorrowExtension, BorrowStatistics,
     Book, User, BorrowStatusChoices
 )
+from ..models.return_model import ReturnFine
+from ..serializers.return_serializers import ReturnFineSerializer
 from ..serializers.borrowing_serializers import (
     BorrowRequestCreateSerializer, BorrowRequestListSerializer, BorrowRequestDetailSerializer,
     BorrowApprovalSerializer, BorrowExtensionCreateSerializer, BorrowExtensionSerializer,
-    BorrowFineSerializer, BorrowRatingSerializer, EarlyReturnSerializer,
+    BorrowRatingSerializer, EarlyReturnSerializer,
     DeliveryUpdateSerializer, MostBorrowedBookSerializer, BorrowingReportSerializer,
     PendingRequestsSerializer, DeliveryReadySerializer, DeliveryManagerSerializer,
     ConfirmPaymentSerializer
@@ -25,7 +27,7 @@ from ..services.borrowing_services import (
     BorrowingService, BorrowingNotificationService, BorrowingReportService, LateReturnService
 )
 from ..services.notification_services import NotificationService
-from ..permissions import IsCustomer, IsLibraryAdmin, IsDeliveryAdmin, IsAnyAdmin, CustomerOrAdmin
+from ..permissions import IsCustomer, IsLibraryAdmin, IsDeliveryAdmin, IsAnyAdmin, CustomerOrAdmin, IsDeliveryAdminOrLibraryAdmin
 from ..utils import format_error_message
 import logging
 
@@ -290,11 +292,52 @@ class BorrowRequestDetailView(generics.RetrieveAPIView):
         try:
             instance = self.get_object()
             serializer = self.get_serializer(instance)
+            data = serializer.data
+            
+            # Check if there's a return request and return fine for this borrowing
+            from ..models.return_model import ReturnRequest, ReturnFine
+            from ..services.return_services import ReturnService
+            from django.utils import timezone
+            
+            # Get the most recent return request for this borrowing
+            return_request = ReturnRequest.objects.filter(
+                borrowing=instance
+            ).order_by('-created_at').first()
+            
+            if return_request:
+                # Get or create return fine (this ensures fine is calculated)
+                return_fine = ReturnService.get_or_create_return_fine(return_request)
+                
+                # Add return fine information to the response
+                if return_fine and return_fine.fine_amount and float(return_fine.fine_amount) > 0:
+                    # Calculate if delay exists
+                    has_delay = False
+                    if instance.expected_return_date:
+                        current_date = timezone.now().date()
+                        expected_date = instance.expected_return_date.date() if hasattr(instance.expected_return_date, 'date') else instance.expected_return_date
+                        has_delay = current_date > expected_date
+                    
+                    # Map payment status for frontend compatibility
+                    fine_status = 'paid' if return_fine.is_paid else 'pending'
+                    
+                    # Update fine amount and status in the response
+                    data['fine_amount'] = float(return_fine.fine_amount)
+                    data['fine_status'] = fine_status
+                    data['overdue_days'] = return_fine.days_late if has_delay else 0
+                    data['payment_method'] = return_fine.payment_method
+                    data['is_finalized'] = return_fine.is_finalized
+                else:
+                    # No fine or fine amount is 0
+                    data['fine_amount'] = 0.0
+                    data['fine_status'] = None
+                    data['overdue_days'] = 0
+                    data['payment_method'] = None
+                    data['is_finalized'] = False
             
             return Response({
                 'success': True,
                 'message': 'Borrowing details retrieved successfully',
-                'data': serializer.data
+                'data': data
             }, status=status.HTTP_200_OK)
             
         except PermissionError as e:
@@ -568,8 +611,10 @@ class BorrowingDeliveryOrdersView(generics.ListAPIView):
         Get ALL borrowing delivery orders assigned to the DM's 'Borrow Requests' list.
         Once a request is assigned to a delivery manager, it remains visible regardless of status.
         This ensures delivery managers can see their complete history of assigned requests.
+        Supports optional status filtering via query parameter.
         """
         from ..models.delivery_model import Order
+        from ..models.borrowing_model import BorrowStatusChoices
         from django.db.models import Q
         
         user = self.request.user
@@ -590,7 +635,33 @@ class BorrowingDeliveryOrdersView(generics.ListAPIView):
             # No status filter - show ALL assigned requests
         )
         
-        # 3. Final Query: Apply the assigned filter (no status restriction)
+        # 3. Apply status filter if provided
+        status_filter = self.request.query_params.get('status')
+        if status_filter and status_filter.lower() != 'all':
+            # Map frontend status values to backend BorrowRequest status values
+            status_mapping = {
+                'pending': BorrowStatusChoices.PENDING,
+                'confirmed': BorrowStatusChoices.ASSIGNED_TO_DELIVERY,  # Orders assigned but not yet accepted
+                'in_delivery': BorrowStatusChoices.OUT_FOR_DELIVERY,  # Delivery in progress
+                'delivered': BorrowStatusChoices.DELIVERED,  # Delivery completed
+                'active': BorrowStatusChoices.ACTIVE,  # Book is actively borrowed
+                'returned': BorrowStatusChoices.RETURNED,  # Book has been returned
+            }
+            
+            backend_status = status_mapping.get(status_filter.lower())
+            if backend_status:
+                assigned_orders_filter = assigned_orders_filter & Q(
+                    borrow_request__status=backend_status
+                )
+                logger.info(f"BorrowingDeliveryOrdersView: Filtering by status: {status_filter} -> {backend_status}")
+            else:
+                # If no mapping found, try direct match (case-insensitive)
+                assigned_orders_filter = assigned_orders_filter & Q(
+                    borrow_request__status__iexact=status_filter
+                )
+                logger.info(f"BorrowingDeliveryOrdersView: Using direct status filter (case-insensitive): {status_filter}")
+        
+        # 4. Final Query: Apply the assigned filter and status filter
         queryset = base_queryset.filter(
             assigned_orders_filter
         ).select_related(
@@ -604,7 +675,7 @@ class BorrowingDeliveryOrdersView(generics.ListAPIView):
         logger.info(f"BorrowingDeliveryOrdersView: Final queryset count for DM {user.id}: {queryset.count()}")
         
         # Log the actual statuses retrieved for immediate debugging
-        for order in queryset:
+        for order in queryset[:5]:  # Log first 5 to avoid spam
             logger.info(f"Fetched Order {order.id} with BR Status: {order.borrow_request.status}")
         
         return queryset
@@ -1163,30 +1234,38 @@ class GetDeliveryLocationView(APIView):
 
 class CompleteDeliveryView(APIView):
     """
-    API view for delivery managers to complete delivery
+    API view for delivery managers and library admins to complete delivery
     """
-    permission_classes = [permissions.IsAuthenticated, IsDeliveryAdmin]
+    permission_classes = [permissions.IsAuthenticated, IsDeliveryAdminOrLibraryAdmin]
     
     def patch(self, request, order_id):
         try:
             from ..models.delivery_model import Order
             order = get_object_or_404(Order, id=order_id, order_type='borrowing')
             
-            # Allow completing delivery when status is 'delivered' (after start delivery) or 'in_delivery'
-            if order.status not in ['in_delivery', 'delivered']:
+            # Get borrow request to check actual status
+            borrow_request = order.borrow_request
+            if not borrow_request:
                 return Response({
                     'success': False,
-                    'message': 'Order is not ready for completion',
-                    'errors': {'status': ['Order status must be in_delivery or delivered']}
+                    'message': 'Borrow request not found for this order',
+                    'errors': {'order': ['This order does not have an associated borrow request']}
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Check borrow_request status - must be OUT_FOR_DELIVERY (delivery_started) to complete
+            if borrow_request.status != BorrowStatusChoices.OUT_FOR_DELIVERY and borrow_request.status != 'out_for_delivery':
+                return Response({
+                    'success': False,
+                    'message': 'Delivery must be started before completion',
+                    'errors': {'status': [f'Borrow request status must be OUT_FOR_DELIVERY (delivery_started). Current status: {borrow_request.status}']}
                 }, status=status.HTTP_400_BAD_REQUEST)
             
             # Update order status to delivered
             order.status = 'delivered'
             order.save()
             
-            # Update borrow request status
-            borrow_request = order.borrow_request
-            borrow_request.status = BorrowStatusChoices.ACTIVE
+            # Update borrow request status to DELIVERED (as per workflow requirements)
+            borrow_request.status = BorrowStatusChoices.DELIVERED
             borrow_request.delivery_date = timezone.now()
             borrow_request.final_return_date = borrow_request.expected_return_date
             borrow_request.save()
@@ -1518,9 +1597,9 @@ class OverdueBorrowingsView(generics.ListAPIView):
 
 class BorrowFineDetailView(generics.RetrieveAPIView):
     """
-    API view for viewing fine details
+    API view for viewing fine details (now using unified ReturnFine model)
     """
-    serializer_class = BorrowFineSerializer
+    serializer_class = ReturnFineSerializer
     permission_classes = [permissions.IsAuthenticated]
     
     def get_object(self):
@@ -1534,9 +1613,9 @@ class BorrowFineDetailView(generics.RetrieveAPIView):
             raise PermissionError("You don't have permission to view this fine")
         
         try:
-            fine = BorrowFine.objects.get(borrow_request=borrow_request)
+            fine = ReturnFine.objects.get(borrow_request=borrow_request, fine_type='borrow')
             return fine
-        except BorrowFine.DoesNotExist:
+        except ReturnFine.DoesNotExist:
             # Return None if no fine exists - this is handled in retrieve method
             return None
     
@@ -1718,14 +1797,16 @@ class BorrowExtensionsListView(generics.ListAPIView):
 
 class BorrowFinesListView(generics.ListAPIView):
     """
-    API view for library managers to view all borrowing fines
+    API view for library managers to view all borrowing fines (now using unified ReturnFine model)
     """
-    serializer_class = BorrowFineSerializer
+    serializer_class = ReturnFineSerializer
     permission_classes = [permissions.IsAuthenticated, IsLibraryAdmin]
     
     def get_queryset(self):
         """Get all borrowing fines with optional filtering"""
-        queryset = BorrowFine.objects.select_related(
+        queryset = ReturnFine.objects.filter(
+            fine_type='borrow'
+        ).select_related(
             'borrow_request__customer',
             'borrow_request__book'
         ).order_by('-created_at')

@@ -3,8 +3,10 @@ import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 import '../../../core/widgets/common/loading_indicator.dart';
+import '../../../core/localization/app_localizations.dart';
 import '../providers/notifications_provider.dart';
 import '../models/notification.dart' as notification_model;
+import '../utils/notification_translator.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -33,9 +35,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Notifications'),
+        title: Text(localizations.notifications),
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.white,
         elevation: 0,
@@ -45,9 +48,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               if (provider.notifications.isNotEmpty) {
                 return TextButton(
                   onPressed: () => _markAllAsRead(),
-                  child: const Text(
-                    'Mark All Read',
-                    style: TextStyle(color: AppColors.white),
+                  child: Text(
+                    localizations.markAllRead,
+                    style: const TextStyle(color: AppColors.white),
                   ),
                 );
               }
@@ -74,9 +77,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     color: AppColors.textHint,
                   ),
                   const SizedBox(height: 16),
-                  const Text(
-                    'Error loading notifications',
-                    style: TextStyle(
+                  Text(
+                    localizations.errorLoadingNotifications,
+                    style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
                       color: AppColors.textPrimary,
@@ -94,7 +97,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   const SizedBox(height: 24),
                   ElevatedButton(
                     onPressed: _loadNotifications,
-                    child: const Text('Retry'),
+                    child: Text(localizations.retry),
                   ),
                 ],
               ),
@@ -112,18 +115,18 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     color: AppColors.textHint,
                   ),
                   const SizedBox(height: 16),
-                  const Text(
-                    'No Notifications',
-                    style: TextStyle(
+                  Text(
+                    localizations.noNotifications,
+                    style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
                       color: AppColors.textPrimary,
                     ),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    'You don\'t have any notifications yet',
-                    style: TextStyle(
+                  Text(
+                    localizations.noNotificationsYet,
+                    style: const TextStyle(
                       fontSize: 14,
                       color: AppColors.textSecondary,
                     ),
@@ -131,7 +134,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   const SizedBox(height: 24),
                   ElevatedButton(
                     onPressed: _loadNotifications,
-                    child: const Text('Refresh'),
+                    child: Text(localizations.refreshButton),
                   ),
                 ],
               ),
@@ -155,6 +158,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Widget _buildNotificationCard(notification_model.Notification notification) {
+    final localizations = AppLocalizations.of(context);
     return Card(
       margin: const EdgeInsets.only(bottom: AppDimensions.paddingM),
       elevation: 2,
@@ -200,7 +204,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       children: [
                         Expanded(
                           child: Text(
-                            notification.title,
+                            NotificationTranslator.translateTitle(
+                              notification.title,
+                              localizations,
+                            ),
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: notification.isRead
@@ -223,7 +230,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      notification.message,
+                      NotificationTranslator.translateMessage(
+                        notification.message,
+                        localizations,
+                      ),
                       style: const TextStyle(
                         fontSize: 14,
                         color: AppColors.textSecondary,
@@ -241,11 +251,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                           color: AppColors.textHint,
                         ),
                         const SizedBox(width: 4),
-                        Text(
-                          _formatDateTime(notification.createdAt),
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textHint,
+                        Flexible(
+                          child: Text(
+                            _formatDateTime(notification.createdAt, context),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textHint,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
                           ),
                         ),
                         const Spacer(),
@@ -265,23 +279,32 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                         ),
                         const SizedBox(width: 8),
                         if (notification.type != 'info')
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: _getNotificationColor(
-                                notification.type,
-                              ).withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              _getNotificationTypeLabel(notification.type),
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w500,
-                                color: _getNotificationColor(notification.type),
+                          Flexible(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _getNotificationColor(
+                                  notification.type,
+                                ).withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                _getNotificationTypeLabel(
+                                  notification.type,
+                                  context,
+                                ),
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w500,
+                                  color: _getNotificationColor(
+                                    notification.type,
+                                  ),
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
                               ),
                             ),
                           ),
@@ -331,38 +354,40 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
   }
 
-  String _getNotificationTypeLabel(String type) {
+  String _getNotificationTypeLabel(String type, BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     switch (type.toLowerCase()) {
       case 'success':
-        return 'Success';
+        return localizations.notificationTypeSuccess;
       case 'warning':
-        return 'Warning';
+        return localizations.notificationTypeWarning;
       case 'error':
-        return 'Error';
+        return localizations.notificationTypeError;
       case 'order':
-        return 'Order';
+        return localizations.notificationTypeOrder;
       case 'borrow':
-        return 'Borrow';
+        return localizations.notificationTypeBorrow;
       case 'delivery':
-        return 'Delivery';
+        return localizations.notificationTypeDelivery;
       case 'info':
       default:
-        return 'Info';
+        return localizations.notificationTypeInfo;
     }
   }
 
-  String _formatDateTime(DateTime dateTime) {
+  String _formatDateTime(DateTime dateTime, BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     final now = DateTime.now();
     final difference = now.difference(dateTime);
 
     if (difference.inDays > 0) {
-      return '${difference.inDays}d ago';
+      return '${difference.inDays} ${localizations.daysAgo}';
     } else if (difference.inHours > 0) {
-      return '${difference.inHours}h ago';
+      return '${difference.inHours} ${localizations.hoursAgo}';
     } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}m ago';
+      return '${difference.inMinutes} ${localizations.minutesAgo}';
     } else {
-      return 'Just now';
+      return localizations.justNow;
     }
   }
 
@@ -376,9 +401,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     await provider.markAllAsRead();
 
     if (mounted) {
+      final localizations = AppLocalizations.of(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('All notifications marked as read'),
+        SnackBar(
+          content: Text(localizations.allNotificationsMarkedRead),
           backgroundColor: AppColors.primary,
         ),
       );
@@ -395,20 +421,19 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     final bool? shouldDelete = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
+        final localizations = AppLocalizations.of(context);
         return AlertDialog(
-          title: const Text('Delete Notification'),
-          content: const Text(
-            'Are you sure you want to delete this notification?',
-          ),
+          title: Text(localizations.deleteNotification),
+          content: Text(localizations.confirmDeleteNotification),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
+              child: Text(localizations.cancel),
             ),
             TextButton(
               onPressed: () => Navigator.of(context).pop(true),
               style: TextButton.styleFrom(foregroundColor: Colors.red),
-              child: const Text('Delete'),
+              child: Text(localizations.deleteButton),
             ),
           ],
         );
@@ -420,9 +445,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       await provider.deleteNotification(notificationId);
 
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         scaffoldMessenger.showSnackBar(
-          const SnackBar(
-            content: Text('Notification deleted successfully'),
+          SnackBar(
+            content: Text(localizations.notificationDeletedSuccessfully),
             backgroundColor: Colors.green,
           ),
         );

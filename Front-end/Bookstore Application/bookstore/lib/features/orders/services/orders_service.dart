@@ -405,6 +405,42 @@ class OrdersService {
   }
 
   // Update delivery assignment status (for delivery managers)
+  // Accept delivery assignment using the new dedicated endpoint
+  // POST /api/delivery/assignments/{id}/accept
+  Future<Map<String, dynamic>> acceptDeliveryAssignment(int assignmentId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/delivery/assignments/$assignmentId/accept/'),
+        headers: {
+          'Content-Type': 'application/json',
+          if (_authToken != null) 'Authorization': 'Bearer $_authToken',
+        },
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'message': data['message'] ?? 'Assignment accepted successfully',
+          'data': data,
+        };
+      } else {
+        return {
+          'success': false,
+          'message': data['error'] ?? data['message'] ?? 'Failed to accept assignment',
+          'error_code': data['error_code'] ?? 'ACCEPT_FAILED',
+        };
+      }
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Network error: ${e.toString()}',
+        'error_code': 'NETWORK_ERROR',
+      };
+    }
+  }
+
   Future<void> updateDeliveryAssignmentStatus(
     int assignmentId,
     String status, {

@@ -4,7 +4,10 @@ import '../../../admin/providers/manager_settings_provider.dart';
 import '../../../../core/services/theme_service.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/services/auth_service.dart';
+import '../../../../core/translations.dart';
+import '../../../../core/localization/app_localizations.dart';
 import '../../../auth/providers/auth_provider.dart';
+import '../../../profile/providers/language_preference_provider.dart';
 
 class ManagerSettingsScreen extends StatefulWidget {
   const ManagerSettingsScreen({super.key});
@@ -23,32 +26,31 @@ class _ManagerSettingsScreenState extends State<ManagerSettingsScreen> {
   int _itemsPerPage = 10;
   bool _autoRefresh = true;
   int _refreshInterval = 30;
+  ThemeService? _themeService;
 
   @override
   void initState() {
     super.initState();
-    _loadSettings();
 
-    // Listen to theme changes
+    // Defer loading settings until after build phase completes
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final themeService = context.read<ThemeService>();
-      themeService.addListener(_onThemeChanged);
+      _loadSettings();
+      _themeService = context.read<ThemeService>();
+      _themeService?.addListener(_onThemeChanged);
     });
   }
 
   @override
   void dispose() {
-    // Remove theme listener
-    final themeService = context.read<ThemeService>();
-    themeService.removeListener(_onThemeChanged);
+    // Remove theme listener using saved reference
+    _themeService?.removeListener(_onThemeChanged);
     super.dispose();
   }
 
   void _onThemeChanged() {
-    if (mounted) {
-      final themeService = context.read<ThemeService>();
+    if (mounted && _themeService != null) {
       setState(() {
-        _isDarkMode = themeService.isDarkMode;
+        _isDarkMode = _themeService!.isDarkMode;
       });
     }
   }
@@ -61,11 +63,18 @@ class _ManagerSettingsScreenState extends State<ManagerSettingsScreen> {
     try {
       final provider = context.read<ManagerSettingsProvider>();
       final themeService = context.read<ThemeService>();
+      final translationsProvider = context.read<TranslationsProvider>();
+
       await provider.loadSettings();
+
+      // Get current language from TranslationsProvider (source of truth for UI)
+      final currentLocale = translationsProvider.currentLocale;
+      final currentLanguageCode = currentLocale.languageCode;
 
       // Update local state with loaded settings from provider
       setState(() {
-        _selectedLanguage = provider.language;
+        // Use TranslationsProvider's current locale as the source of truth
+        _selectedLanguage = currentLanguageCode;
         _isDarkMode = themeService.isDarkMode; // Get from ThemeService instead
         _emailNotifications = provider.emailNotifications;
         _pushNotifications = provider.pushNotifications;
@@ -76,8 +85,13 @@ class _ManagerSettingsScreenState extends State<ManagerSettingsScreen> {
       });
     } catch (e) {
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading settings: ${e.toString()}')),
+          SnackBar(
+            content: Text(
+              '${localizations.errorLoadingSettings}: ${e.toString()}',
+            ),
+          ),
         );
       }
     } finally {
@@ -117,16 +131,30 @@ class _ManagerSettingsScreenState extends State<ManagerSettingsScreen> {
         'refresh_interval': _refreshInterval,
       });
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Settings saved successfully')),
-        );
+      if (mounted && context.mounted) {
+        try {
+          final localizations = AppLocalizations.of(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(localizations.settingsSavedSuccessfully)),
+          );
+        } catch (_) {
+          // Widget disposed, ignore
+        }
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error saving settings: ${e.toString()}')),
-        );
+      if (mounted && context.mounted) {
+        try {
+          final localizations = AppLocalizations.of(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '${localizations.errorSavingSettings}: ${e.toString()}',
+              ),
+            ),
+          );
+        } catch (_) {
+          // Widget disposed, ignore
+        }
       }
     } finally {
       if (mounted) {
@@ -138,22 +166,21 @@ class _ManagerSettingsScreenState extends State<ManagerSettingsScreen> {
   }
 
   Future<void> _resetToDefaults() async {
+    final localizations = AppLocalizations.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Reset to Defaults'),
-        content: const Text(
-          'Are you sure you want to reset all settings to their default values? This action cannot be undone.',
-        ),
+        title: Text(localizations.resetToDefaults),
+        content: Text(localizations.resetToDefaultsConfirmation),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text(localizations.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Reset'),
+            child: Text(localizations.reset),
           ),
         ],
       ),
@@ -186,15 +213,19 @@ class _ManagerSettingsScreenState extends State<ManagerSettingsScreen> {
         });
 
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Settings reset to defaults')),
+            SnackBar(content: Text(localizations.settingsResetToDefaults)),
           );
         }
       } catch (e) {
         if (mounted) {
+          final localizations = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Error resetting settings: ${e.toString()}'),
+              content: Text(
+                '${localizations.errorResettingSettings}: ${e.toString()}',
+              ),
             ),
           );
         }
@@ -210,14 +241,15 @@ class _ManagerSettingsScreenState extends State<ManagerSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Manager Settings'),
+        title: Text(localizations.preferences),
         actions: [
           IconButton(
             onPressed: _isLoading ? null : _resetToDefaults,
             icon: const Icon(Icons.restore),
-            tooltip: 'Reset to Defaults',
+            tooltip: localizations.resetToDefault,
           ),
         ],
       ),
@@ -229,217 +261,341 @@ class _ManagerSettingsScreenState extends State<ManagerSettingsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Language Settings
-                  _buildSectionCard(
-                    title: 'Language & Display',
-                    icon: Icons.language,
-                    children: [
-                      ListTile(
-                        title: const Text('Language'),
-                        subtitle: const Text('Select your preferred language'),
-                        trailing: DropdownButton<String>(
-                          value: _selectedLanguage,
-                          items: const [
-                            DropdownMenuItem(
-                              value: 'en',
-                              child: Text('English'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'ar',
-                              child: Text('العربية'),
-                            ),
-                          ],
-                          onChanged: (value) {
-                            if (value != null) {
-                              setState(() {
-                                _selectedLanguage = value;
-                              });
-                            }
-                          },
-                        ),
-                      ),
-                      Consumer<ThemeService>(
-                        builder: (context, themeService, child) {
-                          final theme = Theme.of(context);
-                          return Container(
-                            margin: const EdgeInsets.only(top: 8, bottom: 8),
-                            decoration: BoxDecoration(
-                              color: theme.colorScheme.surface,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: Icon(
-                                Icons.dark_mode,
-                                color: theme.colorScheme.primary,
-                              ),
-                              title: const Text('Dark Mode'),
-                              subtitle: Text(
-                                themeService.isDarkMode
-                                    ? 'Enabled'
-                                    : 'Disabled',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                              trailing: Switch(
-                                value: themeService.isDarkMode,
-                                onChanged: (value) async {
-                                  setState(() {
-                                    _isDarkMode = value;
-                                  });
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return _buildSectionCard(
+                        title:
+                            '${localizations.language} & ${localizations.appearance}',
+                        icon: Icons.language,
+                        children: [
+                          Consumer<TranslationsProvider>(
+                            builder: (context, translationsProvider, child) {
+                              final localizations = AppLocalizations.of(
+                                context,
+                              );
+                              return ListTile(
+                                title: Text(localizations.language),
+                                subtitle: Text(localizations.appLanguage),
+                                trailing: DropdownButton<String>(
+                                  value: _selectedLanguage,
+                                  items: [
+                                    DropdownMenuItem(
+                                      value: 'en',
+                                      child: Text(
+                                        localizations.englishLanguage,
+                                      ),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 'ar',
+                                      child: Text(localizations.arabicLanguage),
+                                    ),
+                                  ],
+                                  onChanged: (value) async {
+                                    if (value != null &&
+                                        value != _selectedLanguage) {
+                                      setState(() {
+                                        _selectedLanguage = value;
+                                      });
 
-                                  await themeService.setThemeMode(
-                                    value ? ThemeMode.dark : ThemeMode.light,
-                                  );
-                                },
-                                activeTrackColor: theme.colorScheme.primary,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ],
+                                      // Store context-dependent values before async gap
+                                      final authProvider =
+                                          Provider.of<AuthProvider>(
+                                            context,
+                                            listen: false,
+                                          );
+                                      final token = authProvider.token;
+                                      final languageProvider = token != null
+                                          ? Provider.of<
+                                              LanguagePreferenceProvider
+                                            >(context, listen: false)
+                                          : null;
+                                      final successMessage = value == 'en'
+                                          ? localizations
+                                                .languageChangedToEnglish
+                                          : localizations
+                                                .languageChangedToArabic;
+                                      final scaffoldMessenger =
+                                          ScaffoldMessenger.of(context);
+
+                                      // Immediately update TranslationsProvider to trigger RTL/LTR switch
+                                      final newLocale = value == 'ar'
+                                          ? const Locale('ar', 'SA')
+                                          : const Locale('en', 'US');
+                                      await translationsProvider.changeLocale(
+                                        newLocale,
+                                      );
+
+                                      // Check mounted before using context after async gap
+                                      if (!mounted) return;
+
+                                      // Optionally sync with server if user is authenticated
+                                      if (token != null &&
+                                          languageProvider != null) {
+                                        try {
+                                          await languageProvider
+                                              .updateLanguagePreference(
+                                                token,
+                                                value,
+                                              );
+                                        } catch (e) {
+                                          // Silently fail - local change still works
+                                          debugPrint(
+                                            'Failed to sync language to server: $e',
+                                          );
+                                        }
+                                      }
+
+                                      if (mounted) {
+                                        scaffoldMessenger.showSnackBar(
+                                          SnackBar(
+                                            content: Text(successMessage),
+                                            backgroundColor: AppColors.success,
+                                            duration: const Duration(
+                                              seconds: 2,
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                    }
+                                  },
+                                ),
+                              );
+                            },
+                          ),
+                          Consumer<ThemeService>(
+                            builder: (context, themeService, child) {
+                              final theme = Theme.of(context);
+                              return Container(
+                                margin: const EdgeInsets.only(
+                                  top: 8,
+                                  bottom: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.surface,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  leading: Icon(
+                                    Icons.dark_mode,
+                                    color: theme.colorScheme.primary,
+                                  ),
+                                  title: Text(localizations.darkMode),
+                                  subtitle: Text(
+                                    themeService.isDarkMode
+                                        ? localizations.enabled
+                                        : localizations.disabled,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                  trailing: Switch(
+                                    value: themeService.isDarkMode,
+                                    onChanged: (value) async {
+                                      setState(() {
+                                        _isDarkMode = value;
+                                      });
+
+                                      await themeService.setThemeMode(
+                                        value
+                                            ? ThemeMode.dark
+                                            : ThemeMode.light,
+                                      );
+                                    },
+                                    activeTrackColor: theme.colorScheme.primary,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
+                      );
+                    },
                   ),
                   const SizedBox(height: 16),
 
                   // Notification Settings
-                  _buildSectionCard(
-                    title: 'Notifications',
-                    icon: Icons.notifications,
-                    children: [
-                      SwitchListTile(
-                        title: const Text('Email Notifications'),
-                        subtitle: const Text('Receive notifications via email'),
-                        value: _emailNotifications,
-                        onChanged: (value) {
-                          setState(() {
-                            _emailNotifications = value;
-                          });
-                        },
-                      ),
-                      SwitchListTile(
-                        title: const Text('Push Notifications'),
-                        subtitle: const Text('Receive push notifications'),
-                        value: _pushNotifications,
-                        onChanged: (value) {
-                          setState(() {
-                            _pushNotifications = value;
-                          });
-                        },
-                      ),
-                      SwitchListTile(
-                        title: const Text('SMS Notifications'),
-                        subtitle: const Text('Receive notifications via SMS'),
-                        value: _smsNotifications,
-                        onChanged: (value) {
-                          setState(() {
-                            _smsNotifications = value;
-                          });
-                        },
-                      ),
-                    ],
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return _buildSectionCard(
+                        title: localizations.notificationSettings,
+                        icon: Icons.notifications,
+                        children: [
+                          SwitchListTile(
+                            title: Text(localizations.emailNotifications),
+                            subtitle: Text(
+                              localizations.receiveNotificationsViaEmail,
+                            ),
+                            value: _emailNotifications,
+                            onChanged: (value) {
+                              setState(() {
+                                _emailNotifications = value;
+                              });
+                            },
+                          ),
+                          SwitchListTile(
+                            title: Text(localizations.pushNotifications),
+                            subtitle: Text(
+                              localizations.receivePushNotifications,
+                            ),
+                            value: _pushNotifications,
+                            onChanged: (value) {
+                              setState(() {
+                                _pushNotifications = value;
+                              });
+                            },
+                          ),
+                          SwitchListTile(
+                            title: Text(localizations.smsNotifications),
+                            subtitle: Text(
+                              localizations.receiveNotificationsViaSms,
+                            ),
+                            value: _smsNotifications,
+                            onChanged: (value) {
+                              setState(() {
+                                _smsNotifications = value;
+                              });
+                            },
+                          ),
+                        ],
+                      );
+                    },
                   ),
                   const SizedBox(height: 16),
 
                   // Display Settings
-                  _buildSectionCard(
-                    title: 'Display & Performance',
-                    icon: Icons.settings,
-                    children: [
-                      ListTile(
-                        title: const Text('Items per Page'),
-                        subtitle: const Text(
-                          'Number of items to display per page',
-                        ),
-                        trailing: DropdownButton<int>(
-                          value: _itemsPerPage,
-                          items: const [
-                            DropdownMenuItem(value: 5, child: Text('5')),
-                            DropdownMenuItem(value: 10, child: Text('10')),
-                            DropdownMenuItem(value: 20, child: Text('20')),
-                            DropdownMenuItem(value: 50, child: Text('50')),
-                          ],
-                          onChanged: (value) {
-                            if (value != null) {
-                              setState(() {
-                                _itemsPerPage = value;
-                              });
-                            }
-                          },
-                        ),
-                      ),
-                      SwitchListTile(
-                        title: const Text('Auto Refresh'),
-                        subtitle: const Text('Automatically refresh data'),
-                        value: _autoRefresh,
-                        onChanged: (value) {
-                          setState(() {
-                            _autoRefresh = value;
-                          });
-                        },
-                      ),
-                      if (_autoRefresh) ...[
-                        ListTile(
-                          title: const Text('Refresh Interval'),
-                          subtitle: const Text(
-                            'How often to refresh data (seconds)',
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return _buildSectionCard(
+                        title: localizations.settings,
+                        icon: Icons.settings,
+                        children: [
+                          ListTile(
+                            title: Text(localizations.itemsPerPage),
+                            subtitle: Text(
+                              localizations.numberOfItemsToDisplayPerPage,
+                            ),
+                            trailing: DropdownButton<int>(
+                              value: _itemsPerPage,
+                              items: const [
+                                DropdownMenuItem(value: 5, child: Text('5')),
+                                DropdownMenuItem(value: 10, child: Text('10')),
+                                DropdownMenuItem(value: 20, child: Text('20')),
+                                DropdownMenuItem(value: 50, child: Text('50')),
+                              ],
+                              onChanged: (value) {
+                                if (value != null) {
+                                  setState(() {
+                                    _itemsPerPage = value;
+                                  });
+                                }
+                              },
+                            ),
                           ),
-                          trailing: DropdownButton<int>(
-                            value: _refreshInterval,
-                            items: const [
-                              DropdownMenuItem(value: 15, child: Text('15s')),
-                              DropdownMenuItem(value: 30, child: Text('30s')),
-                              DropdownMenuItem(value: 60, child: Text('1m')),
-                              DropdownMenuItem(value: 300, child: Text('5m')),
-                            ],
+                          SwitchListTile(
+                            title: Text(localizations.autoRefresh),
+                            subtitle: Text(
+                              localizations.automaticallyRefreshData,
+                            ),
+                            value: _autoRefresh,
                             onChanged: (value) {
-                              if (value != null) {
-                                setState(() {
-                                  _refreshInterval = value;
-                                });
-                              }
+                              setState(() {
+                                _autoRefresh = value;
+                              });
                             },
                           ),
-                        ),
-                      ],
-                    ],
+                          if (_autoRefresh) ...[
+                            ListTile(
+                              title: Text(localizations.refreshInterval),
+                              subtitle: Text(
+                                localizations.howOftenToRefreshData,
+                              ),
+                              trailing: DropdownButton<int>(
+                                value: _refreshInterval,
+                                items: const [
+                                  DropdownMenuItem(
+                                    value: 15,
+                                    child: Text('15s'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 30,
+                                    child: Text('30s'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 60,
+                                    child: Text('1m'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 300,
+                                    child: Text('5m'),
+                                  ),
+                                ],
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    setState(() {
+                                      _refreshInterval = value;
+                                    });
+                                  }
+                                },
+                              ),
+                            ),
+                          ],
+                        ],
+                      );
+                    },
                   ),
                   const SizedBox(height: 16),
 
                   // Account Actions
-                  _buildSectionCard(
-                    title: 'Account Actions',
-                    icon: Icons.admin_panel_settings,
-                    children: [
-                      ListTile(
-                        leading: const Icon(
-                          Icons.logout,
-                          color: AppColors.error,
-                        ),
-                        title: const Text(
-                          'Sign Out',
-                          style: TextStyle(
-                            color: AppColors.error,
-                            fontWeight: FontWeight.w600,
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return _buildSectionCard(
+                        title: localizations.accountActions,
+                        icon: Icons.admin_panel_settings,
+                        children: [
+                          ListTile(
+                            leading: const Icon(
+                              Icons.logout,
+                              color: AppColors.error,
+                            ),
+                            title: Text(
+                              localizations.signOut,
+                              style: const TextStyle(
+                                color: AppColors.error,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            subtitle: Text(localizations.signOutSubtitle),
+                            trailing: const Icon(
+                              Icons.arrow_forward_ios,
+                              size: 16,
+                            ),
+                            onTap: () => _showLogoutDialog(context),
                           ),
-                        ),
-                        subtitle: const Text('Sign out of your account'),
-                        trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                        onTap: () => _showLogoutDialog(context),
-                      ),
-                    ],
+                        ],
+                      );
+                    },
                   ),
                   const SizedBox(height: 16),
 
                   // Save Button
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _saveSettings,
-                      child: const Text('Save Settings'),
-                    ),
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: ElevatedButton(
+                          onPressed: _isLoading ? null : _saveSettings,
+                          child: Text(localizations.saveChanges),
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -449,6 +605,7 @@ class _ManagerSettingsScreenState extends State<ManagerSettingsScreen> {
 
   void _showLogoutDialog(BuildContext context) {
     final theme = Theme.of(context);
+    final localizations = AppLocalizations.of(context);
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -459,7 +616,7 @@ class _ManagerSettingsScreenState extends State<ManagerSettingsScreen> {
             borderRadius: BorderRadius.circular(16),
           ),
           title: Text(
-            'Sign Out',
+            localizations.signOut,
             style: TextStyle(
               color: theme.colorScheme.onSurface,
               fontWeight: FontWeight.bold,
@@ -467,7 +624,7 @@ class _ManagerSettingsScreenState extends State<ManagerSettingsScreen> {
             ),
           ),
           content: Text(
-            'Are you sure you want to sign out?',
+            localizations.signOutConfirmation,
             style: TextStyle(
               color: theme.colorScheme.onSurfaceVariant,
               fontSize: 16,
@@ -483,9 +640,12 @@ class _ManagerSettingsScreenState extends State<ManagerSettingsScreen> {
                   vertical: 12,
                 ),
               ),
-              child: const Text(
-                'Cancel',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              child: Text(
+                localizations.cancel,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
             ElevatedButton(
@@ -504,9 +664,12 @@ class _ManagerSettingsScreenState extends State<ManagerSettingsScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
-              child: const Text(
-                'Sign Out',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              child: Text(
+                localizations.signOut,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ],

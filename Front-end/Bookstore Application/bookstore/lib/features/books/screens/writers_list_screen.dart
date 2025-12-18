@@ -6,6 +6,7 @@ import '../../../core/widgets/common/error_message.dart';
 import '../../../core/widgets/common/loading_indicator.dart';
 import '../providers/authors_provider.dart';
 import '../models/author.dart';
+import '../../../core/localization/app_localizations.dart';
 
 class AllWritersScreen extends StatefulWidget {
   const AllWritersScreen({super.key});
@@ -37,7 +38,12 @@ class _AllWritersScreenState extends State<AllWritersScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('All Writers'),
+        title: Builder(
+          builder: (context) {
+            final localizations = AppLocalizations.of(context);
+            return Text(localizations.authors);
+          },
+        ),
         backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
         foregroundColor: Theme.of(context).appBarTheme.foregroundColor,
         actions: [
@@ -46,7 +52,7 @@ class _AllWritersScreenState extends State<AllWritersScreen> {
               _loadWriters();
             },
             icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh',
+            tooltip: AppLocalizations.of(context).refresh,
           ),
         ],
       ),

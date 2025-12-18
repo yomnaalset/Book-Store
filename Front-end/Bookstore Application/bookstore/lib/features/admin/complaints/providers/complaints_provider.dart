@@ -55,8 +55,6 @@ class ComplaintsProvider with ChangeNotifier {
         limit: limit,
         search: search,
         status: status,
-        type: type,
-        priority: priority,
       );
 
       _complaints = result.results;
@@ -129,13 +127,10 @@ class ComplaintsProvider with ChangeNotifier {
     try {
       await _apiService.assignComplaint(id, staffId);
 
-      // Update complaint assignment in the list
+      // Update complaint status in the list
       final index = _complaints.indexWhere((c) => c.id == id);
       if (index != -1) {
-        _complaints[index] = _complaints[index].copyWith(
-          assignedToId: staffId,
-          status: 'in_progress',
-        );
+        _complaints[index] = _complaints[index].copyWith(status: 'in_progress');
       }
 
       _isLoading = false;
@@ -177,22 +172,18 @@ class ComplaintsProvider with ChangeNotifier {
   }
 
   // Resolve complaint
-  Future<void> resolveComplaint(int id, String resolution) async {
+  Future<void> resolveComplaint(int id) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
 
     try {
-      await _apiService.resolveComplaint(id, resolution);
+      await _apiService.resolveComplaint(id);
 
-      // Update complaint resolution in the list
+      // Update complaint status in the list
       final index = _complaints.indexWhere((c) => c.id == id);
       if (index != -1) {
-        _complaints[index] = _complaints[index].copyWith(
-          status: 'resolved',
-          resolution: resolution,
-          resolvedAt: DateTime.now(),
-        );
+        _complaints[index] = _complaints[index].copyWith(status: 'resolved');
       }
 
       _isLoading = false;

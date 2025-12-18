@@ -9,7 +9,6 @@ import '../providers/delivery_tasks_provider.dart';
 import '../providers/notifications_provider.dart';
 import '../../../features/delivery_manager/providers/delivery_status_provider.dart';
 import '../../../features/auth/providers/auth_provider.dart';
-import '../widgets/dashboard_stats_card.dart';
 import '../widgets/quick_action_button.dart';
 import '../widgets/task_list_tile.dart';
 import '../widgets/availability_toggle.dart';
@@ -37,7 +36,10 @@ class _DeliveryManagerDashboardScreenState
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Defer provider initialization until after build phase completes
+    WidgetsBinding.instance.addPostFrameCallback((_) {
     _initializeProviders();
+    });
     _startPeriodicStatusRefresh();
   }
 
@@ -126,7 +128,8 @@ class _DeliveryManagerDashboardScreenState
     if (token != null && token.isNotEmpty) {
       statusProvider.setToken(token);
       // Clear any existing errors now that we have a token
-      statusProvider.clearError();
+      // Defer clearError to avoid calling notifyListeners during build
+      Future.microtask(() => statusProvider.clearError());
       debugPrint('DeliveryManagerDashboard: Token set for status provider');
     } else {
       debugPrint(
@@ -218,7 +221,9 @@ class _DeliveryManagerDashboardScreenState
             statusProvider.loadCurrentStatus(),
             notificationsProvider.refreshUnreadCount(),
           ]);
-          debugPrint('Dashboard: Refreshed tasks - Assigned: ${tasksProvider.assignedTasksCount}, Completed: ${tasksProvider.completedTasksCount}, In Progress: ${tasksProvider.inTransitTasksCount}');
+          debugPrint(
+            'Dashboard: Refreshed tasks - Assigned: ${tasksProvider.assignedTasksCount}, Completed: ${tasksProvider.completedTasksCount}, In Progress: ${tasksProvider.inTransitTasksCount}',
+          );
         },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -232,10 +237,6 @@ class _DeliveryManagerDashboardScreenState
 
               // Availability Toggle
               _buildAvailabilitySection(),
-              const SizedBox(height: 24),
-
-              // Dashboard Stats
-              _buildDashboardStats(),
               const SizedBox(height: 24),
 
               // Quick Actions
@@ -282,15 +283,6 @@ class _DeliveryManagerDashboardScreenState
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '${provider.assignedTasksCount} ${AppTranslations.t(context, 'assigned_tasks')}',
-                      style: TextStyle(
-                        color: theme.colorScheme.onPrimary,
-                        fontSize: 16,
-                        // opacity: 0.9,
-                      ),
-                    ),
                   ],
                 ),
               ),
@@ -329,8 +321,12 @@ class _DeliveryManagerDashboardScreenState
                   currentStatus: provider.currentStatus,
                   canChangeManually: provider.canChangeManually,
                   onStatusChanged: (status) async {
-                    // Show loading indicator
+                    // Capture context-dependent values before async gap
                     final scaffoldMessenger = ScaffoldMessenger.of(context);
+                    final localizations = AppLocalizations.of(context);
+                    final statusLabel = status == 'online'
+                        ? localizations.online
+                        : localizations.offline;
 
                     // Use the new unified status provider
                     final success = await provider.updateStatus(status);
@@ -341,7 +337,7 @@ class _DeliveryManagerDashboardScreenState
                       scaffoldMessenger.showSnackBar(
                         SnackBar(
                           content: Text(
-                            'Status updated to ${status == 'online' ? 'Online' : 'Offline'}',
+                            localizations.statusUpdatedTo(statusLabel),
                           ),
                           backgroundColor: Colors.green,
                           duration: const Duration(seconds: 2),
@@ -363,56 +359,6 @@ class _DeliveryManagerDashboardScreenState
           ),
         );
       },
-    );
-  }
-
-  Widget _buildDashboardStats() {
-    final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          AppTranslations.t(context, 'today_stats'),
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: theme.colorScheme.onSurface,
-          ),
-        ),
-        const SizedBox(height: 16),
-        Consumer<DeliveryTasksProvider>(
-          builder: (context, provider, child) {
-            return GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              childAspectRatio: 1.5,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              children: [
-                DashboardStatsCard(
-                  title: AppTranslations.t(context, 'assigned_tasks'),
-                  value: provider.assignedTasksCount.toString(),
-                  icon: Icons.assignment_outlined,
-                  color: AppColors.warning,
-                ),
-                DashboardStatsCard(
-                  title: AppTranslations.t(context, 'completed_tasks'),
-                  value: provider.completedTasksCount.toString(),
-                  icon: Icons.check_circle_outline,
-                  color: AppColors.success,
-                ),
-                DashboardStatsCard(
-                  title: AppTranslations.t(context, 'in_progress_tasks'),
-                  value: provider.inTransitTasksCount.toString(),
-                  icon: Icons.local_shipping_outlined,
-                  color: AppColors.info,
-                ),
-              ],
-            );
-          },
-        ),
-      ],
     );
   }
 

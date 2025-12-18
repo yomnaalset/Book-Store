@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 import '../../../core/extensions/theme_extensions.dart';
+import '../../../core/localization/app_localizations.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../models/review.dart';
 import '../providers/reviews_provider.dart';
@@ -79,17 +80,29 @@ class _ReviewsListState extends State<ReviewsList> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'Reviews (${reviewsProvider.reviews.length})',
-                    style: TextStyle(
-                      fontSize: AppDimensions.fontSizeL,
-                      fontWeight: FontWeight.bold,
-                      color: context.textColor,
-                    ),
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Text(
+                        localizations.reviewsCountWithNumber(
+                          reviewsProvider.reviews.length,
+                        ),
+                        style: TextStyle(
+                          fontSize: AppDimensions.fontSizeL,
+                          fontWeight: FontWeight.bold,
+                          color: context.textColor,
+                        ),
+                      );
+                    },
                   ),
-                  TextButton(
-                    onPressed: () => _showAddReviewDialog(),
-                    child: const Text('Write Review'),
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return TextButton(
+                        onPressed: () => _showAddReviewDialog(),
+                        child: Text(localizations.writeReviewLink),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -127,44 +140,64 @@ class _ReviewsListState extends State<ReviewsList> {
   }
 
   Widget _buildEmptyState() {
-    return Padding(
-      padding: const EdgeInsets.all(AppDimensions.paddingXL),
-      child: Column(
-        children: [
-          const Icon(
-            Icons.rate_review_outlined,
-            size: 64,
-            color: AppColors.textHint,
-          ),
-          const SizedBox(height: AppDimensions.spacingL),
-          const Text(
-            'No reviews yet',
-            style: TextStyle(
-              fontSize: AppDimensions.fontSizeL,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textSecondary,
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppDimensions.paddingXL),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.rate_review_outlined,
+              size: 64,
+              color: AppColors.textHint,
             ),
-          ),
-          const SizedBox(height: AppDimensions.spacingS),
-          const Text(
-            'Be the first to share your thoughts about this book!',
-            style: TextStyle(
-              fontSize: AppDimensions.fontSizeM,
-              color: AppColors.textSecondary,
+            const SizedBox(height: AppDimensions.spacingL),
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Text(
+                  localizations.noReviewsYet,
+                  style: const TextStyle(
+                    fontSize: AppDimensions.fontSizeL,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondary,
+                  ),
+                  textAlign: TextAlign.center,
+                );
+              },
             ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: AppDimensions.spacingL),
-          ElevatedButton.icon(
-            onPressed: () => _showAddReviewDialog(),
-            icon: const Icon(Icons.rate_review),
-            label: const Text('Write First Review'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
+            const SizedBox(height: AppDimensions.spacingS),
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Text(
+                  localizations.beFirstToShare,
+                  style: const TextStyle(
+                    fontSize: AppDimensions.fontSizeM,
+                    color: AppColors.textSecondary,
+                  ),
+                  textAlign: TextAlign.center,
+                );
+              },
             ),
-          ),
-        ],
+            const SizedBox(height: AppDimensions.spacingL),
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return ElevatedButton.icon(
+                  onPressed: () => _showAddReviewDialog(),
+                  icon: const Icon(Icons.rate_review),
+                  label: Text(localizations.writeFirstReview),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -217,17 +250,16 @@ class _ReviewsListState extends State<ReviewsList> {
   }
 
   void _showDeleteReviewDialog(Review review) {
+    final localizations = AppLocalizations.of(context);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Review'),
-        content: const Text(
-          'Are you sure you want to delete this review? This action cannot be undone.',
-        ),
+        title: Text(localizations.deleteReview),
+        content: Text(localizations.confirmDeleteReview),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text(localizations.cancel),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -238,7 +270,7 @@ class _ReviewsListState extends State<ReviewsList> {
               backgroundColor: AppColors.error,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Delete'),
+            child: Text(localizations.delete),
           ),
         ],
       ),
@@ -255,9 +287,10 @@ class _ReviewsListState extends State<ReviewsList> {
       await reviewsProvider.deleteReview(review.id, authProvider.token);
 
       if (mounted) {
+        final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Review deleted successfully!'),
+          SnackBar(
+            content: Text(localizations.reviewDeletedSuccessfully),
             backgroundColor: AppColors.success,
           ),
         );

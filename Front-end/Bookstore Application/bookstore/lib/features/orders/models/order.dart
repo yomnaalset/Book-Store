@@ -744,6 +744,8 @@ class DeliveryAssignment {
   final String orderId;
   final String deliveryManagerId;
   final String deliveryManagerName;
+  final String? deliveryManagerPhone;
+  final String? deliveryManagerEmail;
   final String status;
   final DateTime assignedAt;
   final DateTime? startedAt;
@@ -757,8 +759,8 @@ class DeliveryAssignment {
   DeliveryManager? get deliveryManager => DeliveryManager(
     id: deliveryManagerId,
     name: deliveryManagerName,
-    phone: '',
-    email: '',
+    phone: deliveryManagerPhone ?? '',
+    email: deliveryManagerEmail ?? '',
   );
 
   // Alias for backward compatibility
@@ -769,6 +771,8 @@ class DeliveryAssignment {
     required this.orderId,
     required this.deliveryManagerId,
     required this.deliveryManagerName,
+    this.deliveryManagerPhone,
+    this.deliveryManagerEmail,
     required this.status,
     required this.assignedAt,
     this.startedAt,
@@ -779,27 +783,45 @@ class DeliveryAssignment {
   factory DeliveryAssignment.fromJson(Map<String, dynamic> json) {
     // Handle delivery_manager as either an ID (int/string) or an object with id field
     String deliveryManagerId = '';
+    String? deliveryManagerPhone;
+    String? deliveryManagerEmail;
+    String deliveryManagerName = 'Unknown';
+
     if (json['delivery_manager'] != null) {
       if (json['delivery_manager'] is Map<String, dynamic>) {
-        // It's an object, extract the id
-        deliveryManagerId = json['delivery_manager']['id']?.toString() ?? '';
+        // It's an object, extract all fields
+        final managerData = json['delivery_manager'] as Map<String, dynamic>;
+        deliveryManagerId = managerData['id']?.toString() ?? '';
+        deliveryManagerName =
+            managerData['full_name'] ??
+            managerData['get_full_name'] ??
+            managerData['name'] ??
+            'Unknown';
+        deliveryManagerPhone = managerData['phone']?.toString();
+        deliveryManagerEmail = managerData['email']?.toString();
       } else {
         // It's already an ID
         deliveryManagerId = json['delivery_manager'].toString();
       }
     }
 
+    // Fallback to delivery_manager_name if name wasn't extracted from object
+    if (deliveryManagerName == 'Unknown' &&
+        json['delivery_manager_name'] != null) {
+      deliveryManagerName = json['delivery_manager_name'];
+    }
+
+    // Also check for phone and email at the top level
+    deliveryManagerPhone ??= json['delivery_manager_phone']?.toString();
+    deliveryManagerEmail ??= json['delivery_manager_email']?.toString();
+
     return DeliveryAssignment(
       id: json['id']?.toString() ?? '',
       orderId: json['order']?.toString() ?? '',
       deliveryManagerId: deliveryManagerId,
-      deliveryManagerName:
-          json['delivery_manager_name'] ??
-          (json['delivery_manager'] is Map<String, dynamic>
-              ? (json['delivery_manager']['full_name'] ??
-                    json['delivery_manager']['get_full_name'] ??
-                    'Unknown')
-              : 'Unknown'),
+      deliveryManagerName: deliveryManagerName,
+      deliveryManagerPhone: deliveryManagerPhone,
+      deliveryManagerEmail: deliveryManagerEmail,
       status: json['status'] ?? 'assigned',
       assignedAt: json['assigned_at'] != null
           ? DateTime.parse(json['assigned_at'])

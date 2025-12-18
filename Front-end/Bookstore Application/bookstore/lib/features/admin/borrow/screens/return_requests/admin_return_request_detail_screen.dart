@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import '../../../../borrow/models/return_request.dart';
 import '../../../../borrow/providers/return_request_provider.dart';
 import '../../../../auth/providers/auth_provider.dart';
 import '../../../../../core/widgets/common/loading_indicator.dart';
 import '../../../../borrow/services/return_request_service.dart';
+import '../../../../../core/services/api_service.dart';
+import '../../../../../core/localization/app_localizations.dart';
 
 class AdminReturnRequestDetailScreen extends StatefulWidget {
   final int returnRequestId;
@@ -641,9 +646,10 @@ class _AdminReturnRequestDetailScreenState
     final borrowRequest = returnRequest.borrowRequest;
     final status = returnRequest.status.toLowerCase();
 
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Return Request Details'),
+        title: Text(localizations.returnRequestDetails),
         backgroundColor: Theme.of(context).primaryColor,
         foregroundColor: Colors.white,
         actions: [
@@ -654,6 +660,7 @@ class _AdminReturnRequestDetailScreenState
         ],
       ),
       body: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -664,9 +671,17 @@ class _AdminReturnRequestDetailScreenState
             const SizedBox(height: 16),
             _buildBorrowedBookCard(borrowRequest),
             const SizedBox(height: 16),
+            // Penalty Information Card (always shown)
+            _buildPenaltyInformationCard(returnRequest),
+            const SizedBox(height: 16),
+            // Payment Information Card (only shown if penalty exists)
+            if (returnRequest.hasPenalty == true)
+              _buildPaymentInformationCard(returnRequest),
+            if (returnRequest.hasPenalty == true) const SizedBox(height: 16),
             if (returnRequest.deliveryManagerId != null)
               _buildDeliveryManagerCard(returnRequest),
-            const SizedBox(height: 16),
+            if (returnRequest.deliveryManagerId != null)
+              const SizedBox(height: 16),
             _buildActionsCard(returnRequest, status),
           ],
         ),
@@ -678,6 +693,7 @@ class _AdminReturnRequestDetailScreenState
     ReturnRequest returnRequest,
     dynamic borrowRequest,
   ) {
+    final localizations = AppLocalizations.of(context);
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -686,13 +702,17 @@ class _AdminReturnRequestDetailScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
-                Icon(Icons.description, color: Color(0xFF2C3E50), size: 20),
-                SizedBox(width: 8),
+                const Icon(
+                  Icons.description,
+                  color: Color(0xFF2C3E50),
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
                 Text(
-                  'Request Details',
-                  style: TextStyle(
+                  localizations.requestDetails,
+                  style: const TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
                     color: Color(0xFF2C3E50),
@@ -701,18 +721,21 @@ class _AdminReturnRequestDetailScreenState
               ],
             ),
             const SizedBox(height: 16),
-            _buildInfoRow('Request Number', '#${returnRequest.id}'),
             _buildInfoRow(
-              'Sending Date',
+              localizations.requestNumberLabel,
+              '#${returnRequest.id}',
+            ),
+            _buildInfoRow(
+              localizations.sendingDate,
               _formatDate(returnRequest.requestedAt),
             ),
             if (borrowRequest.dueDate != null)
               _buildInfoRow(
-                'Expected Return Date',
+                localizations.expectedReturnDate,
                 _formatDate(borrowRequest.dueDate!),
               ),
             _buildInfoRow(
-              'Request Status',
+              localizations.requestStatus,
               _getStatusDisplay(returnRequest.status),
             ),
           ],
@@ -722,6 +745,7 @@ class _AdminReturnRequestDetailScreenState
   }
 
   Widget _buildCustomerInfoCard(dynamic borrowRequest) {
+    final localizations = AppLocalizations.of(context);
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -730,13 +754,13 @@ class _AdminReturnRequestDetailScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
-                Icon(Icons.person, color: Color(0xFF2C3E50), size: 20),
-                SizedBox(width: 8),
+                const Icon(Icons.person, color: Color(0xFF2C3E50), size: 20),
+                const SizedBox(width: 8),
                 Text(
-                  'Customer Information',
-                  style: TextStyle(
+                  localizations.customerInformation,
+                  style: const TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
                     color: Color(0xFF2C3E50),
@@ -746,17 +770,20 @@ class _AdminReturnRequestDetailScreenState
             ),
             const SizedBox(height: 16),
             _buildCustomerDetailRow(
-              'Full Name',
-              borrowRequest.customerName ?? 'Not provided',
+              localizations.fullName,
+              borrowRequest.customerName ?? localizations.notProvided,
               Icons.person_outline,
             ),
             _buildCustomerDetailRow(
-              'Phone Number',
-              _getCustomerPhone(borrowRequest),
+              localizations.phoneNumber,
+              (borrowRequest.customer?.phone != null &&
+                      borrowRequest.customer!.phone!.isNotEmpty)
+                  ? borrowRequest.customer!.phone!
+                  : localizations.notFound,
               Icons.phone,
             ),
             _buildCustomerDetailRow(
-              'Email',
+              localizations.emailLabel,
               _getCustomerEmail(borrowRequest),
               Icons.email,
             ),
@@ -792,7 +819,7 @@ class _AdminReturnRequestDetailScreenState
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
-                    color: value == 'Not provided'
+                    color: value == AppLocalizations.of(context).notProvided
                         ? Colors.red[600]
                         : const Color(0xFF495057),
                   ),
@@ -805,23 +832,19 @@ class _AdminReturnRequestDetailScreenState
     );
   }
 
-  String _getCustomerPhone(dynamic borrowRequest) {
-    if (borrowRequest.customer?.phone != null &&
-        borrowRequest.customer!.phone!.isNotEmpty) {
-      return borrowRequest.customer!.phone!;
-    }
-    return 'Not provided';
-  }
-
   String _getCustomerEmail(dynamic borrowRequest) {
+    final localizations = AppLocalizations.of(context);
     if (borrowRequest.customer?.email != null &&
         borrowRequest.customer!.email.isNotEmpty) {
       return borrowRequest.customer!.email;
     }
-    return 'Not provided';
+    return localizations.notProvided;
   }
 
-  Widget _buildBorrowedBookCard(dynamic borrowRequest) {
+  Widget _buildPenaltyInformationCard(ReturnRequest returnRequest) {
+    final localizations = AppLocalizations.of(context);
+    final hasPenalty = returnRequest.hasPenalty == true;
+
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -830,13 +853,443 @@ class _AdminReturnRequestDetailScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
-                Icon(Icons.book, color: Color(0xFF2C3E50), size: 20),
-                SizedBox(width: 8),
+                const Icon(
+                  Icons.warning_amber_rounded,
+                  color: Color(0xFFFF9800),
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
                 Text(
-                  'Borrowed Book',
-                  style: TextStyle(
+                  localizations.penaltyInformation,
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF2C3E50),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            if (!hasPenalty)
+              Text(
+                localizations.noPenaltyForThisOrder,
+                style: const TextStyle(fontSize: 16, color: Color(0xFF6C757D)),
+              )
+            else ...[
+              _buildInfoRow(
+                '${localizations.penaltyApplied}:',
+                localizations.yes,
+              ),
+              if (returnRequest.penaltyAmount != null)
+                _buildInfoRow(
+                  '${localizations.penaltyAmountLabel}:',
+                  '\$${returnRequest.penaltyAmount!.toStringAsFixed(2)}',
+                ),
+              if (returnRequest.overdueDays != null)
+                _buildInfoRow(
+                  '${localizations.daysOverdue}:',
+                  '${returnRequest.overdueDays}',
+                ),
+              if (returnRequest.dueDate != null)
+                _buildInfoRow(
+                  '${localizations.dueDateLabel}:',
+                  _formatDate(returnRequest.dueDate!),
+                ),
+              _buildInfoRow(
+                '${localizations.penaltyReasonLabel}:',
+                localizations.exceededBorrowingPeriod,
+              ),
+              // Fine action buttons or confirmation label
+              _buildFineActionButtons(returnRequest),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFineActionButtons(ReturnRequest returnRequest) {
+    final hasPenalty = returnRequest.hasPenalty == true;
+    final isFinalized = returnRequest.isFinalized == true;
+
+    // Don't show buttons if no penalty
+    if (!hasPenalty) {
+      return const SizedBox.shrink();
+    }
+
+    // If finalized, show confirmation label
+    if (isFinalized) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.green.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: Colors.green.withValues(alpha: 0.3),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.check_circle, color: Colors.green, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              'Fine Confirmed',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Colors.green,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Show buttons if not finalized
+    return Column(
+      children: [
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: () => _handleConfirmFine(returnRequest),
+                icon: const Icon(Icons.check_circle, size: 20),
+                label: const Text('Confirm Fine'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: () => _handleIncreaseFine(returnRequest),
+                icon: const Icon(Icons.add, size: 20),
+                label: const Text('Increase Fine'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Future<void> _handleConfirmFine(ReturnRequest returnRequest) async {
+    if (!mounted) return;
+
+    // Capture authProvider before async gap
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final token = authProvider.token;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm Fine'),
+        content: const Text(
+          'Are you sure you want to confirm this fine? Once confirmed, the fine cannot be modified.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    try {
+      if (token != null) {
+        _service.setToken(token);
+      }
+
+      await _service.confirmReturnFine(widget.returnRequestId);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Fine has been successfully confirmed'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        _loadReturnRequestDetails();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _handleIncreaseFine(ReturnRequest returnRequest) async {
+    if (!mounted) return;
+
+    // Capture authProvider before async gap
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final token = authProvider.token;
+
+    final TextEditingController amountController = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Increase Fine'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Enter the additional amount to add to the fine:'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: amountController,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              decoration: const InputDecoration(
+                labelText: 'Additional Amount (\$)',
+                prefixText: '\$',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final amount = double.tryParse(amountController.text);
+              if (amount == null || amount <= 0) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please enter a valid amount greater than 0'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+              Navigator.of(context).pop(true);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Increase'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final additionalAmount = double.tryParse(amountController.text);
+    if (additionalAmount == null || additionalAmount <= 0) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Invalid amount'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    try {
+      if (token != null) {
+        _service.setToken(token);
+      }
+
+      await _service.increaseReturnFine(
+        widget.returnRequestId,
+        additionalAmount,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Fine increased by \$${additionalAmount.toStringAsFixed(2)}',
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+        _loadReturnRequestDetails();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Widget _buildPaymentInformationCard(ReturnRequest returnRequest) {
+    final localizations = AppLocalizations.of(context);
+    final hasPenalty = returnRequest.hasPenalty == true;
+
+    // Don't show payment section if no penalty
+    if (!hasPenalty) {
+      return const SizedBox.shrink();
+    }
+
+    // Get payment method display
+    String paymentMethodDisplay = localizations.notSelected;
+    if (returnRequest.paymentMethod != null) {
+      final method = returnRequest.paymentMethod!.toLowerCase();
+      if (method == 'cash') {
+        paymentMethodDisplay = localizations.paymentMethodCash;
+      } else if (method == 'card') {
+        paymentMethodDisplay = localizations.mastercard;
+      } else {
+        paymentMethodDisplay = returnRequest.paymentMethod!;
+      }
+    }
+
+    // Get payment status display
+    String paymentStatusDisplay = localizations.paymentStatusUnpaid;
+    Color statusColor = Colors.red;
+    if (returnRequest.paymentStatus != null) {
+      final status = returnRequest.paymentStatus!.toLowerCase();
+      if (status == 'paid' || status == 'completed') {
+        paymentStatusDisplay = localizations.paymentStatusPaid;
+        statusColor = Colors.green;
+      } else if (status == 'pending_payment') {
+        paymentStatusDisplay = 'Pending Payment';
+        statusColor = Colors.orange;
+      } else if (status == 'pending' || status == 'pending_cash_payment') {
+        paymentStatusDisplay = localizations.paymentStatusPending;
+        statusColor = Colors.orange;
+      } else if (status == 'unpaid' || status == 'not_paid') {
+        paymentStatusDisplay = localizations.paymentStatusUnpaid;
+        statusColor = Colors.red;
+      } else {
+        // Capitalize first letter for display
+        paymentStatusDisplay = status[0].toUpperCase() + status.substring(1);
+      }
+    }
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.payment, color: Color(0xFF2C3E50), size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  localizations.paymentInformation,
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF2C3E50),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _buildInfoRow(
+              '${localizations.paymentMethodLabel}:',
+              paymentMethodDisplay,
+            ),
+            const SizedBox(height: 12),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 140,
+                  child: Text(
+                    '${localizations.paymentStatusLabel}:',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF6C757D),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: statusColor.withValues(alpha: 0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: Text(
+                      paymentStatusDisplay,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: statusColor,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBorrowedBookCard(dynamic borrowRequest) {
+    final localizations = AppLocalizations.of(context);
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.book, color: Color(0xFF2C3E50), size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  localizations.borrowedBook,
+                  style: const TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
                     color: Color(0xFF2C3E50),
@@ -866,7 +1319,7 @@ class _AdminReturnRequestDetailScreenState
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        borrowRequest.bookTitle ?? 'N/A',
+                        borrowRequest.bookTitle ?? localizations.notAvailable,
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
@@ -875,7 +1328,7 @@ class _AdminReturnRequestDetailScreenState
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Duration: ${borrowRequest.durationDays > 0 ? borrowRequest.durationDays : 'N/A'} ${borrowRequest.durationDays > 0 ? 'days' : ''}',
+                        '${localizations.duration}: ${borrowRequest.durationDays > 0 ? borrowRequest.durationDays : localizations.notAvailable} ${borrowRequest.durationDays > 0 ? ' ${localizations.days}' : ''}',
                         style: const TextStyle(
                           fontSize: 14,
                           color: Color(0xFF6C757D),
@@ -893,6 +1346,7 @@ class _AdminReturnRequestDetailScreenState
   }
 
   Widget _buildDeliveryManagerCard(ReturnRequest returnRequest) {
+    final localizations = AppLocalizations.of(context);
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -901,13 +1355,17 @@ class _AdminReturnRequestDetailScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
-                Icon(Icons.local_shipping, color: Color(0xFF2C3E50), size: 20),
-                SizedBox(width: 8),
+                const Icon(
+                  Icons.local_shipping,
+                  color: Color(0xFF2C3E50),
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
                 Text(
-                  'Assigned Delivery Manager',
-                  style: TextStyle(
+                  localizations.assignedDeliveryManager,
+                  style: const TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
                     color: Color(0xFF2C3E50),
@@ -917,19 +1375,63 @@ class _AdminReturnRequestDetailScreenState
             ),
             const SizedBox(height: 16),
             _buildCustomerDetailRow(
-              'Full Name',
-              returnRequest.deliveryManagerName ?? 'Not provided',
+              localizations.fullName,
+              returnRequest.deliveryManagerName ?? localizations.notProvided,
               Icons.person_outline,
             ),
             _buildCustomerDetailRow(
-              'Phone Number',
-              returnRequest.deliveryManagerPhone ?? 'Not provided',
+              localizations.phoneNumber,
+              (returnRequest.deliveryManagerPhone != null &&
+                      returnRequest.deliveryManagerPhone!.isNotEmpty)
+                  ? returnRequest.deliveryManagerPhone!
+                  : localizations.notFound,
               Icons.phone,
             ),
             _buildCustomerDetailRow(
-              'Email',
-              returnRequest.deliveryManagerEmail ?? 'Not provided',
+              localizations.emailLabel,
+              returnRequest.deliveryManagerEmail ?? localizations.notProvided,
               Icons.email,
+            ),
+            // Button to view delivery manager's current location
+            // Only show when return is in progress (IN_PROGRESS status)
+            Builder(
+              builder: (context) {
+                final isActive = _isReturnActive(returnRequest);
+                if (isActive) {
+                  return Column(
+                    children: [
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            _openDeliveryManagerLocation(returnRequest);
+                          },
+                          icon: const Icon(Icons.location_on, size: 20),
+                          label: Text(
+                            localizations.viewDeliveryManagerLocation,
+                            style: const TextStyle(fontSize: 16),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF4285F4),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 14,
+                              horizontal: 16,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            elevation: 2,
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                } else {
+                  return const SizedBox.shrink();
+                }
+              },
             ),
           ],
         ),
@@ -937,7 +1439,225 @@ class _AdminReturnRequestDetailScreenState
     );
   }
 
+  /// Check if return is currently active (in progress)
+  /// Button should appear ONLY when status is "IN_PROGRESS" and delivery manager is assigned
+  bool _isReturnActive(ReturnRequest returnRequest) {
+    if (returnRequest.deliveryManagerId == null) {
+      return false;
+    }
+
+    // Normalize the status: lowercase, trim, replace spaces and hyphens with underscores
+    final normalizedStatus = returnRequest.status
+        .toLowerCase()
+        .trim()
+        .replaceAll(' ', '_')
+        .replaceAll('-', '_');
+
+    // Button should be visible when status is IN_PROGRESS (return is in progress)
+    return normalizedStatus == 'in_progress';
+  }
+
+  Future<void> _openDeliveryManagerLocation(ReturnRequest returnRequest) async {
+    if (!mounted) return;
+
+    if (returnRequest.deliveryManagerId == null) {
+      if (mounted) {
+        final localizations = AppLocalizations.of(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(localizations.deliveryManagerInformationNotAvailable),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    // Verify that status is still IN_PROGRESS
+    final status = returnRequest.status.toLowerCase().trim().replaceAll(
+      ' ',
+      '_',
+    );
+    if (status != 'in_progress') {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Location tracking is only available during active return.',
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    try {
+      // Get auth token
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final token = authProvider.token;
+
+      if (token == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Authentication required. Please log in again.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Try to fetch location from return request endpoint first
+      // Pattern: /api/returns/requests/<id>/delivery-location/
+      try {
+        final response = await http.get(
+          Uri.parse(
+            '${ApiService.baseUrl}/returns/requests/${returnRequest.id}/delivery-location/',
+          ),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+        );
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          if (data['success'] == true && data['data'] != null) {
+            final locationData = data['data']['location'] ?? data['data'];
+            if (locationData != null &&
+                locationData['latitude'] != null &&
+                locationData['longitude'] != null) {
+              final latitude = locationData['latitude'] as double;
+              final longitude = locationData['longitude'] as double;
+              await _launchGoogleMaps(latitude, longitude);
+              return;
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('Return request location endpoint not available: $e');
+      }
+
+      // Fallback: Try to get location from delivery manager's profile
+      // Pattern: /api/delivery/location/<delivery_manager_id>/
+      try {
+        final response = await http.get(
+          Uri.parse(
+            '${ApiService.baseUrl}/delivery/location/${returnRequest.deliveryManagerId}/',
+          ),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+        );
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          if (data['success'] == true && data['data'] != null) {
+            final locationData = data['data']['location'] ?? data['data'];
+            if (locationData != null &&
+                locationData['latitude'] != null &&
+                locationData['longitude'] != null) {
+              final latitude = locationData['latitude'] as double;
+              final longitude = locationData['longitude'] as double;
+              await _launchGoogleMaps(latitude, longitude);
+              return;
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('Delivery manager location endpoint error: $e');
+      }
+
+      // If both endpoints fail, show error message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Delivery manager location is not available at the moment.',
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _launchGoogleMaps(double latitude, double longitude) async {
+    try {
+      // Try multiple URL schemes in order of preference
+      final urls = [
+        // Google Maps app (Android) - navigation mode
+        Uri.parse('google.navigation:q=$latitude,$longitude'),
+        // Google Maps app (Android/iOS) - search mode
+        Uri.parse('comgooglemaps://?q=$latitude,$longitude'),
+        // Geo scheme (Android) - opens default maps app
+        Uri.parse('geo:$latitude,$longitude'),
+        // Google Maps web URL (always works as fallback)
+        Uri.parse(
+          'https://www.google.com/maps/search/?api=1&query=$latitude,$longitude',
+        ),
+      ];
+
+      bool launched = false;
+      for (final url in urls) {
+        try {
+          // Try to launch directly - canLaunchUrl can be unreliable
+          await launchUrl(url, mode: LaunchMode.externalApplication);
+          launched = true;
+          break;
+        } catch (e) {
+          // Try next URL if this one fails
+          debugPrint('Failed to launch URL $url: $e');
+          continue;
+        }
+      }
+
+      if (!launched) {
+        // Final fallback: try the web URL which should always work
+        try {
+          final webUrl = Uri.parse(
+            'https://www.google.com/maps?q=$latitude,$longitude',
+          );
+          await launchUrl(webUrl, mode: LaunchMode.externalApplication);
+        } catch (e) {
+          debugPrint('Failed to launch web URL: $e');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Could not open maps application'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error launching Google Maps: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error opening maps: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   Widget _buildActionsCard(ReturnRequest returnRequest, String status) {
+    final localizations = AppLocalizations.of(context);
     // Case 1: Status = PENDING - Show "Accept Request" button
     if (status == 'pending' || status.toUpperCase() == 'PENDING') {
       return Card(
@@ -948,13 +1668,17 @@ class _AdminReturnRequestDetailScreenState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Row(
+              Row(
                 children: [
-                  Icon(Icons.settings, color: Color(0xFF2C3E50), size: 20),
-                  SizedBox(width: 8),
+                  const Icon(
+                    Icons.settings,
+                    color: Color(0xFF2C3E50),
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
                   Text(
-                    'Actions',
-                    style: TextStyle(
+                    localizations.actions,
+                    style: const TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
                       color: Color(0xFF2C3E50),
@@ -968,7 +1692,7 @@ class _AdminReturnRequestDetailScreenState
                 child: ElevatedButton.icon(
                   onPressed: _acceptRequest,
                   icon: const Icon(Icons.check_circle),
-                  label: const Text('Accept Request'),
+                  label: Text(localizations.acceptRequest),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green,
                     foregroundColor: Colors.white,
@@ -992,13 +1716,17 @@ class _AdminReturnRequestDetailScreenState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Row(
+              Row(
                 children: [
-                  Icon(Icons.settings, color: Color(0xFF2C3E50), size: 20),
-                  SizedBox(width: 8),
+                  const Icon(
+                    Icons.settings,
+                    color: Color(0xFF2C3E50),
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
                   Text(
-                    'Actions',
-                    style: TextStyle(
+                    localizations.actions,
+                    style: const TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
                       color: Color(0xFF2C3E50),
@@ -1012,7 +1740,7 @@ class _AdminReturnRequestDetailScreenState
                 child: ElevatedButton.icon(
                   onPressed: _assignDeliveryManager,
                   icon: const Icon(Icons.person_add),
-                  label: const Text('Assign Delivery Manager'),
+                  label: Text(localizations.assignDeliveryManager),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blue,
                     foregroundColor: Colors.white,
@@ -1067,15 +1795,7 @@ class _AdminReturnRequestDetailScreenState
   }
 
   String _getStatusDisplay(String status) {
-    switch (status.toLowerCase()) {
-      case 'return_requested':
-        return 'Return Requested';
-      case 'return_approved':
-        return 'Return Approved';
-      case 'return_assigned':
-        return 'Return Assigned';
-      default:
-        return status;
-    }
+    final localizations = AppLocalizations.of(context);
+    return localizations.getReturnRequestStatusLabel(status);
   }
 }

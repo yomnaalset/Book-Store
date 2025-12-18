@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../orders/models/order.dart';
+import '../../../core/localization/app_localizations.dart';
 
 class OrderCard extends StatelessWidget {
   final Order order;
@@ -45,12 +46,20 @@ class OrderCard extends StatelessWidget {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        Text(
-                          order.orderTypeDisplay,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: _getOrderTypeColor(order.orderType),
-                            fontWeight: FontWeight.w500,
-                          ),
+                        Builder(
+                          builder: (context) {
+                            final localizations = AppLocalizations.of(context);
+                            return Text(
+                              _getLocalizedOrderType(
+                                order.orderType,
+                                localizations,
+                              ),
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: _getOrderTypeColor(order.orderType),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            );
+                          },
                         ),
                       ],
                     ),
@@ -64,12 +73,17 @@ class OrderCard extends StatelessWidget {
                       color: _getStatusColor(order.status),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Text(
-                      order.statusDisplay,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w500,
-                      ),
+                    child: Builder(
+                      builder: (context) {
+                        final localizations = AppLocalizations.of(context);
+                        return Text(
+                          localizations.getOrderStatusLabel(order.status),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ],
@@ -86,52 +100,68 @@ class OrderCard extends StatelessWidget {
                   ),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Column(
-                  children: [
-                    _buildDetailRow(
-                      icon: Icons.person_outline,
-                      label: 'Customer',
-                      value: order.customerName,
-                    ),
-                    const SizedBox(height: 8),
-                    _buildDetailRow(
-                      icon: Icons.location_on_outlined,
-                      label: 'Address',
-                      value:
-                          order.shippingAddress?.fullAddress ??
-                          'No address provided',
-                    ),
-                    const SizedBox(height: 8),
-                    _buildDetailRow(
-                      icon: Icons.shopping_bag_outlined,
-                      label: 'Items',
-                      value: '${order.items.length} items',
-                    ),
-                    const SizedBox(height: 8),
-                    _buildDetailRow(
-                      icon: Icons.attach_money_outlined,
-                      label: 'Total',
-                      value: '\$${order.totalAmount.toStringAsFixed(2)}',
-                    ),
-                    const SizedBox(height: 8),
-                    _buildDetailRow(
-                      icon: Icons.schedule_outlined,
-                      label: 'Created',
-                      value: _formatDate(order.createdAt),
-                    ),
-                  ],
+                child: Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return Column(
+                      children: [
+                        _buildDetailRow(
+                          context: context,
+                          icon: Icons.person_outline,
+                          label: localizations.orderCustomerLabel,
+                          value: order.customerName,
+                        ),
+                        const SizedBox(height: 8),
+                        _buildDetailRow(
+                          context: context,
+                          icon: Icons.location_on_outlined,
+                          label: localizations.orderAddressLabel,
+                          value:
+                              order.shippingAddress?.fullAddress ??
+                              localizations.notAvailable,
+                        ),
+                        const SizedBox(height: 8),
+                        _buildDetailRow(
+                          context: context,
+                          icon: Icons.shopping_bag_outlined,
+                          label: localizations.orderItemsLabel,
+                          value:
+                              '${order.items.length} ${localizations.orderItemsLabel.toLowerCase()}',
+                        ),
+                        const SizedBox(height: 8),
+                        _buildDetailRow(
+                          context: context,
+                          icon: Icons.attach_money_outlined,
+                          label: localizations.orderTotalLabel,
+                          value: '\$${order.totalAmount.toStringAsFixed(2)}',
+                        ),
+                        const SizedBox(height: 8),
+                        _buildDetailRow(
+                          context: context,
+                          icon: Icons.schedule_outlined,
+                          label: localizations.orderCreatedLabel,
+                          value: _formatDate(order.createdAt),
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ),
 
               // Order Items Preview
               if (order.items.isNotEmpty) ...[
                 const SizedBox(height: 12),
-                Text(
-                  'Items:',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w500,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
+                Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return Text(
+                      '${localizations.orderItemsLabel}:',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w500,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    );
+                  },
                 ),
                 const SizedBox(height: 4),
                 ...order.items
@@ -166,6 +196,7 @@ class OrderCard extends StatelessWidget {
   }
 
   Widget _buildDetailRow({
+    required BuildContext context,
     required IconData icon,
     required String label,
     required String value,
@@ -239,5 +270,21 @@ class OrderCard extends StatelessWidget {
 
   String _formatDate(DateTime date) {
     return '${date.day}/${date.month}/${date.year}';
+  }
+
+  String _getLocalizedOrderType(
+    String orderType,
+    AppLocalizations localizations,
+  ) {
+    switch (orderType.toLowerCase()) {
+      case 'purchase':
+        return localizations.purchaseOrder;
+      case 'borrowing':
+        return localizations.borrowingRequest;
+      case 'return_collection':
+        return localizations.returnRequest;
+      default:
+        return orderType;
+    }
   }
 }

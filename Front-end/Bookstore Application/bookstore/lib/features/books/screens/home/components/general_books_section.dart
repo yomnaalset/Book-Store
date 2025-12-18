@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../../core/constants/app_colors.dart';
+import '../../../../../core/localization/app_localizations.dart';
 import '../../../../cart/providers/cart_provider.dart';
 import '../../../providers/books_provider.dart';
 import '../../../models/book.dart';
@@ -111,7 +112,7 @@ class _GeneralBooksSectionState extends State<GeneralBooksSection> {
                     ),
                     const SizedBox(width: 12),
                     Text(
-                      _getSectionTitle(),
+                      _getSectionTitle(context),
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
@@ -127,38 +128,41 @@ class _GeneralBooksSectionState extends State<GeneralBooksSection> {
                     });
                     await _loadBooksBySort(value);
                   },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                      value: 'all',
-                      child: Row(
-                        children: [
-                          Icon(Icons.book, size: 18),
-                          SizedBox(width: 8),
-                          Text('All'),
-                        ],
+                  itemBuilder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return [
+                      PopupMenuItem(
+                        value: 'all',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.book, size: 18),
+                            const SizedBox(width: 8),
+                            Text(localizations.filterAll),
+                          ],
+                        ),
                       ),
-                    ),
-                    const PopupMenuItem(
-                      value: 'newest',
-                      child: Row(
-                        children: [
-                          Icon(Icons.access_time, size: 18),
-                          SizedBox(width: 8),
-                          Text('New Books'),
-                        ],
+                      PopupMenuItem(
+                        value: 'newest',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.access_time, size: 18),
+                            const SizedBox(width: 8),
+                            Text(localizations.filterNewBooks),
+                          ],
+                        ),
                       ),
-                    ),
-                    const PopupMenuItem(
-                      value: 'rating',
-                      child: Row(
-                        children: [
-                          Icon(Icons.star, size: 18),
-                          SizedBox(width: 8),
-                          Text('Highest Rated'),
-                        ],
+                      PopupMenuItem(
+                        value: 'rating',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.star, size: 18),
+                            const SizedBox(width: 8),
+                            Text(localizations.filterHighestRated),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ];
+                  },
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16,
@@ -176,7 +180,7 @@ class _GeneralBooksSectionState extends State<GeneralBooksSection> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          _getSortLabel(),
+                          _getSortLabel(context),
                           style: const TextStyle(
                             color: AppColors.uranianBlue,
                             fontWeight: FontWeight.w600,
@@ -252,7 +256,7 @@ class _GeneralBooksSectionState extends State<GeneralBooksSection> {
                   ),
                   const SizedBox(width: 12),
                   Text(
-                    _getSectionTitle(),
+                    _getSectionTitle(context),
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
@@ -268,38 +272,41 @@ class _GeneralBooksSectionState extends State<GeneralBooksSection> {
                   });
                   await _loadBooksBySort(value);
                 },
-                itemBuilder: (context) => [
-                  const PopupMenuItem(
-                    value: 'all',
-                    child: Row(
-                      children: [
-                        Icon(Icons.book, size: 18),
-                        SizedBox(width: 8),
-                        Text('All'),
-                      ],
+                itemBuilder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return [
+                    PopupMenuItem(
+                      value: 'all',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.book, size: 18),
+                          const SizedBox(width: 8),
+                          Text(localizations.filterAll),
+                        ],
+                      ),
                     ),
-                  ),
-                  const PopupMenuItem(
-                    value: 'newest',
-                    child: Row(
-                      children: [
-                        Icon(Icons.access_time, size: 18),
-                        SizedBox(width: 8),
-                        Text('New Books'),
-                      ],
+                    PopupMenuItem(
+                      value: 'newest',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.access_time, size: 18),
+                          const SizedBox(width: 8),
+                          Text(localizations.filterNewBooks),
+                        ],
+                      ),
                     ),
-                  ),
-                  const PopupMenuItem(
-                    value: 'rating',
-                    child: Row(
-                      children: [
-                        Icon(Icons.star, size: 18),
-                        SizedBox(width: 8),
-                        Text('Highest Rated'),
-                      ],
+                    PopupMenuItem(
+                      value: 'rating',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.star, size: 18),
+                          const SizedBox(width: 8),
+                          Text(localizations.filterHighestRated),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ];
+                },
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
@@ -317,7 +324,7 @@ class _GeneralBooksSectionState extends State<GeneralBooksSection> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        _getSortLabel(),
+                        _getSortLabel(context),
                         style: const TextStyle(
                           color: AppColors.uranianBlue,
                           fontWeight: FontWeight.w600,
@@ -435,13 +442,18 @@ class _GeneralBooksSectionState extends State<GeneralBooksSection> {
                             color: AppColors.error,
                             borderRadius: BorderRadius.circular(6),
                           ),
-                          child: Text(
-                            '${book.savingsPercentage.toInt()}% OFF',
+                          child: Builder(
+                            builder: (context) {
+                              final localizations = AppLocalizations.of(context);
+                              return Text(
+                                localizations.discountOff(book.savingsPercentage.toInt()),
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 8,
                               fontWeight: FontWeight.bold,
                             ),
+                              );
+                            },
                           ),
                         ),
                       ),
@@ -542,27 +554,29 @@ class _GeneralBooksSectionState extends State<GeneralBooksSection> {
     );
   }
 
-  String _getSectionTitle() {
+  String _getSectionTitle(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     switch (_sortBy) {
       case 'newest':
-        return 'All Books';
+        return localizations.allBooks;
       case 'rating':
-        return 'All Books';
+        return localizations.allBooks;
       default:
-        return 'All Books';
+        return localizations.allBooks;
     }
   }
 
-  String _getSortLabel() {
+  String _getSortLabel(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     switch (_sortBy) {
       case 'all':
-        return 'All';
+        return localizations.filterAll;
       case 'newest':
-        return 'New Books';
+        return localizations.filterNewBooks;
       case 'rating':
-        return 'Highest Rated';
+        return localizations.filterHighestRated;
       default:
-        return 'All';
+        return localizations.filterAll;
     }
   }
 

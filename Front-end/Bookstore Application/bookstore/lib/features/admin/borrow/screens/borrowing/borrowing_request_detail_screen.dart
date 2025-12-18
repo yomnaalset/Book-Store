@@ -11,6 +11,7 @@ import '../../../../auth/providers/auth_provider.dart';
 import '../../../widgets/library_manager/status_chip.dart';
 import '../../../../../core/services/api_service.dart';
 import '../../../../../shared/widgets/custom_text_field.dart';
+import '../../../../../core/localization/app_localizations.dart';
 
 class BorrowingRequestDetailScreen extends StatefulWidget {
   final int requestId;
@@ -64,13 +65,16 @@ class _BorrowingRequestDetailScreenState
 
   void _initializeFormControllers() {
     if (_request == null) return;
+    final localizations = AppLocalizations.of(context);
 
     // Initialize customer form controllers
     _customerNameController.text = _getCustomerName();
-    _customerPhoneController.text = _getCustomerPhone() == 'Not provided'
+    _customerPhoneController.text =
+        _getCustomerPhone() == localizations.notProvided
         ? ''
         : _getCustomerPhone();
-    _customerEmailController.text = _getCustomerEmail() == 'Not provided'
+    _customerEmailController.text =
+        _getCustomerEmail() == localizations.notProvided
         ? ''
         : _getCustomerEmail();
 
@@ -316,13 +320,15 @@ class _BorrowingRequestDetailScreenState
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Request #${widget.requestId}'),
+        title: Text(
+          AppLocalizations.of(context).requestNumber(widget.requestId),
+        ),
         backgroundColor: const Color(0xFFB5E7FF),
         foregroundColor: Colors.white,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh request details',
+            tooltip: AppLocalizations.of(context).refreshRequestDetails,
             onPressed: () {
               debugPrint('DEBUG: Refresh button pressed');
               _loadRequestDetails();
@@ -352,7 +358,7 @@ class _BorrowingRequestDetailScreenState
             Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
             const SizedBox(height: 16),
             Text(
-              'Error loading request details',
+              AppLocalizations.of(context).errorLoadingRequestDetails,
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 8),
@@ -364,7 +370,7 @@ class _BorrowingRequestDetailScreenState
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: _loadRequestDetails,
-              child: const Text('Retry'),
+              child: Text(AppLocalizations.of(context).retry),
             ),
           ],
         ),
@@ -372,7 +378,7 @@ class _BorrowingRequestDetailScreenState
     }
 
     if (_request == null) {
-      return const Center(child: Text('Request not found'));
+      return Center(child: Text(AppLocalizations.of(context).requestNotFound));
     }
 
     return SingleChildScrollView(
@@ -491,7 +497,7 @@ class _BorrowingRequestDetailScreenState
               children: [
                 Expanded(
                   child: Text(
-                    'Request #${_request!.id}',
+                    AppLocalizations.of(context).requestNumber(_request!.id),
                     style: const TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
@@ -555,14 +561,19 @@ class _BorrowingRequestDetailScreenState
                 children: [
                   const Icon(Icons.person, color: Color(0xFF2C3E50), size: 20),
                   const SizedBox(width: 8),
-                  const Expanded(
-                    child: Text(
-                      'Customer Information',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF2C3E50),
-                      ),
+                  Expanded(
+                    child: Builder(
+                      builder: (context) {
+                        final localizations = AppLocalizations.of(context);
+                        return Text(
+                          localizations.customerInformation,
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF2C3E50),
+                          ),
+                        );
+                      },
                     ),
                   ),
                   if (!_isEditingCustomer)
@@ -599,12 +610,12 @@ class _BorrowingRequestDetailScreenState
               if (_isEditingCustomer) ...[
                 CustomTextField(
                   controller: _customerNameController,
-                  labelText: 'Full Name',
+                  labelText: AppLocalizations.of(context).fullName,
                   prefixIcon: const Icon(Icons.person_outline),
                   enabled: _isEditingCustomer,
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
-                      return 'Full name is required';
+                      return AppLocalizations.of(context).fullNameRequired;
                     }
                     return null;
                   },
@@ -612,7 +623,7 @@ class _BorrowingRequestDetailScreenState
                 const SizedBox(height: 16),
                 CustomTextField(
                   controller: _customerPhoneController,
-                  labelText: 'Phone Number',
+                  labelText: AppLocalizations.of(context).phoneNumber,
                   prefixIcon: const Icon(Icons.phone),
                   keyboardType: TextInputType.phone,
                   enabled: _isEditingCustomer,
@@ -620,7 +631,9 @@ class _BorrowingRequestDetailScreenState
                     if (value != null && value.trim().isNotEmpty) {
                       final phoneRegex = RegExp(r'^\+?[\d\s\-\(\)]{7,20}$');
                       if (!phoneRegex.hasMatch(value.trim())) {
-                        return 'Please enter a valid phone number';
+                        return AppLocalizations.of(
+                          context,
+                        ).pleaseEnterValidPhoneNumber;
                       }
                     }
                     return null;
@@ -629,51 +642,62 @@ class _BorrowingRequestDetailScreenState
                 const SizedBox(height: 16),
                 CustomTextField(
                   controller: _customerEmailController,
-                  labelText: 'Email',
+                  labelText: AppLocalizations.of(context).email,
                   prefixIcon: const Icon(Icons.email),
                   keyboardType: TextInputType.emailAddress,
                   enabled: _isEditingCustomer,
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
-                      return 'Email is required';
+                      return AppLocalizations.of(context).emailRequired;
                     }
                     final emailRegex = RegExp(
                       r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
                     );
                     if (!emailRegex.hasMatch(value.trim())) {
-                      return 'Please enter a valid email address';
+                      return AppLocalizations.of(
+                        context,
+                      ).pleaseEnterValidEmailAddress;
                     }
                     return null;
                   },
                 ),
               ] else ...[
-                _buildCustomerDetailRow(
-                  'Full Name:',
-                  _getCustomerName(),
-                  Icons.person_outline,
+                Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return Column(
+                      children: [
+                        _buildCustomerDetailRow(
+                          '${localizations.fullName}:',
+                          _getCustomerName(),
+                          Icons.person_outline,
+                        ),
+                        _buildCustomerDetailRow(
+                          '${localizations.phoneNumber}:',
+                          _getCustomerPhone(),
+                          Icons.phone,
+                        ),
+                        _buildCustomerDetailRow(
+                          '${localizations.email}:',
+                          _getCustomerEmail(),
+                          Icons.email,
+                        ),
+                        if (_request!.customer?.address != null)
+                          _buildCustomerDetailRow(
+                            '${localizations.deliveryAddress}:',
+                            _request!.customer!.address!,
+                            Icons.location_on,
+                          ),
+                        if (_request!.customer?.city != null)
+                          _buildCustomerDetailRow(
+                            '${localizations.deliveryCity}:',
+                            _request!.customer!.city!,
+                            Icons.location_city,
+                          ),
+                      ],
+                    );
+                  },
                 ),
-                _buildCustomerDetailRow(
-                  'Phone Number:',
-                  _getCustomerPhone(),
-                  Icons.phone,
-                ),
-                _buildCustomerDetailRow(
-                  'Email:',
-                  _getCustomerEmail(),
-                  Icons.email,
-                ),
-                if (_request!.customer?.address != null)
-                  _buildCustomerDetailRow(
-                    'Address',
-                    _request!.customer!.address!,
-                    Icons.location_on,
-                  ),
-                if (_request!.customer?.city != null)
-                  _buildCustomerDetailRow(
-                    'City',
-                    _request!.customer!.city!,
-                    Icons.location_city,
-                  ),
               ],
             ],
           ),
@@ -714,15 +738,20 @@ class _BorrowingRequestDetailScreenState
                   ),
                 ),
                 const SizedBox(height: 2),
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: value == 'Not provided'
-                        ? Colors.red[600]
-                        : const Color(0xFF495057),
-                  ),
+                Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return Text(
+                      value,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: value == localizations.notProvided
+                            ? Colors.red[600]
+                            : const Color(0xFF495057),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -739,7 +768,8 @@ class _BorrowingRequestDetailScreenState
     if (_request!.customer != null) {
       return _request!.customer!.fullName;
     }
-    return 'Not provided';
+    final localizations = AppLocalizations.of(context);
+    return localizations.notProvided;
   }
 
   String _getCustomerPhone() {
@@ -747,7 +777,8 @@ class _BorrowingRequestDetailScreenState
         _request!.customer!.phone!.isNotEmpty) {
       return _request!.customer!.phone!;
     }
-    return 'Not provided';
+    final localizations = AppLocalizations.of(context);
+    return localizations.notProvided;
   }
 
   String _getCustomerEmail() {
@@ -755,7 +786,8 @@ class _BorrowingRequestDetailScreenState
         _request!.customer!.email.isNotEmpty) {
       return _request!.customer!.email;
     }
-    return 'Not provided';
+    final localizations = AppLocalizations.of(context);
+    return localizations.notProvided;
   }
 
   Widget _buildBorrowedBooksCard() {
@@ -767,17 +799,22 @@ class _BorrowingRequestDetailScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
-                Icon(Icons.book, color: Color(0xFF2C3E50), size: 20),
-                SizedBox(width: 8),
-                Text(
-                  'Borrowed Books',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF2C3E50),
-                  ),
+                const Icon(Icons.book, color: Color(0xFF2C3E50), size: 20),
+                const SizedBox(width: 8),
+                Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return Text(
+                      localizations.borrowedBooks,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF2C3E50),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -811,12 +848,17 @@ class _BorrowingRequestDetailScreenState
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        'Duration: ${_request!.durationDays} days',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: Color(0xFF6C757D),
-                        ),
+                      Builder(
+                        builder: (context) {
+                          final localizations = AppLocalizations.of(context);
+                          return Text(
+                            '${localizations.duration}: ${_request!.durationDays} ${localizations.days}',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: Color(0xFF6C757D),
+                            ),
+                          );
+                        },
                       ),
                     ],
                   ),
@@ -893,21 +935,26 @@ class _BorrowingRequestDetailScreenState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Row(
+              Row(
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.assignment_return,
                     color: Color(0xFF2C3E50),
                     size: 20,
                   ),
-                  SizedBox(width: 8),
-                  Text(
-                    'Return Request',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF2C3E50),
-                    ),
+                  const SizedBox(width: 8),
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Text(
+                        localizations.returnRequestLabel,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black,
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -923,27 +970,37 @@ class _BorrowingRequestDetailScreenState
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: Colors.orange, width: 1),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
-                    Icon(Icons.schedule, color: Colors.orange, size: 20),
-                    SizedBox(width: 8),
+                    const Icon(Icons.schedule, color: Colors.orange, size: 20),
+                    const SizedBox(width: 8),
                     Expanded(
-                      child: Text(
-                        'Status: Pending Approval',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.orange,
-                        ),
+                      child: Builder(
+                        builder: (context) {
+                          final localizations = AppLocalizations.of(context);
+                          return Text(
+                            localizations.statusPendingApproval,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.orange,
+                            ),
+                          );
+                        },
                       ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 16),
-              const Text(
-                'A return request has been initiated. Please approve the return request.',
-                style: TextStyle(color: Color(0xFF6C757D)),
+              Builder(
+                builder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return Text(
+                    localizations.returnRequestInitiatedMessage,
+                    style: const TextStyle(color: Color(0xFF6C757D)),
+                  );
+                },
               ),
             ],
           ),
@@ -959,21 +1016,26 @@ class _BorrowingRequestDetailScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
-                Icon(
+                const Icon(
                   Icons.assignment_return,
                   color: Color(0xFF2C3E50),
                   size: 20,
                 ),
-                SizedBox(width: 8),
-                Text(
-                  'Return Request',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF2C3E50),
-                  ),
+                const SizedBox(width: 8),
+                Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return Text(
+                      localizations.returnRequestLabel,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF2C3E50),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -1000,13 +1062,20 @@ class _BorrowingRequestDetailScreenState
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text(
-                      'Status: ${_returnRequest!.statusDisplay}',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: _getReturnStatusColor(_returnRequest!.status),
-                      ),
+                    child: Builder(
+                      builder: (context) {
+                        final localizations = AppLocalizations.of(context);
+                        return Text(
+                          '${localizations.status}: ${localizations.getReturnRequestStatusLabel(_returnRequest!.status)}',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: _getReturnStatusColor(
+                              _returnRequest!.status,
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ],
@@ -1026,12 +1095,17 @@ class _BorrowingRequestDetailScreenState
                     const Icon(Icons.warning, color: Colors.orange, size: 20),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Text(
-                        'Fine: \$${_returnRequest!.fineAmount.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: Colors.orange,
-                        ),
+                      child: Builder(
+                        builder: (context) {
+                          final localizations = AppLocalizations.of(context);
+                          return Text(
+                            '${localizations.fine}: \$${_returnRequest!.fineAmount.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: Colors.orange,
+                            ),
+                          );
+                        },
                       ),
                     ),
                   ],
@@ -1058,17 +1132,22 @@ class _BorrowingRequestDetailScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
-                Icon(Icons.settings, color: Color(0xFF2C3E50), size: 20),
-                SizedBox(width: 8),
-                Text(
-                  'Actions',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF2C3E50),
-                  ),
+                const Icon(Icons.settings, color: Color(0xFF2C3E50), size: 20),
+                const SizedBox(width: 8),
+                Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return Text(
+                      localizations.actions,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF2C3E50),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -1079,14 +1158,11 @@ class _BorrowingRequestDetailScreenState
                 child: ElevatedButton.icon(
                   onPressed: _approveReturnRequestOnly,
                   icon: const Icon(Icons.check_circle),
-                  label: const Text('Approve Return Request'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF28A745),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+                  label: Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Text(localizations.approveReturnRequest);
+                    },
                   ),
                 ),
               )
@@ -1096,7 +1172,9 @@ class _BorrowingRequestDetailScreenState
                 child: ElevatedButton.icon(
                   onPressed: _assignDeliveryManager,
                   icon: const Icon(Icons.person_add),
-                  label: const Text('Assign Delivery Manager'),
+                  label: Text(
+                    AppLocalizations.of(context).assignDeliveryManager,
+                  ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF007BFF),
                     foregroundColor: Colors.white,
@@ -1137,14 +1215,19 @@ class _BorrowingRequestDetailScreenState
                     size: 20,
                   ),
                   const SizedBox(width: 8),
-                  const Expanded(
-                    child: Text(
-                      'Assigned Delivery Manager',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF2C3E50),
-                      ),
+                  Expanded(
+                    child: Builder(
+                      builder: (context) {
+                        final localizations = AppLocalizations.of(context);
+                        return Text(
+                          localizations.assignedDeliveryManager,
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF2C3E50),
+                          ),
+                        );
+                      },
                     ),
                   ),
                   if (!_isEditingDeliveryManager)
@@ -1181,12 +1264,12 @@ class _BorrowingRequestDetailScreenState
               if (_isEditingDeliveryManager) ...[
                 CustomTextField(
                   controller: _deliveryManagerNameController,
-                  labelText: 'Full Name',
+                  labelText: AppLocalizations.of(context).fullName,
                   prefixIcon: const Icon(Icons.person_outline),
                   enabled: _isEditingDeliveryManager,
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
-                      return 'Full name is required';
+                      return AppLocalizations.of(context).fullNameRequired;
                     }
                     return null;
                   },
@@ -1194,7 +1277,7 @@ class _BorrowingRequestDetailScreenState
                 const SizedBox(height: 16),
                 CustomTextField(
                   controller: _deliveryManagerPhoneController,
-                  labelText: 'Phone Number',
+                  labelText: AppLocalizations.of(context).phoneNumber,
                   prefixIcon: const Icon(Icons.phone),
                   keyboardType: TextInputType.phone,
                   enabled: _isEditingDeliveryManager,
@@ -1202,7 +1285,9 @@ class _BorrowingRequestDetailScreenState
                     if (value != null && value.trim().isNotEmpty) {
                       final phoneRegex = RegExp(r'^\+?[\d\s\-\(\)]{7,20}$');
                       if (!phoneRegex.hasMatch(value.trim())) {
-                        return 'Please enter a valid phone number';
+                        return AppLocalizations.of(
+                          context,
+                        ).pleaseEnterValidPhoneNumber;
                       }
                     }
                     return null;
@@ -1211,43 +1296,60 @@ class _BorrowingRequestDetailScreenState
                 const SizedBox(height: 16),
                 CustomTextField(
                   controller: _deliveryManagerEmailController,
-                  labelText: 'Email',
+                  labelText: AppLocalizations.of(context).email,
                   prefixIcon: const Icon(Icons.email),
                   keyboardType: TextInputType.emailAddress,
                   enabled: _isEditingDeliveryManager,
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
-                      return 'Email is required';
+                      return AppLocalizations.of(context).emailRequired;
                     }
                     final emailRegex = RegExp(
                       r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
                     );
                     if (!emailRegex.hasMatch(value.trim())) {
-                      return 'Please enter a valid email address';
+                      return AppLocalizations.of(
+                        context,
+                      ).pleaseEnterValidEmailAddress;
                     }
                     return null;
                   },
                 ),
               ] else ...[
-                _buildCustomerDetailRow(
-                  'Full Name:',
-                  _getDeliveryManagerName(),
-                  Icons.person_outline,
+                Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return _buildCustomerDetailRow(
+                      '${localizations.fullName}:',
+                      _getDeliveryManagerName(),
+                      Icons.person_outline,
+                    );
+                  },
                 ),
-                _buildCustomerDetailRow(
-                  'Phone Number:',
-                  _request!.deliveryPerson!.phone != null &&
-                          _request!.deliveryPerson!.phone!.isNotEmpty
-                      ? _request!.deliveryPerson!.phone!
-                      : 'Not provided',
-                  Icons.phone,
+                Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return _buildCustomerDetailRow(
+                      '${localizations.phoneNumber}:',
+                      _request!.deliveryPerson!.phone != null &&
+                              _request!.deliveryPerson!.phone!.isNotEmpty
+                          ? _request!.deliveryPerson!.phone!
+                          : localizations.notProvided,
+                      Icons.phone,
+                    );
+                  },
                 ),
-                _buildCustomerDetailRow(
-                  'Email:',
-                  _request!.deliveryPerson!.email.isNotEmpty
-                      ? _request!.deliveryPerson!.email
-                      : 'Not provided',
-                  Icons.email,
+                Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return _buildCustomerDetailRow(
+                      '${localizations.email}:',
+                      _request!.deliveryPerson!.email.isNotEmpty
+                          ? _request!.deliveryPerson!.email
+                          : localizations.notProvided,
+                      Icons.email,
+                    );
+                  },
                 ),
               ],
             ],
@@ -1262,8 +1364,13 @@ class _BorrowingRequestDetailScreenState
     if (_request == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Request information not available'),
+          SnackBar(
+            content: Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Text(localizations.requestInformationNotAvailable);
+              },
+            ),
             backgroundColor: Colors.orange,
           ),
         );
@@ -1287,8 +1394,13 @@ class _BorrowingRequestDetailScreenState
 
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Return request approved successfully'),
+          SnackBar(
+            content: Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Text(localizations.returnRequestApprovedSuccessfully);
+              },
+            ),
             backgroundColor: Colors.green,
           ),
         );
@@ -1301,8 +1413,14 @@ class _BorrowingRequestDetailScreenState
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              returnProvider.errorMessage ?? 'Failed to approve return request',
+            content: Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Text(
+                  returnProvider.errorMessage ??
+                      localizations.failedToApproveReturnRequest,
+                );
+              },
             ),
             backgroundColor: Colors.red,
           ),
@@ -1312,7 +1430,12 @@ class _BorrowingRequestDetailScreenState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: ${e.toString()}'),
+            content: Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Text('${localizations.error}: ${e.toString()}');
+              },
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -1325,8 +1448,13 @@ class _BorrowingRequestDetailScreenState
     if (_request == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Request information not available'),
+          SnackBar(
+            content: Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Text(localizations.requestInformationNotAvailable);
+              },
+            ),
             backgroundColor: Colors.orange,
           ),
         );
@@ -1348,8 +1476,13 @@ class _BorrowingRequestDetailScreenState
 
     if (managers.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No delivery managers available'),
+        SnackBar(
+          content: Builder(
+            builder: (context) {
+              final localizations = AppLocalizations.of(context);
+              return Text(localizations.noDeliveryManagersAvailable);
+            },
+          ),
           backgroundColor: Colors.red,
         ),
       );
@@ -1371,25 +1504,42 @@ class _BorrowingRequestDetailScreenState
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Row(
+                Row(
                   children: [
-                    Icon(Icons.person_add, color: Color(0xFF007BFF), size: 24),
-                    SizedBox(width: 12),
+                    const Icon(
+                      Icons.person_add,
+                      color: Color(0xFF007BFF),
+                      size: 24,
+                    ),
+                    const SizedBox(width: 12),
                     Expanded(
-                      child: Text(
-                        'Select Delivery Manager',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      child: Builder(
+                        builder: (context) {
+                          final localizations = AppLocalizations.of(context);
+                          return Text(
+                            localizations.selectDeliveryManager,
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          );
+                        },
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 20),
-                const Text(
-                  'Select a delivery manager to assign this return request:',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return Text(
+                      localizations.selectDeliveryManagerToAssignReturnRequest,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    );
+                  },
                 ),
                 const SizedBox(height: 16),
                 Container(
@@ -1540,7 +1690,7 @@ class _BorrowingRequestDetailScreenState
                     Expanded(
                       child: OutlinedButton(
                         onPressed: () => Navigator.of(context).pop(false),
-                        child: const Text('Cancel'),
+                        child: Text(AppLocalizations.of(context).cancel),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -1553,7 +1703,7 @@ class _BorrowingRequestDetailScreenState
                           backgroundColor: const Color(0xFF007BFF),
                           foregroundColor: Colors.white,
                         ),
-                        child: const Text('Assign Manager'),
+                        child: Text(AppLocalizations.of(context).assignManager),
                       ),
                     ),
                   ],
@@ -1575,8 +1725,15 @@ class _BorrowingRequestDetailScreenState
         if (mounted) {
           if (success) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Delivery manager assigned successfully'),
+              SnackBar(
+                content: Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return Text(
+                      localizations.deliveryManagerAssignedSuccessfully,
+                    );
+                  },
+                ),
                 backgroundColor: Colors.green,
               ),
             );
@@ -1585,9 +1742,14 @@ class _BorrowingRequestDetailScreenState
           } else {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(
-                  returnProvider.errorMessage ??
-                      'Failed to assign delivery manager',
+                content: Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return Text(
+                      returnProvider.errorMessage ??
+                          localizations.failedToAssignDeliveryManager,
+                    );
+                  },
                 ),
                 backgroundColor: Colors.red,
               ),
@@ -1598,7 +1760,12 @@ class _BorrowingRequestDetailScreenState
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Error: ${e.toString()}'),
+              content: Builder(
+                builder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return Text('${localizations.error}: ${e.toString()}');
+                },
+              ),
               backgroundColor: Colors.red,
             ),
           );
@@ -1702,14 +1869,19 @@ class _BorrowingRequestDetailScreenState
                     size: 20,
                   ),
                   const SizedBox(width: 8),
-                  const Expanded(
-                    child: Text(
-                      'Assigned Delivery Manager',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF2C3E50),
-                      ),
+                  Expanded(
+                    child: Builder(
+                      builder: (context) {
+                        final localizations = AppLocalizations.of(context);
+                        return Text(
+                          localizations.assignedDeliveryManager,
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF2C3E50),
+                          ),
+                        );
+                      },
                     ),
                   ),
                   if (!_isEditingDeliveryManager)
@@ -1746,12 +1918,12 @@ class _BorrowingRequestDetailScreenState
               if (_isEditingDeliveryManager) ...[
                 CustomTextField(
                   controller: _deliveryManagerNameController,
-                  labelText: 'Full Name',
+                  labelText: AppLocalizations.of(context).fullName,
                   prefixIcon: const Icon(Icons.person_outline),
                   enabled: _isEditingDeliveryManager,
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
-                      return 'Full name is required';
+                      return AppLocalizations.of(context).fullNameRequired;
                     }
                     return null;
                   },
@@ -1759,7 +1931,7 @@ class _BorrowingRequestDetailScreenState
                 const SizedBox(height: 16),
                 CustomTextField(
                   controller: _deliveryManagerPhoneController,
-                  labelText: 'Phone Number',
+                  labelText: AppLocalizations.of(context).phoneNumber,
                   prefixIcon: const Icon(Icons.phone),
                   keyboardType: TextInputType.phone,
                   enabled: _isEditingDeliveryManager,
@@ -1767,7 +1939,9 @@ class _BorrowingRequestDetailScreenState
                     if (value != null && value.trim().isNotEmpty) {
                       final phoneRegex = RegExp(r'^\+?[\d\s\-\(\)]{7,20}$');
                       if (!phoneRegex.hasMatch(value.trim())) {
-                        return 'Please enter a valid phone number';
+                        return AppLocalizations.of(
+                          context,
+                        ).pleaseEnterValidPhoneNumber;
                       }
                     }
                     return null;
@@ -1776,43 +1950,60 @@ class _BorrowingRequestDetailScreenState
                 const SizedBox(height: 16),
                 CustomTextField(
                   controller: _deliveryManagerEmailController,
-                  labelText: 'Email',
+                  labelText: AppLocalizations.of(context).email,
                   prefixIcon: const Icon(Icons.email),
                   keyboardType: TextInputType.emailAddress,
                   enabled: _isEditingDeliveryManager,
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
-                      return 'Email is required';
+                      return AppLocalizations.of(context).emailRequired;
                     }
                     final emailRegex = RegExp(
                       r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
                     );
                     if (!emailRegex.hasMatch(value.trim())) {
-                      return 'Please enter a valid email address';
+                      return AppLocalizations.of(
+                        context,
+                      ).pleaseEnterValidEmailAddress;
                     }
                     return null;
                   },
                 ),
               ] else ...[
-                _buildCustomerDetailRow(
-                  'Full Name:',
-                  _getDeliveryManagerName(),
-                  Icons.person_outline,
+                Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return _buildCustomerDetailRow(
+                      '${localizations.fullName}:',
+                      _getDeliveryManagerName(),
+                      Icons.person_outline,
+                    );
+                  },
                 ),
-                _buildCustomerDetailRow(
-                  'Phone Number:',
-                  _request!.deliveryPerson!.phone != null &&
-                          _request!.deliveryPerson!.phone!.isNotEmpty
-                      ? _request!.deliveryPerson!.phone!
-                      : 'Not provided',
-                  Icons.phone,
+                Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return _buildCustomerDetailRow(
+                      '${localizations.phoneNumber}:',
+                      _request!.deliveryPerson!.phone != null &&
+                              _request!.deliveryPerson!.phone!.isNotEmpty
+                          ? _request!.deliveryPerson!.phone!
+                          : localizations.notProvided,
+                      Icons.phone,
+                    );
+                  },
                 ),
-                _buildCustomerDetailRow(
-                  'Email:',
-                  _request!.deliveryPerson!.email.isNotEmpty
-                      ? _request!.deliveryPerson!.email
-                      : 'Not provided',
-                  Icons.email,
+                Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return _buildCustomerDetailRow(
+                      '${localizations.email}:',
+                      _request!.deliveryPerson!.email.isNotEmpty
+                          ? _request!.deliveryPerson!.email
+                          : localizations.notProvided,
+                      Icons.email,
+                    );
+                  },
                 ),
               ],
               // Button to view delivery manager's current location
@@ -1936,7 +2127,8 @@ class _BorrowingRequestDetailScreenState
 
   String _getDeliveryManagerName() {
     if (_request?.deliveryPerson == null) {
-      return 'Not provided';
+      final localizations = AppLocalizations.of(context);
+      return localizations.notProvided;
     }
 
     final deliveryPerson = _request!.deliveryPerson!;
@@ -1966,9 +2158,10 @@ class _BorrowingRequestDetailScreenState
     }
 
     // Fallback to email if name is not available
+    final localizations = AppLocalizations.of(context);
     return deliveryPerson.email.isNotEmpty
         ? deliveryPerson.email
-        : 'Not provided';
+        : localizations.notProvided;
   }
 
   Future<void> _openDeliveryManagerLocation() async {
@@ -1977,8 +2170,13 @@ class _BorrowingRequestDetailScreenState
     if (_request == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Request information not available'),
+          SnackBar(
+            content: Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Text(localizations.requestInformationNotAvailable);
+              },
+            ),
             backgroundColor: Colors.orange,
           ),
         );
@@ -1989,8 +2187,15 @@ class _BorrowingRequestDetailScreenState
     if (_request!.deliveryPerson == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Delivery manager information not available'),
+          SnackBar(
+            content: Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Text(
+                  localizations.deliveryManagerInformationNotAvailable,
+                );
+              },
+            ),
             backgroundColor: Colors.orange,
           ),
         );
@@ -2003,9 +2208,15 @@ class _BorrowingRequestDetailScreenState
     if (status != 'out_for_delivery') {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Location tracking is only available during active delivery.',
+          SnackBar(
+            content: Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Text(
+                  localizations
+                      .locationTrackingOnlyAvailableDuringActiveDelivery,
+                );
+              },
             ),
             backgroundColor: Colors.orange,
           ),
@@ -2018,12 +2229,20 @@ class _BorrowingRequestDetailScreenState
       // Get auth token
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final token = authProvider.token;
+      final localizations = AppLocalizations.of(context);
 
       if (token == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Authentication required. Please log in again.'),
+            SnackBar(
+              content: Builder(
+                builder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return Text(
+                    localizations.authenticationRequiredPleaseLogInAgain,
+                  );
+                },
+              ),
               backgroundColor: Colors.red,
             ),
           );
@@ -2062,9 +2281,15 @@ class _BorrowingRequestDetailScreenState
           } else {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    'Delivery manager location is not available at the moment.',
+                SnackBar(
+                  content: Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Text(
+                        localizations
+                            .deliveryManagerLocationNotAvailableAtTheMoment,
+                      );
+                    },
                   ),
                   backgroundColor: Colors.orange,
                 ),
@@ -2072,11 +2297,17 @@ class _BorrowingRequestDetailScreenState
             }
           }
         } else {
-          final errorMessage = data['message'] ?? 'Failed to get location';
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(errorMessage),
+                content: Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return Text(
+                      data['message'] ?? localizations.failedToGetLocation,
+                    );
+                  },
+                ),
                 backgroundColor: Colors.orange,
               ),
             );
@@ -2087,7 +2318,7 @@ class _BorrowingRequestDetailScreenState
         final errorMessage =
             errorData['message'] ??
             errorData['error'] ??
-            'Failed to get location';
+            localizations.failedToGetLocation;
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
@@ -2098,7 +2329,9 @@ class _BorrowingRequestDetailScreenState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: ${e.toString()}'),
+            content: Text(
+              '${AppLocalizations.of(context).error}: ${e.toString()}',
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -2146,9 +2379,15 @@ class _BorrowingRequestDetailScreenState
         } catch (e) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                  'Could not open maps. Please check your internet connection.',
+              SnackBar(
+                content: Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return Text(
+                      localizations
+                          .couldNotOpenMapsPleaseCheckYourInternetConnection,
+                    );
+                  },
                 ),
                 backgroundColor: Colors.orange,
               ),
@@ -2160,7 +2399,9 @@ class _BorrowingRequestDetailScreenState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error opening maps: ${e.toString()}'),
+            content: Text(
+              AppLocalizations.of(context).errorOpeningMaps(e.toString()),
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -2177,21 +2418,26 @@ class _BorrowingRequestDetailScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
-                Icon(
+                const Icon(
                   Icons.admin_panel_settings,
                   color: Color(0xFF2C3E50),
                   size: 20,
                 ),
-                SizedBox(width: 8),
-                Text(
-                  'Administration',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF2C3E50),
-                  ),
+                const SizedBox(width: 8),
+                Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return Text(
+                      localizations.administration,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF2C3E50),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -2256,27 +2502,29 @@ class _BorrowingRequestDetailScreenState
   String _getStatusMessage(String status) {
     switch (status.toLowerCase()) {
       case 'pending':
-        return '⏳ Request is pending approval';
+        return AppLocalizations.of(context).requestIsPendingApproval;
       case 'approved':
-        return '✓ Request has been approved';
+        return AppLocalizations.of(context).requestHasBeenApproved;
       case 'rejected':
-        return '✗ Request has been rejected';
+        return AppLocalizations.of(context).requestHasBeenRejected;
       case 'active':
-        return '📖 Book is currently borrowed';
+        return AppLocalizations.of(context).bookIsCurrentlyBorrowed;
       case 'delivered':
-        return '📦 Book has been delivered';
+        return AppLocalizations.of(context).bookHasBeenDelivered;
       case 'returned':
-        return '↩️ Book has been returned';
+        return AppLocalizations.of(context).bookHasBeenReturned;
       case 'return_requested':
-        return '🔄 Return request pending approval';
+        return AppLocalizations.of(context).returnRequestPendingApproval;
       case 'return_approved':
-        return '✅ Return request approved - Assign delivery manager';
+        return AppLocalizations.of(
+          context,
+        ).returnRequestApprovedAssignDeliveryManager;
       case 'return_assigned':
-        return '📦 Return assigned to delivery manager';
+        return AppLocalizations.of(context).returnAssignedToDeliveryManager;
       case 'overdue':
-        return '⚠️ Book is overdue';
+        return AppLocalizations.of(context).bookIsOverdue;
       default:
-        return 'Status: $status';
+        return '${AppLocalizations.of(context).status}: $status';
     }
   }
 
@@ -2289,68 +2537,82 @@ class _BorrowingRequestDetailScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Request Details',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF2C3E50),
-              ),
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Text(
+                  localizations.requestDetails,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF2C3E50),
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 16),
             _buildDetailRow(
-              'Request Date',
+              AppLocalizations.of(context).requestDate,
               _formatDate(_request!.requestDate),
               Icons.calendar_today,
             ),
             if (_request!.approvalDate != null)
               _buildDetailRow(
-                'Approval Date',
+                AppLocalizations.of(context).approvalDate,
                 _formatDate(_request!.approvalDate!),
                 Icons.check_circle,
               ),
             if (_request!.dueDate != null)
               _buildDetailRow(
-                'Due Date',
+                AppLocalizations.of(context).dueDate,
                 _formatDate(_request!.dueDate!),
                 Icons.schedule,
               ),
             if (_request!.deliveryDate != null)
               _buildDetailRow(
-                'Delivery Date',
+                AppLocalizations.of(context).deliveryDate,
                 _formatDate(_request!.deliveryDate!),
                 Icons.local_shipping,
               ),
             if (_request!.returnDate != null)
               _buildDetailRow(
-                'Return Date',
+                AppLocalizations.of(context).returnDate,
                 _formatDate(_request!.returnDate!),
                 Icons.assignment_return,
               ),
-            _buildDetailRow(
-              'Duration',
-              '${_request!.durationDays} days',
-              Icons.access_time,
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return _buildDetailRow(
+                  localizations.duration,
+                  '${_request!.durationDays} ${localizations.days}',
+                  Icons.access_time,
+                );
+              },
             ),
             if (_request!.deliveryAddress != null)
               _buildDetailRow(
-                'Delivery Address',
+                AppLocalizations.of(context).deliveryAddress,
                 _request!.deliveryAddress!,
                 Icons.location_on,
               ),
             if (_request!.additionalNotes != null &&
                 _request!.additionalNotes!.isNotEmpty)
-              _buildDetailRow('Notes', _request!.additionalNotes!, Icons.note),
+              _buildDetailRow(
+                AppLocalizations.of(context).notes,
+                _request!.additionalNotes!,
+                Icons.note,
+              ),
             if (_request!.rejectionReason != null)
               _buildDetailRow(
-                'Rejection Reason',
+                AppLocalizations.of(context).rejectionReason,
                 _request!.rejectionReason!,
                 Icons.cancel,
                 textColor: Colors.red,
               ),
             if (_request!.fineAmount != null && _request!.fineAmount! > 0)
               _buildDetailRow(
-                'Fine Amount',
+                AppLocalizations.of(context).fineAmount,
                 '\$${_request!.fineAmount!.toStringAsFixed(2)}',
                 Icons.monetization_on,
                 textColor: Colors.orange,
@@ -2416,13 +2678,18 @@ class _BorrowingRequestDetailScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Request Timeline',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF2C3E50),
-              ),
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Text(
+                  localizations.requestTimelineLabel,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF2C3E50),
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 16),
             ...(_request!.timeline!.asMap().entries.map((entry) {
@@ -2529,8 +2796,15 @@ class _BorrowingRequestDetailScreenState
       if (token == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Authentication required. Please log in again.'),
+            SnackBar(
+              content: Builder(
+                builder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return Text(
+                    localizations.authenticationRequiredPleaseLogInAgain,
+                  );
+                },
+              ),
               backgroundColor: Colors.red,
             ),
           );
@@ -2557,8 +2831,15 @@ class _BorrowingRequestDetailScreenState
       if (mounted) {
         if (response.statusCode == 200) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Customer information updated successfully'),
+            SnackBar(
+              content: Builder(
+                builder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return Text(
+                    localizations.customerInformationUpdatedSuccessfully,
+                  );
+                },
+              ),
               backgroundColor: Colors.green,
             ),
           );
@@ -2572,7 +2853,7 @@ class _BorrowingRequestDetailScreenState
           final errorMessage =
               errorData['message'] ??
               errorData['error'] ??
-              'Failed to update customer information';
+              AppLocalizations.of(context).failedToUpdateCustomerInformation;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
           );
@@ -2582,7 +2863,9 @@ class _BorrowingRequestDetailScreenState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: ${e.toString()}'),
+            content: Text(
+              '${AppLocalizations.of(context).error}: ${e.toString()}',
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -2606,8 +2889,15 @@ class _BorrowingRequestDetailScreenState
       if (token == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Authentication required. Please log in again.'),
+            SnackBar(
+              content: Builder(
+                builder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return Text(
+                    localizations.authenticationRequiredPleaseLogInAgain,
+                  );
+                },
+              ),
               backgroundColor: Colors.red,
             ),
           );
@@ -2634,9 +2924,14 @@ class _BorrowingRequestDetailScreenState
       if (mounted) {
         if (response.statusCode == 200) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Delivery manager information updated successfully',
+            SnackBar(
+              content: Builder(
+                builder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return Text(
+                    localizations.deliveryManagerInformationUpdatedSuccessfully,
+                  );
+                },
               ),
               backgroundColor: Colors.green,
             ),
@@ -2651,7 +2946,9 @@ class _BorrowingRequestDetailScreenState
           final errorMessage =
               errorData['message'] ??
               errorData['error'] ??
-              'Failed to update delivery manager information';
+              AppLocalizations.of(
+                context,
+              ).failedToUpdateDeliveryManagerInformation;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
           );
@@ -2661,7 +2958,9 @@ class _BorrowingRequestDetailScreenState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: ${e.toString()}'),
+            content: Text(
+              '${AppLocalizations.of(context).error}: ${e.toString()}',
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -2686,6 +2985,6 @@ class _BorrowingRequestDetailScreenState
     }
 
     // Final fallback
-    return 'Book ID: ${_request!.bookId ?? 'N/A'}';
+    return '${AppLocalizations.of(context).bookId}: ${_request!.bookId ?? AppLocalizations.of(context).notProvided}';
   }
 }

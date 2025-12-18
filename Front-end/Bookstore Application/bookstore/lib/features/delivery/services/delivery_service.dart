@@ -623,6 +623,77 @@ class DeliveryService {
     }
   }
 
+  // Accept a delivery assignment
+  // POST /api/delivery/assignments/{id}/accept
+  Future<Map<String, dynamic>> acceptDeliveryAssignment(int assignmentId) async {
+    _clearError();
+
+    try {
+      final url = '$baseUrl/delivery/assignments/$assignmentId/accept/';
+      final headers = _getHeaders();
+
+      debugPrint('🚀 DeliveryService: Accepting assignment $assignmentId');
+      debugPrint('🚀 DeliveryService: URL: $url');
+
+      final response = await http.post(
+        Uri.parse(url),
+        headers: headers,
+      );
+
+      debugPrint(
+        '🚀 DeliveryService: Accept assignment response: ${response.statusCode}',
+      );
+      debugPrint('🚀 DeliveryService: Response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        debugPrint('🚀 DeliveryService: Assignment accepted! Data: $data');
+        return {
+          'success': true,
+          'message': data['message'] ?? 'Assignment accepted successfully',
+          'data': data,
+        };
+      } else if (response.statusCode == 400) {
+        final data = jsonDecode(response.body);
+        _setError(data['error'] ?? 'Invalid assignment');
+        return {
+          'success': false,
+          'message': data['error'] ?? 'Failed to accept assignment',
+          'error_code': 'ACCEPT_FAILED',
+        };
+      } else if (response.statusCode == 403) {
+        _setError('Permission denied: Only assigned delivery manager can accept');
+        return {
+          'success': false,
+          'message': 'Permission denied',
+          'error_code': 'FORBIDDEN',
+        };
+      } else if (response.statusCode == 404) {
+        _setError('Assignment not found: $assignmentId');
+        return {
+          'success': false,
+          'message': 'Assignment not found',
+          'error_code': 'NOT_FOUND',
+        };
+      }
+
+      _setError('Failed to accept assignment: ${response.statusCode}');
+      return {
+        'success': false,
+        'message': 'Failed to accept assignment',
+        'error_code': 'UNKNOWN_ERROR',
+      };
+    } catch (e) {
+      _setError('Network error: ${e.toString()}');
+      debugPrint('🚀 DeliveryService: Exception: $e');
+      return {
+        'success': false,
+        'message': 'Network error: ${e.toString()}',
+        'error_code': 'NETWORK_ERROR',
+      };
+    }
+  }
+
   // Accept a delivery task
   Future<bool> acceptDeliveryTask(int taskId, {String? notes}) async {
     final updateRequest = DeliveryTaskUpdateRequest(

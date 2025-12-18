@@ -9,6 +9,7 @@ import '../../../../shared/widgets/empty_state.dart';
 import '../../../borrow/models/borrow_request.dart';
 import '../../../admin/providers/admin_borrowing_provider.dart';
 import '../../../auth/providers/auth_provider.dart';
+import '../../../../core/localization/app_localizations.dart';
 
 class LibraryManagerBorrowingDashboard extends StatefulWidget {
   const LibraryManagerBorrowingDashboard({super.key});
@@ -47,7 +48,7 @@ class _LibraryManagerBorrowingDashboardState
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Borrowing Management'),
+        title: Text(AppLocalizations.of(context).borrowingManagement),
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.white,
         bottom: TabBar(
@@ -55,10 +56,25 @@ class _LibraryManagerBorrowingDashboardState
           onTap: (index) {
             // Tab selection handled by TabController
           },
-          tabs: const [
-            Tab(text: 'Pending Requests'),
-            Tab(text: 'Overdue'),
-            Tab(text: 'All Borrowings'),
+          tabs: [
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Tab(text: localizations.pending);
+              },
+            ),
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Tab(text: localizations.expired);
+              },
+            ),
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return Tab(text: localizations.borrowings);
+              },
+            ),
           ],
         ),
       ),

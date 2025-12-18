@@ -33,7 +33,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text('Forgot Password'),
+        title: Text(l10n.forgotPasswordTitle),
         backgroundColor: theme.colorScheme.primary,
         foregroundColor: theme.colorScheme.onPrimary,
       ),
@@ -105,7 +105,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
         // Title
         Text(
-          _emailSent ? 'Check Your Email' : 'Forgot Password?',
+          _emailSent ? l10n.checkYourEmail : l10n.forgotPasswordQuestionTitle,
           style: TextStyle(
             fontSize: 28,
             fontWeight: FontWeight.w600,
@@ -119,9 +119,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
         // Description
         Text(
-          _emailSent
-              ? 'We\'ve sent a password reset link to your email address.'
-              : 'Enter your email address and we\'ll send you a link to reset your password.',
+          _emailSent ? l10n.passwordResetLinkSent : l10n.enterEmailForReset,
           style: TextStyle(
             fontSize: 16,
             color: theme.colorScheme.onSurfaceVariant,
@@ -135,7 +133,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   Widget _buildEmailForm(AppLocalizations l10n) {
     return CustomTextField(
-      label: 'Email',
+      label: l10n.emailLabelLogin,
       hint: l10n.emailHint,
       controller: _emailController,
       type: TextFieldType.email,
@@ -153,7 +151,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           'DEBUG: Building send button - isLoading: ${authProvider.isLoading}',
         );
         return CustomButton(
-          text: 'Send Reset Link',
+          text: l10n.sendResetLink,
           onPressed: authProvider.isLoading
               ? null
               : () {
@@ -188,7 +186,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           Icon(Icons.check_circle, color: theme.colorScheme.primary, size: 48),
           const SizedBox(height: AppDimensions.spacingM),
           Text(
-            'Password Reset Link Sent!',
+            l10n.passwordResetLinkSentTitle,
             style: TextStyle(
               fontSize: AppDimensions.fontSizeL,
               fontWeight: FontWeight.w600,
@@ -198,7 +196,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           ),
           const SizedBox(height: AppDimensions.spacingS),
           Text(
-            'Please check your email and follow the instructions to reset your password.',
+            l10n.checkEmailInstructions,
             style: TextStyle(
               fontSize: AppDimensions.fontSizeM,
               color: theme.colorScheme.onSurfaceVariant,
@@ -212,7 +210,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   Widget _buildBackToLoginButton(AppLocalizations l10n) {
     return CustomButton(
-      text: 'Back to Login',
+      text: l10n.backToLogin,
       onPressed: () {
         Navigator.pop(context);
       },
@@ -253,8 +251,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         });
       } else {
         debugPrint('DEBUG: Failed - showing error message');
+        final localizations = AppLocalizations.of(context);
         _showErrorSnackBar(
-          authProvider.errorMessage ?? 'Failed to send reset link',
+          authProvider.errorMessage ?? localizations.failedToSendResetLink,
         );
       }
     }

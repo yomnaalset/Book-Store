@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
+import '../../../core/localization/app_localizations.dart';
 import '../../../shared/widgets/custom_button.dart';
 import '../../../shared/widgets/custom_text_field.dart';
 import '../../books/models/book.dart';
@@ -81,22 +82,21 @@ class _BorrowRequestScreenState extends State<BorrowRequestScreen> {
   }
 
   void _showAddAddressDialog() {
+    final localizations = AppLocalizations.of(context);
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('Address Required'),
-          content: const Text(
-            'You cannot complete your loan request without an address. Would you like to add an address now?',
-          ),
+          title: Text(localizations.addressRequired),
+          content: Text(localizations.addressRequiredMessage),
           actions: [
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
                 Navigator.of(context).pop(); // Go back to previous screen
               },
-              child: const Text('Cancel'),
+              child: Text(localizations.cancel),
             ),
             TextButton(
               onPressed: () {
@@ -106,7 +106,7 @@ class _BorrowRequestScreenState extends State<BorrowRequestScreen> {
                   _loadUserAddress();
                 });
               },
-              child: const Text('Yes'),
+              child: Text(localizations.yes),
             ),
           ],
         );
@@ -166,9 +166,10 @@ class _BorrowRequestScreenState extends State<BorrowRequestScreen> {
         // Get book from request or use widget.book
         final borrowBook = createdRequest.book;
         if (borrowBook == null) {
+          final localizations = AppLocalizations.of(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Failed to load book details'),
+            SnackBar(
+              content: Text(localizations.failedToLoadBookDetailsShort),
               backgroundColor: AppColors.error,
             ),
           );
@@ -212,11 +213,24 @@ class _BorrowRequestScreenState extends State<BorrowRequestScreen> {
           ),
         );
       } else {
+        final localizations = AppLocalizations.of(context);
+        String errorMessage =
+            borrowProvider.errorMessage ?? 'Failed to submit request';
+
+        // Translate common backend error messages
+        final errorLower = errorMessage.toLowerCase();
+        if (errorLower.contains('cannot borrow') &&
+            errorLower.contains('outstanding fine')) {
+          errorMessage = localizations.youCannotBorrowUntilFinePaid;
+        } else if (errorLower.contains('cannot submit') &&
+            errorLower.contains('pending fine')) {
+          errorMessage =
+              localizations.youCannotSubmitBorrowRequestUntilFinePaid;
+        }
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              borrowProvider.errorMessage ?? 'Failed to submit request',
-            ),
+            content: Text(errorMessage),
             backgroundColor: AppColors.error,
           ),
         );
@@ -226,28 +240,30 @@ class _BorrowRequestScreenState extends State<BorrowRequestScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Borrow Request'),
+        title: Text(localizations.borrowRequest),
         backgroundColor: AppColors.primary,
         foregroundColor: AppColors.white,
       ),
       body: Consumer<BorrowProvider>(
         builder: (context, borrowProvider, child) {
           if (_isLoadingProfile) {
-            return const Center(
+            return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: AppDimensions.spacingM),
-                  Text('Loading your address...'),
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: AppDimensions.spacingM),
+                  Text(localizations.loadingYourAddress),
                 ],
               ),
             );
           }
 
           return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(AppDimensions.paddingL),
             child: Form(
               key: _formKey,
@@ -292,7 +308,10 @@ class _BorrowRequestScreenState extends State<BorrowRequestScreen> {
                                 const SizedBox(height: AppDimensions.spacingS),
                                 if (widget.book.author != null)
                                   Text(
-                                    'by ${widget.book.author?.name ?? 'Unknown Author'}',
+                                    localizations.byAuthor(
+                                      widget.book.author?.name ??
+                                          localizations.author,
+                                    ),
                                     style: const TextStyle(
                                       fontSize: AppDimensions.fontSizeM,
                                       color: AppColors.textSecondary,
@@ -300,7 +319,9 @@ class _BorrowRequestScreenState extends State<BorrowRequestScreen> {
                                   ),
                                 const SizedBox(height: AppDimensions.spacingS),
                                 Text(
-                                  'Available: ${widget.book.availableCopies} copies',
+                                  localizations.availableCopies(
+                                    widget.book.availableCopies ?? 0,
+                                  ),
                                   style: const TextStyle(
                                     fontSize: AppDimensions.fontSizeS,
                                     color: AppColors.success,
@@ -317,9 +338,9 @@ class _BorrowRequestScreenState extends State<BorrowRequestScreen> {
                   const SizedBox(height: AppDimensions.spacingXL),
 
                   // Duration Selection
-                  const Text(
-                    'Borrow Duration',
-                    style: TextStyle(
+                  Text(
+                    localizations.borrowDuration,
+                    style: const TextStyle(
                       fontSize: AppDimensions.fontSizeL,
                       fontWeight: FontWeight.bold,
                     ),
@@ -331,7 +352,7 @@ class _BorrowRequestScreenState extends State<BorrowRequestScreen> {
                     children: _durationOptions.map((days) {
                       final isSelected = _selectedDays == days;
                       return ChoiceChip(
-                        label: Text('$days days'),
+                        label: Text('$days ${localizations.days}'),
                         selected: isSelected,
                         onSelected: (selected) {
                           if (selected) {
@@ -351,9 +372,9 @@ class _BorrowRequestScreenState extends State<BorrowRequestScreen> {
                   const SizedBox(height: AppDimensions.spacingXL),
 
                   // Delivery Address
-                  const Text(
-                    'Delivery Address',
-                    style: TextStyle(
+                  Text(
+                    localizations.deliveryAddress,
+                    style: const TextStyle(
                       fontSize: AppDimensions.fontSizeL,
                       fontWeight: FontWeight.bold,
                     ),
@@ -362,12 +383,12 @@ class _BorrowRequestScreenState extends State<BorrowRequestScreen> {
 
                   CustomTextField(
                     controller: _deliveryAddressController,
-                    hintText: 'Enter your delivery address...',
+                    hintText: localizations.enterDeliveryAddress,
                     maxLines: 2,
                     enabled: false, // Make it read-only
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
-                        return 'Delivery address is required';
+                        return localizations.deliveryAddressRequired;
                       }
                       return null;
                     },
@@ -386,16 +407,16 @@ class _BorrowRequestScreenState extends State<BorrowRequestScreen> {
                         });
                       },
                       icon: const Icon(Icons.edit, size: 16),
-                      label: const Text('Edit Address from Profile'),
+                      label: Text(localizations.editAddressFromProfile),
                     ),
                   ),
 
                   const SizedBox(height: AppDimensions.spacingXL),
 
                   // Notes
-                  const Text(
-                    'Additional Notes (Optional)',
-                    style: TextStyle(
+                  Text(
+                    localizations.additionalNotesOptional,
+                    style: const TextStyle(
                       fontSize: AppDimensions.fontSizeL,
                       fontWeight: FontWeight.bold,
                     ),
@@ -404,7 +425,7 @@ class _BorrowRequestScreenState extends State<BorrowRequestScreen> {
 
                   CustomTextField(
                     controller: _notesController,
-                    hintText: 'Any special requests or notes...',
+                    hintText: localizations.anySpecialRequests,
                     maxLines: 3,
                   ),
 
@@ -414,7 +435,7 @@ class _BorrowRequestScreenState extends State<BorrowRequestScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: CustomButton(
-                      text: 'Submit Request',
+                      text: localizations.submitRequest,
                       onPressed: borrowProvider.isLoading
                           ? null
                           : _submitRequest,

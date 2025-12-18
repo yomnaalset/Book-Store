@@ -10,9 +10,9 @@ if TYPE_CHECKING:
     pass
 
 from ..models import (
-    BorrowRequest, BorrowExtension, BorrowFine, BorrowStatistics,
+    BorrowRequest, BorrowExtension, BorrowStatistics,
     Book, User, Payment, BorrowStatusChoices, ExtensionStatusChoices, FineStatusChoices,
-    Notification
+    Notification, ReturnFine
 )
 from ..services.notification_services import NotificationService
 
@@ -430,20 +430,20 @@ class BorrowingService:
                 tracking.tracking_interval = 5  # 5 seconds
                 tracking.save()
             
-            # Get delivery assignment if exists
-            from ..models.delivery_model import DeliveryAssignment, Order
+            # Get delivery request if exists
+            from ..models.delivery_model import Order, DeliveryRequest
             try:
                 order = Order.objects.filter(
                     borrow_request=borrow_request,
                     order_type='borrowing'
                 ).first()
                 if order:
-                    assignment = DeliveryAssignment.objects.filter(order=order).first()
-                    if assignment:
-                        tracking.current_delivery_assignment = assignment
+                    delivery_request = DeliveryRequest.objects.filter(order=order).first()
+                    if delivery_request:
+                        tracking.current_delivery_request = delivery_request
                         tracking.save()
             except Exception as e:
-                logger.warning(f"Could not link delivery assignment to tracking: {str(e)}")
+                logger.warning(f"Could not link delivery request to tracking: {str(e)}")
             
             logger.info(f"Enabled real-time tracking for delivery manager {delivery_person.id} with 5-second interval")
             
@@ -1089,34 +1089,17 @@ class BorrowingNotificationService:
                 borrowing.status = BorrowStatusChoices.LATE
                 borrowing.save()
                 
-                # Create or update fine as specified in requirements
-                fine, created = BorrowFine.objects.get_or_create(
-                    borrow_request=borrowing,
-                    defaults={
-                        'daily_rate': Decimal('1.00'),  # $1 per day as specified
-                        'days_overdue': borrowing.get_days_overdue(),
-                        'total_amount': Decimal('1.00') * borrowing.get_days_overdue(),
-                        'reason': "Delayed Return"
-                    }
-                )
+                # Note: Borrowing itself never generates a fine.
+                # Fines are only created when a return request is processed and the return is late/damaged/lost.
+                # Just update status and send notifications about overdue status.
                 
-                if not created:
-                    # Update existing fine
-                    fine.days_overdue = borrowing.get_days_overdue()
-                    fine.total_amount = fine.daily_rate * borrowing.get_days_overdue()
-                    fine.save()
-                
-                # Update borrow request fine information
-                borrowing.fine_amount = fine.total_amount
-                borrowing.fine_status = FineStatusChoices.UNPAID
-                borrowing.save()
-                
-                # Send notification to customer as specified
+                # Send notification to customer about overdue status
+                days_overdue = borrowing.get_days_overdue()
                 NotificationService.create_notification(
                     user_id=borrowing.customer.id,
-                    title="Book Overdue - Fine Applied",
-                    message=f"A penalty of ${fine.total_amount} has been imposed due to late return of the book '{borrowing.book.name}'.",
-                    notification_type="overdue_fine"
+                    title="Book Overdue",
+                    message=f"Your book '{borrowing.book.name}' is overdue by {days_overdue} days. Please return it as soon as possible.",
+                    notification_type="overdue_alert"
                 )
                 
                 # Send notification to library manager
@@ -1125,7 +1108,7 @@ class BorrowingNotificationService:
                     NotificationService.create_notification(
                         user_id=admin.id,
                         title="Overdue Book Alert",
-                        message=f"Customer {borrowing.customer.get_full_name()} has been late returning book '{borrowing.book.name}' for {borrowing.get_days_overdue()} days. Fine: ${fine.total_amount}",
+                        message=f"Customer {borrowing.customer.get_full_name()} has been late returning book '{borrowing.book.name}' for {days_overdue} days.",
                         notification_type="overdue_alert"
                     )
 
@@ -1162,8 +1145,8 @@ class LateReturnService:
             return {
                 'success': True,
                 'message': 'Late return scenario processed successfully',
-                'fine_amount': fine.total_amount,
-                'days_overdue': fine.days_overdue
+                'days_overdue': borrow_request.get_days_overdue(),
+                'note': 'Fine will be created when return request is processed'
             }
             
         except Exception as e:
@@ -1174,30 +1157,13 @@ class LateReturnService:
     
     @staticmethod
     def create_or_update_fine(borrow_request):
-        """Create or update fine for overdue borrowing"""
-        days_overdue = borrow_request.get_days_overdue()
-        daily_rate = Decimal('1.00')  # $1 per day as per requirements
-        
-        fine, created = BorrowFine.objects.get_or_create(
-            borrow_request=borrow_request,
-            defaults={
-                'daily_rate': daily_rate,
-                'days_overdue': days_overdue,
-                'total_amount': daily_rate * days_overdue,
-                'reason': f"Late return - {days_overdue} days overdue"
-            }
-        )
-        
-        if not created:
-            # Update existing fine
-            fine.update_fine(days_overdue)
-        
-        # Update borrow request fine information
-        borrow_request.fine_amount = fine.total_amount
-        borrow_request.fine_status = FineStatusChoices.UNPAID
-        borrow_request.save()
-        
-        return fine
+        """
+        Note: This method is deprecated.
+        Borrowing itself never generates a fine.
+        Fines are only created when processing return requests (late return, damage, or loss).
+        """
+        # Return None - no fine is created during borrowing
+        return None
     
     @staticmethod
     def send_late_return_notifications(borrow_request, fine):
@@ -1207,7 +1173,7 @@ class LateReturnService:
         NotificationService.create_notification(
             user_id=borrow_request.customer.id,
             title="Book Return Overdue",
-            message=f"You are late in returning '{borrow_request.book.name}'. Please return to avoid additional penalty. Current fine: ${fine.total_amount}",
+            message=f"You are late in returning '{borrow_request.book.name}'. Please return to avoid additional penalty.",
             notification_type="late_return_customer"
         )
         
@@ -1217,7 +1183,7 @@ class LateReturnService:
             NotificationService.create_notification(
                 user_id=admin.id,
                 title="Customer Late Return Alert",
-                message=f"Customer {borrow_request.customer.get_full_name()} has been late returning book '{borrow_request.book.name}' for {fine.days_overdue} days. Fine: ${fine.total_amount}",
+                message=f"Customer {borrow_request.customer.get_full_name()} has been late returning book '{borrow_request.book.name}'.",
                 notification_type="late_return_admin"
             )
     
@@ -1305,7 +1271,7 @@ class LateReturnService:
             return {
                 'success': True,
                 'message': 'Fine paid successfully',
-                'fine_amount': fine.total_amount,
+                'fine_amount': fine.fine_amount if fine else 0,
                 'refund_amount': refund_amount,
                 'deposit_refunded': borrow_request.deposit_refunded
             }
@@ -1357,10 +1323,13 @@ class LateReturnService:
             'fine_status': borrow_request.fine_status,
             'refund_amount': borrow_request.refund_amount,
             'fine_details': {
-                'daily_rate': fine.daily_rate if fine else 0,
-                'days_overdue': fine.days_overdue if fine else 0,
-                'total_amount': fine.total_amount if fine else 0,
-                'paid_date': fine.paid_date if fine else None
+                'days_late': fine.days_late if fine else 0,
+                'fine_amount': fine.fine_amount if fine else 0,
+                'fine_reason': fine.fine_reason if fine else None,
+                'late_return': fine.late_return if fine else False,
+                'damaged': fine.damaged if fine else False,
+                'lost': fine.lost if fine else False,
+                'paid_date': fine.paid_at.isoformat() if fine and fine.paid_at else None
             } if fine else None
         }
 
@@ -1389,11 +1358,11 @@ class BorrowingReportService:
         for i in range(1, 6):
             rating_distribution[str(i)] = sum(1 for r in ratings if r == i)
         
-        # Fine statistics
-        fines = BorrowFine.objects.aggregate(
-            total=Sum('total_amount'),
-            paid=Sum('total_amount', filter=Q(status=FineStatusChoices.PAID)),
-            unpaid=Sum('total_amount', filter=Q(status=FineStatusChoices.UNPAID))
+        # Fine statistics - Note: Borrowing never generates fines. Only return requests can have fines.
+        fines = ReturnFine.objects.aggregate(
+            total=Sum('fine_amount'),
+            paid=Sum('fine_amount', filter=Q(is_paid=True)),
+            unpaid=Sum('fine_amount', filter=Q(is_paid=False))
         )
         
         return {
@@ -1431,11 +1400,13 @@ class BorrowingReportService:
         overdue_count = borrowings.filter(status=BorrowStatusChoices.LATE).count()
         
         # Calculate total fines
-        customer_fines = BorrowFine.objects.filter(
-            borrow_request__customer=customer
+        # Note: Borrowing never generates fines. Only return requests can have fines.
+        # Get fines from return requests for this customer
+        customer_fines = ReturnFine.objects.filter(
+            return_request__borrowing__customer=customer
         ).aggregate(
-            total=Sum('total_amount'),
-            unpaid=Sum('total_amount', filter=Q(status=FineStatusChoices.UNPAID))
+            total=Sum('fine_amount'),
+            unpaid=Sum('fine_amount', filter=Q(is_paid=False))
         )
         
         return {
