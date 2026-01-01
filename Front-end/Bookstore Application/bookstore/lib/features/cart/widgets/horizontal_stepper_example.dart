@@ -12,7 +12,7 @@ class _HorizontalStepperExampleState extends State<HorizontalStepperExample> {
   int _currentStep = 0;
   Set<int> skippedSteps = {};
 
-  final List<String> steps = ['Shipping', 'Payment', 'Review'];
+  final List<String> steps = ['Delivery', 'Payment', 'Review'];
 
   bool isStepOptional(int step) => step == 1;
   bool isStepSkipped(int step) => skippedSteps.contains(step);

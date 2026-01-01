@@ -314,11 +314,18 @@ class DeliveryProfileViewSet(viewsets.ModelViewSet):
         Automatically resets status to 'online' if user is 'busy' but has no active deliveries.
         """
         if not request.user.is_delivery_admin():
+            # Return graceful response for non-delivery-admins instead of 403
             return Response({
-                'success': False,
-                'message': 'Only delivery administrators have delivery status',
-                'error_code': 'PERMISSION_DENIED'
-            }, status=status.HTTP_403_FORBIDDEN)
+                'success': True,
+                'message': 'User does not have delivery status',
+                'data': {
+                    'user_id': request.user.id,
+                    'delivery_status': None,
+                    'can_change_manually': False,
+                    'is_tracking_active': False,
+                    'last_updated': None
+                }
+            }, status=status.HTTP_200_OK)
         
         try:
             delivery_profile = DeliveryProfileService.get_or_create_delivery_profile(request.user)
@@ -379,8 +386,8 @@ class DeliveryProfileViewSet(viewsets.ModelViewSet):
             
             delivery_profile = DeliveryProfileService.update_location(
                 user=request.user,
-                latitude=serializer.validated_data['latitude'],
-                longitude=serializer.validated_data['longitude'],
+                latitude=serializer.validated_data.get('latitude'),
+                longitude=serializer.validated_data.get('longitude'),
                 address=serializer.validated_data.get('address')
             )
             

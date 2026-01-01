@@ -202,7 +202,7 @@ class Notification(models.Model):
                 from .library_model import Book
                 return Book.objects.get(id=self.related_object_id)
             elif self.related_object_type == 'order':
-                from .delivery_model import Order
+                from .order_model import Order
                 return Order.objects.get(id=self.related_object_id)
             elif self.related_object_type == 'borrow_request':
                 from .borrowing_model import BorrowRequest

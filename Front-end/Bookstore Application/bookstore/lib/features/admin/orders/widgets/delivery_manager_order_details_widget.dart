@@ -1102,10 +1102,10 @@ class _DeliveryManagerOrderDetailsWidgetState
                     widget.order.customerEmail,
                     Icons.email,
                   ),
-                  if (widget.order.shippingAddress != null) ...[
+                  if (widget.order.deliveryAddress != null) ...[
                     widget.shared.buildCustomerDetailRow(
                       localizations.addressLabel,
-                      widget.order.shippingAddressText ??
+                      widget.order.deliveryAddressText ??
                           localizations.notProvided,
                       Icons.location_on,
                     ),

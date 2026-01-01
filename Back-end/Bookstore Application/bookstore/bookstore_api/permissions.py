@@ -315,3 +315,48 @@ class IsAdminUser(permissions.BasePermission):
     """
     def has_permission(self, request, view):
         return bool(request.user and request.user.is_staff)
+
+
+class CanManageDeliveryNotes(permissions.BasePermission):
+    """
+    Permission for managing delivery notes.
+    Allows admin, customer (for their own deliveries), and delivery manager (for assigned deliveries).
+    Notes can only be edited before delivery completion.
+    """
+    message = "You do not have permission to manage notes for this delivery."
+    
+    def has_permission(self, request, view):
+        return request.user and request.user.is_authenticated and request.user.is_active
+    
+    def has_object_permission(self, request, view, obj):
+        # Get the delivery request object
+        # Check if obj is a DeliveryRequest by checking for required attributes
+        if not hasattr(obj, 'status') or not hasattr(obj, 'customer') or not hasattr(obj, 'delivery_manager'):
+            return False
+        
+        delivery_request = obj
+        
+        # Admins can always manage notes
+        if request.user.user_type in ['library_admin', 'delivery_admin']:
+            # Check if delivery is completed - if so, only read access
+            if delivery_request.status == 'completed':
+                return request.method in permissions.SAFE_METHODS
+            return True
+        
+        # Customer can manage notes for their own deliveries
+        if request.user.user_type == 'customer':
+            if delivery_request.customer == request.user:
+                # Check if delivery is completed - if so, only read access
+                if delivery_request.status == 'completed':
+                    return request.method in permissions.SAFE_METHODS
+                return True
+        
+        # Delivery manager can manage notes for assigned deliveries
+        if request.user.user_type == 'delivery_admin':
+            if delivery_request.delivery_manager == request.user:
+                # Check if delivery is completed - if so, only read access
+                if delivery_request.status == 'completed':
+                    return request.method in permissions.SAFE_METHODS
+                return True
+        
+        return False

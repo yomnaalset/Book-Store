@@ -125,7 +125,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   onPageChanged: (index) =>
                       setState(() => _currentStep = index),
                   children: [
-                    _buildShippingStep(),
+                    _buildDeliveryStep(),
                     _buildPaymentStep(),
                     _buildReviewStep(cartProvider),
                   ],
@@ -230,7 +230,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     );
   }
 
-  Widget _buildShippingStep() {
+  Widget _buildDeliveryStep() {
     final localizations = AppLocalizations.of(context);
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),

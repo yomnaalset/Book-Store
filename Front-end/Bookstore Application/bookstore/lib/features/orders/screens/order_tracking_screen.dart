@@ -222,7 +222,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
               _order!.paymentInfo?.paymentMethod ?? 'Cash on Delivery',
             ),
 
-            if (_order!.shippingAddress != null) ...[
+            if (_order!.deliveryAddress != null) ...[
               const SizedBox(height: 8),
               Text(
                 'Delivery Address',
@@ -231,7 +231,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                 ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 4),
-              Text(_order!.shippingAddress!.fullAddress),
+              Text(_order!.deliveryAddress!.fullAddress),
             ],
           ],
         ),

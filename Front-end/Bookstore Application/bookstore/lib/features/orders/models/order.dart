@@ -12,7 +12,7 @@ class Order {
   final String orderType; // Added order_type field
   final String? paymentMethod;
   final double totalAmount;
-  final double shippingCost;
+  final double deliveryCost;
   final double taxAmount;
   final String? couponCode;
   final double? discountAmount;
@@ -23,7 +23,7 @@ class Order {
   final DateTime updatedAt;
   final List<OrderItem> items;
   final int? totalQuantity;
-  final OrderAddress? shippingAddress;
+  final OrderAddress? deliveryAddress;
   final OrderAddress? billingAddress;
   final PaymentInfo? paymentInfo;
   final DeliveryAssignment? deliveryAssignment;
@@ -40,7 +40,7 @@ class Order {
     required this.orderType, // Added orderType parameter
     this.paymentMethod,
     required this.totalAmount,
-    required this.shippingCost,
+    required this.deliveryCost,
     required this.taxAmount,
     this.couponCode,
     this.discountAmount,
@@ -53,7 +53,7 @@ class Order {
     required this.updatedAt,
     required this.items,
     this.totalQuantity,
-    this.shippingAddress,
+    this.deliveryAddress,
     this.billingAddress,
     this.paymentInfo,
     this.deliveryAssignment,
@@ -79,7 +79,17 @@ class Order {
       }
 
       // Handle both backend API structure and frontend structure
-      final customerData = json['customer'] as Map<String, dynamic>?;
+      // Customer can be either an int (ID) or a Map (full object)
+      Map<String, dynamic>? customerData;
+      if (json['customer'] != null) {
+        if (json['customer'] is Map<String, dynamic>) {
+          customerData = json['customer'] as Map<String, dynamic>;
+        } else if (json['customer'] is int) {
+          // Customer is just an ID, use customer_name and customer_email from JSON
+          customerData =
+              null; // Will use fallback values from json['customer_name'] and json['customer_email']
+        }
+      }
       final paymentData = json['payment'] as Map<String, dynamic>?;
       final profileData = customerData?['profile'] as Map<String, dynamic>?;
 
@@ -116,6 +126,7 @@ class Order {
         orderNumber: json['order_number'] ?? '',
         userId:
             customerData?['id']?.toString() ??
+            (json['customer'] is int ? json['customer'].toString() : null) ??
             json['user_id']?.toString() ??
             '',
         customerName:
@@ -128,8 +139,8 @@ class Order {
         orderType: json['order_type'] ?? 'purchase', // Default to purchase
         paymentMethod: json['payment_method'],
         totalAmount: _parseDouble(json['total_amount']),
-        shippingCost: _parseDouble(
-          json['delivery_cost'] ?? json['shipping_cost'],
+        deliveryCost: _parseDouble(
+          json['delivery_cost'] ?? json['delivery_cost'],
         ),
         taxAmount: json['tax_amount'] != null
             ? _parseDouble(json['tax_amount'])
@@ -216,7 +227,7 @@ class Order {
           return itemsData.map((item) => OrderItem.fromJson(item)).toList();
         }(),
         totalQuantity: json['total_quantity'],
-        shippingAddress:
+        deliveryAddress:
             json['delivery_address'] != null &&
                 json['delivery_address'] is String
             ? OrderAddress.fromDeliveryAddress(
@@ -226,8 +237,8 @@ class Order {
             : json['delivery_address'] != null &&
                   json['delivery_address'] is Map<String, dynamic>
             ? OrderAddress.fromJson(json['delivery_address'])
-            : json['shipping_address'] != null
-            ? OrderAddress.fromJson(json['shipping_address'])
+            : json['delivery_address'] != null
+            ? OrderAddress.fromJson(json['delivery_address'])
             : null,
         billingAddress: json['billing_address'] != null
             ? OrderAddress.fromJson(json['billing_address'])
@@ -330,7 +341,7 @@ class Order {
 
   double get subtotal => items.fold(0.0, (sum, item) => sum + item.totalPrice);
   double get finalTotal =>
-      subtotal + shippingCost + taxAmount - (discountAmount ?? 0.0);
+      subtotal + deliveryCost + taxAmount - (discountAmount ?? 0.0);
 
   // Methods from the old Order class for compatibility
   bool get isPending => status.toLowerCase() == 'pending';
@@ -378,7 +389,7 @@ class Order {
 
   String? _customerPhone;
   String? get paymentStatus => paymentInfo?.status;
-  String? get deliveryCity => shippingAddress?.city;
+  String? get deliveryCity => deliveryAddress?.city;
   String? get deliveryNotes => notes;
 
   // Get notes list (prefer new orderNotes, fallback to legacy notes)
@@ -418,7 +429,7 @@ class Order {
   bool? canEditNotes;
   bool? canDeleteNotes;
 
-  String? get deliveryAddress => shippingAddress?.address1;
+  String? get deliveryAddressField => deliveryAddress?.address1;
   DateTime? get deliveredAt => null;
   bool get hasDeliveryAssignment => deliveryAssignment != null;
   String? get deliveryAgentId => deliveryAssignment?.deliveryManagerId;
@@ -434,8 +445,8 @@ class Order {
   bool get hasDiscount => discountAmount != null && discountAmount! > 0;
 
   String get deliveryAgentName => deliveryAssignment?.deliveryManagerName ?? '';
-  String? get shippingAddressText => shippingAddress != null
-      ? "${shippingAddress?.address1}, ${shippingAddress?.city}"
+  String? get deliveryAddressText => deliveryAddress != null
+      ? "${deliveryAddress?.address1}, ${deliveryAddress?.city}"
       : null;
 
   String get statusDisplay {
@@ -470,7 +481,7 @@ class Order {
   // Add copyWith method for compatibility
   Order copyWith({
     // Override specific properties that need type checking
-    dynamic shippingAddr,
+    dynamic deliveryAddr,
     String? id,
     String? orderNumber,
     String? userId,
@@ -480,7 +491,7 @@ class Order {
     String? orderType,
     String? paymentMethod,
     double? totalAmount,
-    double? shippingCost,
+    double? deliveryCost,
     double? taxAmount,
     String? couponCode,
     double? discountAmount,
@@ -493,7 +504,7 @@ class Order {
     DateTime? updatedAt,
     List<OrderItem>? items,
     int? totalQuantity,
-    OrderAddress? shippingAddress,
+    OrderAddress? deliveryAddress,
     OrderAddress? billingAddress,
     PaymentInfo? paymentInfo,
     DeliveryAssignment? deliveryAssignment,
@@ -510,7 +521,7 @@ class Order {
       orderType: orderType ?? this.orderType,
       paymentMethod: paymentMethod ?? this.paymentMethod,
       totalAmount: totalAmount ?? this.totalAmount,
-      shippingCost: shippingCost ?? this.shippingCost,
+      deliveryCost: deliveryCost ?? this.deliveryCost,
       taxAmount: taxAmount ?? this.taxAmount,
       couponCode: couponCode ?? this.couponCode,
       discountAmount: discountAmount ?? this.discountAmount,
@@ -523,9 +534,9 @@ class Order {
       updatedAt: updatedAt ?? this.updatedAt,
       items: items ?? this.items,
       totalQuantity: totalQuantity ?? this.totalQuantity,
-      shippingAddress: shippingAddr is OrderAddress
-          ? shippingAddr
-          : shippingAddress ?? this.shippingAddress,
+      deliveryAddress: deliveryAddr is OrderAddress
+          ? deliveryAddr
+          : deliveryAddress ?? this.deliveryAddress,
       billingAddress: billingAddress ?? this.billingAddress,
       paymentInfo: paymentInfo ?? this.paymentInfo,
       deliveryAssignment: deliveryAssignment ?? this.deliveryAssignment,
@@ -538,22 +549,25 @@ class Order {
 class OrderItem {
   final String id;
   final String orderId;
-  final Book book;
+  final int bookId;
+  final String bookTitle;
+  final String? bookAuthor;
+  final String? bookImage;
   final int quantity;
   final double unitPrice;
   final double totalPrice;
 
   // Legacy properties for compatibility
   bool get isBorrowed => false;
-  String get bookTitle => book.title;
-  String? get bookAuthor => book.author?.name;
-  String? get bookImage => book.primaryImageUrl;
   double get price => unitPrice;
 
   OrderItem({
     required this.id,
     required this.orderId,
-    required this.book,
+    required this.bookId,
+    required this.bookTitle,
+    this.bookAuthor,
+    this.bookImage,
     required this.quantity,
     required this.unitPrice,
     required this.totalPrice,
@@ -563,27 +577,60 @@ class OrderItem {
     try {
       debugPrint('DEBUG: Parsing OrderItem from JSON: $json');
 
-      // Parse book information
+      // Parse book information - support both full book object and book_id/book_title
+      int? bookId;
+      String? bookTitle;
+      String? bookAuthor;
+      String? bookImage;
+
+      // Check if we have a full book object (legacy format)
       final bookData = json['book'] as Map<String, dynamic>?;
-      if (bookData == null) {
-        debugPrint('DEBUG: No book data found in OrderItem JSON');
-        throw Exception('Book data is required for OrderItem');
+      if (bookData != null) {
+        // Legacy format with full book object
+        final book = Book.fromJson(bookData);
+        bookId = int.tryParse(book.id.toString()) ?? 0;
+        bookTitle = book.name; // Book model uses 'name', not 'title'
+        bookAuthor = book.author?.name;
+        bookImage = book.primaryImageUrl;
+      } else {
+        // New format with book_id and book_title
+        bookId = json['book_id'] is int
+            ? json['book_id'] as int
+            : (json['book_id'] != null
+                  ? int.tryParse(json['book_id'].toString())
+                  : null);
+        bookTitle = json['book_title']?.toString() ?? 'Unknown Book';
+        bookAuthor = json['book_author']?.toString();
+        bookImage = json['book_image']?.toString();
       }
 
-      final book = Book.fromJson(bookData);
-      debugPrint('DEBUG: Parsed book: ${book.title}');
+      // Validate required fields
+      if (bookId == null) {
+        throw Exception('book_id is required for OrderItem');
+      }
+      if (bookTitle == null || bookTitle.isEmpty) {
+        throw Exception('book_title is required for OrderItem');
+      }
 
       final orderItem = OrderItem(
         id: json['id']?.toString() ?? '',
-        orderId: json['order_id']?.toString() ?? '',
-        book: book,
-        quantity: json['quantity'] ?? 1,
-        unitPrice: Order._parseDouble(json['unit_price']),
+        orderId:
+            json['order_id']?.toString() ?? json['order']?.toString() ?? '',
+        bookId: bookId,
+        bookTitle: bookTitle,
+        bookAuthor: bookAuthor,
+        bookImage: bookImage,
+        quantity: json['quantity'] is int
+            ? json['quantity'] as int
+            : (json['quantity'] != null
+                  ? int.tryParse(json['quantity'].toString()) ?? 1
+                  : 1),
+        unitPrice: Order._parseDouble(json['unit_price'] ?? json['price']),
         totalPrice: Order._parseDouble(json['total_price']),
       );
 
       debugPrint(
-        'DEBUG: Created OrderItem: ${orderItem.book.title} x ${orderItem.quantity} = \$${orderItem.totalPrice}',
+        'DEBUG: Created OrderItem: ${orderItem.bookTitle} x ${orderItem.quantity} = \$${orderItem.totalPrice}',
       );
       return orderItem;
     } catch (e) {
@@ -596,7 +643,10 @@ class OrderItem {
     return {
       'id': id,
       'order_id': orderId,
-      'book': book.toJson(),
+      'book_id': bookId,
+      'book_title': bookTitle,
+      'book_author': bookAuthor,
+      'book_image': bookImage,
       'quantity': quantity,
       'unit_price': unitPrice,
       'total_price': totalPrice,

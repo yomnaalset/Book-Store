@@ -168,7 +168,7 @@ class _DeliveryMonitoringDetailsScreenState
             _buildInfoRow(
               'Delivery Address',
               order.deliveryAddress?.toString() ??
-                  order.shippingAddressText ??
+                  order.deliveryAddressText ??
                   'No address',
               Icons.location_on,
             ),

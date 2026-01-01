@@ -22,7 +22,7 @@ class LegacyOrder {
   final String? notes;
   final DateTime createdAt;
   final DateTime updatedAt;
-  final String? shippingAddress;
+  final String? deliveryAddress;
   final String? billingAddress;
   final String? paymentMethod;
   final String? paymentStatus;
@@ -35,7 +35,6 @@ class LegacyOrder {
   final double? finalAmount;
   final DeliveryAssignment? deliveryAssignment;
   final String? orderNumber;
-  final String? deliveryAddress;
   final String? deliveryCity;
   final String? deliveryNotes;
 
@@ -48,7 +47,7 @@ class LegacyOrder {
     this.notes,
     required this.createdAt,
     required this.updatedAt,
-    this.shippingAddress,
+    this.deliveryAddress,
     this.billingAddress,
     this.paymentMethod,
     this.paymentStatus,
@@ -61,7 +60,6 @@ class LegacyOrder {
     this.finalAmount,
     this.deliveryAssignment,
     this.orderNumber,
-    this.deliveryAddress,
     this.deliveryCity,
     this.deliveryNotes,
   });
@@ -150,7 +148,7 @@ class LegacyOrder {
             : json['updated_at'] != null
             ? DateTime.parse(json['updated_at'])
             : DateTime.now(),
-        shippingAddress: json['shippingAddress'] ?? json['shipping_address'],
+        deliveryAddress: json['deliveryAddress'] ?? json['delivery_address'],
         billingAddress: json['billingAddress'] ?? json['billing_address'],
         paymentMethod:
             json['paymentMethod'] ??
@@ -200,7 +198,6 @@ class LegacyOrder {
             ? DeliveryAssignment.fromJson(json['delivery_assignment'])
             : null,
         orderNumber: json['orderNumber'] ?? json['order_number'],
-        deliveryAddress: json['deliveryAddress'] ?? json['delivery_address'],
         deliveryCity: json['deliveryCity'] ?? json['delivery_city'],
         deliveryNotes: json['deliveryNotes'] ?? json['delivery_notes'],
       );
@@ -222,7 +219,7 @@ class LegacyOrder {
       'notes': notes,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
-      'shippingAddress': shippingAddress,
+      'deliveryAddress': deliveryAddress,
       'billingAddress': billingAddress,
       'paymentMethod': paymentMethod,
       'paymentStatus': paymentStatus,
@@ -235,7 +232,6 @@ class LegacyOrder {
       'finalAmount': finalAmount,
       'deliveryAssignment': deliveryAssignment?.toJson(),
       'orderNumber': orderNumber,
-      'deliveryAddress': deliveryAddress,
       'deliveryCity': deliveryCity,
       'deliveryNotes': deliveryNotes,
     };
@@ -250,7 +246,7 @@ class LegacyOrder {
     String? notes,
     DateTime? createdAt,
     DateTime? updatedAt,
-    String? shippingAddress,
+    String? deliveryAddress,
     String? billingAddress,
     String? paymentMethod,
     String? paymentStatus,
@@ -263,7 +259,6 @@ class LegacyOrder {
     double? finalAmount,
     DeliveryAssignment? deliveryAssignment,
     String? orderNumber,
-    String? deliveryAddress,
     String? deliveryCity,
     String? deliveryNotes,
   }) {
@@ -276,7 +271,7 @@ class LegacyOrder {
       notes: notes ?? this.notes,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
-      shippingAddress: shippingAddress ?? this.shippingAddress,
+      deliveryAddress: deliveryAddress ?? this.deliveryAddress,
       billingAddress: billingAddress ?? this.billingAddress,
       paymentMethod: paymentMethod ?? this.paymentMethod,
       paymentStatus: paymentStatus ?? this.paymentStatus,
@@ -289,7 +284,6 @@ class LegacyOrder {
       finalAmount: finalAmount ?? this.finalAmount,
       deliveryAssignment: deliveryAssignment ?? this.deliveryAssignment,
       orderNumber: orderNumber ?? this.orderNumber,
-      deliveryAddress: deliveryAddress ?? this.deliveryAddress,
       deliveryCity: deliveryCity ?? this.deliveryCity,
       deliveryNotes: deliveryNotes ?? this.deliveryNotes,
     );

@@ -38,7 +38,7 @@ class _DeliveryManagerDashboardScreenState
     WidgetsBinding.instance.addObserver(this);
     // Defer provider initialization until after build phase completes
     WidgetsBinding.instance.addPostFrameCallback((_) {
-    _initializeProviders();
+      _initializeProviders();
     });
     _startPeriodicStatusRefresh();
   }

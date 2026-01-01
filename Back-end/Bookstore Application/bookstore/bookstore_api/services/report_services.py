@@ -8,10 +8,10 @@ import logging
 from ..models.report_model import Report, ReportTemplate
 from ..models.library_model import Book, Library, Author, Category, BookEvaluation
 from ..models.user_model import User
-from ..models.delivery_model import Order
+from ..models import Order
 from ..models.borrowing_model import BorrowRequest, BorrowStatusChoices, FineStatusChoices
 from ..models.return_model import ReturnFine
-from ..models.delivery_model import DeliveryRequest
+from ..models import DeliveryRequest
 from ..models.payment_model import Payment
 
 logger = logging.getLogger(__name__)

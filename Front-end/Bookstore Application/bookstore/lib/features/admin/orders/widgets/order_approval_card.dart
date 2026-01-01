@@ -152,7 +152,7 @@ class _OrderApprovalCardState extends State<OrderApprovalCard> {
               Text('${widget.order.items.length} items'),
             ],
           ),
-          if (widget.order.shippingAddress != null) ...[
+          if (widget.order.deliveryAddress != null) ...[
             const SizedBox(height: 8),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -164,7 +164,7 @@ class _OrderApprovalCardState extends State<OrderApprovalCard> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    widget.order.shippingAddress!.fullAddress,
+                    widget.order.deliveryAddress!.fullAddress,
                     style: const TextStyle(fontSize: 12),
                   ),
                 ),

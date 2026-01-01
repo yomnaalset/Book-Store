@@ -31,11 +31,10 @@ class OrderItemsList extends StatelessWidget {
 
   Widget _buildOrderItem(BuildContext context, OrderItem item) {
     // Get book image URL
-    final String? imageUrl =
-        item.book.coverImageUrl ?? item.book.primaryImageUrl;
+    final String? imageUrl = item.bookImage;
 
     // Get author name safely
-    final String authorName = item.book.author?.name ?? 'Unknown Author';
+    final String authorName = item.bookAuthor ?? 'Unknown Author';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -89,7 +88,7 @@ class OrderItemsList extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  item.book.title,
+                  item.bookTitle,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -105,16 +104,6 @@ class OrderItemsList extends StatelessWidget {
                   ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
                 ),
                 const SizedBox(height: 4),
-
-                if (item.book.isbn != null) ...[
-                  Text(
-                    'ISBN: ${item.book.isbn}',
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
-                  ),
-                  const SizedBox(height: 4),
-                ],
                 const SizedBox(height: 8),
 
                 Row(

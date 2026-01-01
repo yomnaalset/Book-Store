@@ -1,12 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../core/localization/app_localizations.dart';
-import '../../../core/widgets/common/loading_indicator.dart';
-import '../../../core/widgets/common/error_message.dart';
-import '../../orders/providers/orders_provider.dart';
-import '../../auth/providers/auth_provider.dart';
-import '../widgets/order_card.dart';
-import '../widgets/advanced_search_filter_bar.dart';
+import '../models/unified_delivery.dart';
+import '../services/unified_delivery_service.dart';
+import '../../../features/auth/providers/auth_provider.dart';
 
 class AllOrdersScreen extends StatefulWidget {
   const AllOrdersScreen({super.key});
@@ -15,222 +11,184 @@ class AllOrdersScreen extends StatefulWidget {
   State<AllOrdersScreen> createState() => _AllOrdersScreenState();
 }
 
-class _AllOrdersScreenState extends State<AllOrdersScreen> {
-  String _searchQuery = '';
-  String? _selectedStatus;
-  String? _selectedOrderType;
+class _AllOrdersScreenState extends State<AllOrdersScreen>
+    with SingleTickerProviderStateMixin {
+  List<UnifiedDelivery> _allDeliveries = [];
+  bool _isLoading = false;
+  String? _errorMessage;
+  late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
-    // Load all orders when the screen initializes (no filters initially)
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadOrdersFromServer();
-    });
+    _tabController = TabController(length: 3, vsync: this);
+    _loadAllDeliveries();
   }
 
-  // Load orders from server with current filter parameters
-  Future<void> _loadOrdersFromServer() async {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final ordersProvider = Provider.of<OrdersProvider>(context, listen: false);
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
 
-    // Set the auth token before loading orders
-    ordersProvider.setToken(authProvider.token);
-
-    debugPrint(
-      'AllOrdersScreen: Loading orders from server with filters - status: $_selectedStatus, orderType: $_selectedOrderType, search: "$_searchQuery"',
-    );
+  Future<void> _loadAllDeliveries() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
 
     try {
-      await ordersProvider.loadOrders(
-        status: _selectedStatus,
-        orderType: _selectedOrderType,
-        search: _searchQuery.isNotEmpty ? _searchQuery : null,
-      );
-      debugPrint(
-        'AllOrdersScreen: Orders loaded successfully. Count: ${ordersProvider.orders.length}',
-      );
-    } catch (error) {
-      debugPrint('AllOrdersScreen: Error loading orders: $error');
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final token = authProvider.token ?? authProvider.getCurrentToken();
+
+      if (token != null) {
+        UnifiedDeliveryService.setToken(token);
+      }
+
+      // Load all delivery types
+      final results = await Future.wait([
+        UnifiedDeliveryService.getDeliveryList(deliveryType: 'purchase'),
+        UnifiedDeliveryService.getDeliveryList(deliveryType: 'borrow'),
+        UnifiedDeliveryService.getDeliveryList(deliveryType: 'return'),
+      ]);
+
+      List<UnifiedDelivery> all = [];
+      for (var result in results) {
+        if (result['success'] == true) {
+          final data = result['data'] as List;
+          all.addAll(data.map((json) => UnifiedDelivery.fromJson(json)));
+        }
+      }
+
+      setState(() {
+        _allDeliveries = all;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Error loading deliveries: $e';
+        _isLoading = false;
+      });
     }
   }
 
-  void _onSearchChanged(String query) {
-    debugPrint('AllOrdersScreen: Search query changed to: "$query"');
-    setState(() {
-      _searchQuery = query;
-    });
-    // Reload orders from server with new search query
-    _loadOrdersFromServer();
-  }
-
-  void _onStatusFilterChanged(String? status) {
-    debugPrint('AllOrdersScreen: Status filter changed to: $status');
-    setState(() {
-      _selectedStatus = status;
-    });
-    // Reload orders from server with new status filter
-    _loadOrdersFromServer();
-  }
-
-  void _onOrderTypeFilterChanged(String? orderType) {
-    debugPrint('AllOrdersScreen: Order type filter changed to: $orderType');
-    setState(() {
-      _selectedOrderType = orderType;
-    });
-    // Reload orders from server with new order type filter
-    _loadOrdersFromServer();
+  List<UnifiedDelivery> _getDeliveriesByType(String type) {
+    return _allDeliveries.where((d) => d.deliveryType == type).toList();
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: Text(AppLocalizations.of(context).all),
-        backgroundColor: theme.colorScheme.primary,
-        foregroundColor: theme.colorScheme.onPrimary,
-        elevation: 0,
+        title: const Text('All Delivery Requests'),
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(text: 'Purchase', icon: Icon(Icons.shopping_cart)),
+            Tab(text: 'Borrow', icon: Icon(Icons.library_books)),
+            Tab(text: 'Return', icon: Icon(Icons.undo)),
+          ],
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () {
-              _loadOrdersFromServer();
-            },
+            onPressed: _loadAllDeliveries,
           ),
         ],
       ),
-      body: Consumer<OrdersProvider>(
-        builder: (context, ordersProvider, child) {
-          if (ordersProvider.isLoading) {
-            return const Center(child: LoadingIndicator());
-          }
-
-          if (ordersProvider.hasError) {
-            return Center(
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _errorMessage != null
+          ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  ErrorMessage(message: ordersProvider.errorMessage!),
+                  Text(_errorMessage!),
                   const SizedBox(height: 16),
                   ElevatedButton(
-                    onPressed: () {
-                      _loadOrdersFromServer();
-                    },
-                    child: Text(AppLocalizations.of(context).retry),
+                    onPressed: _loadAllDeliveries,
+                    child: const Text('Retry'),
                   ),
                 ],
               ),
-            );
-          }
+            )
+          : TabBarView(
+              controller: _tabController,
+              children: [
+                _buildDeliveryList(_getDeliveriesByType('purchase')),
+                _buildDeliveryList(_getDeliveriesByType('borrow')),
+                _buildDeliveryList(_getDeliveriesByType('return')),
+              ],
+            ),
+    );
+  }
 
-          // Get user type to determine which status filters to show
-          final authProvider = Provider.of<AuthProvider>(
-            context,
-            listen: false,
-          );
-          final userType = authProvider.user?.userType;
-          final isDeliveryManager = userType == 'delivery_admin';
+  Widget _buildDeliveryList(List<UnifiedDelivery> deliveries) {
+    if (deliveries.isEmpty) {
+      return Center(
+        child: Text(
+          'No delivery requests',
+          style: Theme.of(context).textTheme.bodyLarge,
+        ),
+      );
+    }
 
-          // Use filtered status options for delivery managers
-          final statusFilterOptions = isDeliveryManager
-              ? ordersProvider.deliveryManagerStatusFilterOptions
-              : ordersProvider.statusFilterOptions;
-
-          return Column(
-            children: [
-              // Advanced Search and Filter Bar
-              AdvancedSearchFilterBar(
-                searchHint: AppLocalizations.of(context).searchAllRequests,
-                initialSearchQuery: _searchQuery,
-                initialStatusFilter: _selectedStatus,
-                initialOrderTypeFilter: _selectedOrderType,
-                statusFilterOptions: statusFilterOptions,
-                orderTypeFilterOptions: ordersProvider.orderTypeFilterOptions,
-                onSearchChanged: _onSearchChanged,
-                onStatusFilterChanged: _onStatusFilterChanged,
-                onOrderTypeFilterChanged: _onOrderTypeFilterChanged,
+    return RefreshIndicator(
+      onRefresh: _loadAllDeliveries,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: deliveries.length,
+        itemBuilder: (context, index) {
+          final delivery = deliveries[index];
+          return Card(
+            margin: const EdgeInsets.only(bottom: 16),
+            child: ListTile(
+              title: Text(
+                delivery.deliveryType == 'purchase'
+                    ? 'Order #${delivery.orderNumber ?? delivery.id}'
+                    : delivery.deliveryType == 'borrow'
+                    ? 'Borrow Request #${delivery.id}'
+                    : 'Return Request #${delivery.id}',
               ),
-
-              // Orders List
-              Expanded(
-                child: RefreshIndicator(
-                  onRefresh: () async {
-                    await _loadOrdersFromServer();
-                  },
-                  child: ordersProvider.orders.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.list_outlined,
-                                size: 64,
-                                color: theme.colorScheme.outline,
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                _searchQuery.isNotEmpty ||
-                                        _selectedStatus != null ||
-                                        _selectedOrderType != null
-                                    ? AppLocalizations.of(
-                                        context,
-                                      ).noMatchingRequestsFound
-                                    : AppLocalizations.of(
-                                        context,
-                                      ).noOrdersFound,
-                                style: theme.textTheme.headlineSmall?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                _searchQuery.isNotEmpty ||
-                                        _selectedStatus != null ||
-                                        _selectedOrderType != null
-                                    ? AppLocalizations.of(
-                                        context,
-                                      ).tryAdjustingSearchOrFilter
-                                    : AppLocalizations.of(
-                                        context,
-                                      ).noOrdersCurrentlyAvailable,
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
-                          ),
-                        )
-                      : ListView.builder(
-                          padding: const EdgeInsets.all(16),
-                          itemCount: ordersProvider.orders.length,
-                          itemBuilder: (context, index) {
-                            final order = ordersProvider.orders[index];
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: OrderCard(
-                                order: order,
-                                onTap: () {
-                                  // Navigate to order details
-                                  Navigator.pushNamed(
-                                    context,
-                                    '/order-detail',
-                                    arguments: {'orderId': order.id},
-                                  );
-                                },
-                              ),
-                            );
-                          },
-                        ),
+              subtitle: Text(
+                '${delivery.customerName ?? "N/A"} - ${delivery.deliveryAddress}',
+              ),
+              trailing: Chip(
+                label: Text(delivery.deliveryStatus.toUpperCase()),
+                backgroundColor: _getStatusColor(
+                  delivery.deliveryStatus,
+                ).withValues(alpha: 0.2),
+                labelStyle: TextStyle(
+                  color: _getStatusColor(delivery.deliveryStatus),
+                  fontWeight: FontWeight.bold,
                 ),
               ),
-            ],
+              onTap: () {
+                // Navigate to detail screen
+              },
+            ),
           );
         },
       ),
     );
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'pending':
+        return Colors.orange;
+      case 'assigned':
+        return Colors.blue;
+      case 'accepted':
+        return Colors.green;
+      case 'in_delivery':
+        return Colors.purple;
+      case 'completed':
+        return Colors.grey;
+      case 'rejected':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
   }
 }

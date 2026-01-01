@@ -1446,14 +1446,8 @@ class EvaluationCreateSerializer(serializers.ModelSerializer):
         rating = attrs.get('rating')
         comment = attrs.get('comment')
         
-        # Check if user hasn't already evaluated this book (existing validation)
-        request = self.context.get('request')
-        if request and request.user:
-            book_id = attrs.get('book_id')
-            if book_id and BookEvaluation.objects.filter(book_id=book_id, user=request.user).exists():
-                raise serializers.ValidationError({
-                    'book_id': 'You have already evaluated this book. You can update your existing evaluation.'
-                })
+        # Allow users to create multiple reviews for the same book
+        # No restriction on number of reviews per user per book
         
         # Validate that at least one of rating or comment is provided
         if not rating and (not comment or not comment.strip()):

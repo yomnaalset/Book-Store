@@ -94,50 +94,55 @@ class _OrdersScreenState extends State<OrdersScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Builder(
-                    builder: (context) {
-                      final localizations = AppLocalizations.of(context);
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            localizations.orderNumberPrefix(
-                              '${order.orderNumber ?? order.id}',
-                            ),
-                            style: TextStyle(
-                              fontSize: AppDimensions.fontSizeM,
-                              fontWeight: FontWeight.w600,
-                              color: context.textColor,
-                            ),
-                          ),
-                          const SizedBox(height: AppDimensions.spacingS),
-                          Text(
-                            localizations.totalPrefix(
-                              '\$${order.totalAmount?.toStringAsFixed(2) ?? '0.00'}',
-                            ),
-                            style: const TextStyle(
-                              fontSize: AppDimensions.fontSizeM,
-                              fontWeight: FontWeight.w500,
-                              color: AppColors.primary,
-                            ),
-                          ),
-                          const SizedBox(height: AppDimensions.spacingS),
-                          Text(
-                            localizations.statusPrefix(
-                              localizations.getOrderStatusLabel(
-                                order.status ?? 'pending',
+                  Expanded(
+                    child: Builder(
+                      builder: (context) {
+                        final localizations = AppLocalizations.of(context);
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              localizations.orderNumberPrefix(
+                                '${order.orderNumber ?? order.id}',
+                              ),
+                              style: TextStyle(
+                                fontSize: AppDimensions.fontSizeM,
+                                fontWeight: FontWeight.w600,
+                                color: context.textColor,
                               ),
                             ),
-                            style: TextStyle(
-                              fontSize: AppDimensions.fontSizeS,
-                              color: context.secondaryTextColor,
+                            const SizedBox(height: AppDimensions.spacingS),
+                            Text(
+                              localizations.totalPrefix(
+                                '\$${order.totalAmount?.toStringAsFixed(2) ?? '0.00'}',
+                              ),
+                              style: const TextStyle(
+                                fontSize: AppDimensions.fontSizeM,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.primary,
+                              ),
                             ),
-                          ),
-                        ],
-                      );
-                    },
+                            const SizedBox(height: AppDimensions.spacingS),
+                            Text(
+                              localizations.statusPrefix(
+                                localizations.getOrderStatusLabel(
+                                  order.status ?? 'pending',
+                                ),
+                              ),
+                              style: TextStyle(
+                                fontSize: AppDimensions.fontSizeS,
+                                color: context.secondaryTextColor,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
                   ),
-                  _buildStatusChip(order.status ?? 'pending', context),
+                  const SizedBox(width: AppDimensions.spacingS),
+                  Flexible(
+                    child: _buildStatusChip(order.status ?? 'pending', context),
+                  ),
                 ],
               ),
               const SizedBox(height: AppDimensions.spacingS),
@@ -201,6 +206,9 @@ class _OrdersScreenState extends State<OrdersScreen> {
           fontWeight: FontWeight.w600,
           color: textColor,
         ),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        textAlign: TextAlign.center,
       ),
     );
   }

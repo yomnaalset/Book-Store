@@ -261,10 +261,10 @@ class CartService {
     }
   }
 
-  // Calculate shipping cost
-  Future<double> calculateShipping({
+  // Calculate delivery cost
+  Future<double> calculateDelivery({
     required String token,
-    required Map<String, dynamic> shippingAddress,
+    required Map<String, dynamic> deliveryAddress,
     required List<CartItem> items,
     required List<book.Book> books,
   }) async {
@@ -272,13 +272,13 @@ class CartService {
 
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/shipping/calculate/'),
+        Uri.parse('$baseUrl/delivery/calculate/'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
         body: json.encode({
-          'shipping_address': shippingAddress,
+          'delivery_address': deliveryAddress,
           'items': items
               .map(
                 (item) => {
@@ -293,19 +293,19 @@ class CartService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        final shippingCost = (data['shipping_cost'] ?? 0.0).toDouble();
+        final deliveryCost = (data['delivery_cost'] ?? 0.0).toDouble();
         debugPrint(
-          'CartService: Shipping calculated successfully: $shippingCost',
+          'CartService: Delivery calculated successfully: $deliveryCost',
         );
-        return shippingCost;
+        return deliveryCost;
       } else {
         final data = json.decode(response.body);
-        _setError(data['message'] ?? 'Failed to calculate shipping');
+        _setError(data['message'] ?? 'Failed to calculate delivery');
         return 0.0;
       }
     } catch (e) {
       _setError('Network error: ${e.toString()}');
-      debugPrint('CartService: Error calculating shipping: $e');
+      debugPrint('CartService: Error calculating delivery: $e');
       return 0.0;
     }
   }
@@ -419,8 +419,8 @@ class CartService {
     }
   }
 
-  // Get shipping options
-  Future<List<Map<String, dynamic>>> getShippingOptions({
+  // Get delivery options
+  Future<List<Map<String, dynamic>>> getDeliveryOptions({
     required String token,
     required Map<String, dynamic> address,
   }) async {
@@ -428,7 +428,7 @@ class CartService {
 
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/shipping/options/'),
+        Uri.parse('$baseUrl/delivery/options/'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -438,16 +438,16 @@ class CartService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        final List<dynamic> options = data['shipping_options'] ?? [];
+        final List<dynamic> options = data['delivery_options'] ?? [];
         return options.cast<Map<String, dynamic>>();
       } else {
         final data = json.decode(response.body);
-        _setError(data['message'] ?? 'Failed to load shipping options');
+        _setError(data['message'] ?? 'Failed to load delivery options');
         return [];
       }
     } catch (e) {
       _setError('Network error: ${e.toString()}');
-      debugPrint('CartService: Error getting shipping options: $e');
+      debugPrint('CartService: Error getting delivery options: $e');
       return [];
     }
   }

@@ -148,22 +148,39 @@ class DeliveryProfileUpdateSerializer(serializers.ModelSerializer):
 class DeliveryProfileLocationUpdateSerializer(serializers.Serializer):
     """
     Serializer specifically for updating location data.
+    Allows updating address only, or coordinates with optional address.
     """
-    latitude = serializers.DecimalField(max_digits=10, decimal_places=7, required=True)
-    longitude = serializers.DecimalField(max_digits=10, decimal_places=7, required=True)
+    latitude = serializers.DecimalField(max_digits=10, decimal_places=7, required=False, allow_null=True)
+    longitude = serializers.DecimalField(max_digits=10, decimal_places=7, required=False, allow_null=True)
     address = serializers.CharField(max_length=500, required=False, allow_blank=True)
     
     def validate_latitude(self, value):
         """Validate latitude."""
-        if not (-90 <= value <= 90):
+        if value is not None and not (-90 <= value <= 90):
             raise serializers.ValidationError("Latitude must be between -90 and 90 degrees")
         return value
     
     def validate_longitude(self, value):
         """Validate longitude."""
-        if not (-180 <= value <= 180):
+        if value is not None and not (-180 <= value <= 180):
             raise serializers.ValidationError("Longitude must be between -180 and 180 degrees")
         return value
+    
+    def validate(self, data):
+        """Validate that either coordinates or address is provided."""
+        latitude = data.get('latitude')
+        longitude = data.get('longitude')
+        address = data.get('address', '').strip()
+        
+        # If coordinates are provided, both must be provided
+        if (latitude is not None and longitude is None) or (longitude is not None and latitude is None):
+            raise serializers.ValidationError("Both latitude and longitude must be provided together, or neither.")
+        
+        # At least one of coordinates or address must be provided
+        if latitude is None and longitude is None and (address == '' or address is None):
+            raise serializers.ValidationError("Either coordinates (latitude and longitude) or address must be provided.")
+        
+        return data
 
 
 class DeliveryProfileStatusUpdateSerializer(serializers.Serializer):

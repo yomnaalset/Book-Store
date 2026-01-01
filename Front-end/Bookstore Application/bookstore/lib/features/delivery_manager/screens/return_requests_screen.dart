@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/localization/app_localizations.dart';
-import '../../../core/widgets/common/loading_indicator.dart';
-import '../../../core/widgets/common/error_message.dart';
-import '../../borrow/providers/return_request_provider.dart';
-import '../../borrow/models/return_request.dart';
-import '../../auth/providers/auth_provider.dart';
-import '../widgets/search_filter_bar.dart';
-import 'return_request_detail_screen.dart';
+import '../../../core/constants/app_colors.dart';
+import '../models/unified_delivery.dart';
+import '../services/unified_delivery_service.dart';
+import '../../../features/auth/providers/auth_provider.dart';
+import 'delivery_request_detail_screen.dart';
 
 class ReturnRequestsScreen extends StatefulWidget {
   const ReturnRequestsScreen({super.key});
@@ -17,382 +15,369 @@ class ReturnRequestsScreen extends StatefulWidget {
 }
 
 class _ReturnRequestsScreenState extends State<ReturnRequestsScreen> {
-  String _searchQuery = '';
-  String? _selectedStatus;
+  List<UnifiedDelivery> _deliveries = [];
+  bool _isLoading = false;
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    // Load return requests when the screen initializes (no filters initially)
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadReturnRequestsFromServer();
-    });
+    _loadDeliveries();
   }
 
-  // Load return requests from server with current filter parameters
-  Future<void> _loadReturnRequestsFromServer() async {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final returnProvider = Provider.of<ReturnRequestProvider>(
-      context,
-      listen: false,
-    );
-
-    // Set the auth token before loading return requests
-    if (authProvider.token != null) {
-      returnProvider.setToken(authProvider.token!);
-    }
-
-    debugPrint(
-      'ReturnRequestsScreen: Loading return requests from server with filters - status: $_selectedStatus, search: "$_searchQuery"',
-    );
+  Future<void> _loadDeliveries() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
 
     try {
-      await returnProvider.loadReturnRequests(
-        status: _selectedStatus,
-        search: _searchQuery.isNotEmpty ? _searchQuery : null,
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final token = authProvider.token ?? authProvider.getCurrentToken();
+
+      if (token != null) {
+        UnifiedDeliveryService.setToken(token);
+      }
+
+      final result = await UnifiedDeliveryService.getDeliveryList(
+        deliveryType: 'return',
       );
-      debugPrint(
-        'ReturnRequestsScreen: Return requests loaded successfully. Count: ${returnProvider.returnRequests.length}',
-      );
-    } catch (error) {
-      debugPrint('ReturnRequestsScreen: Error loading return requests: $error');
+
+      if (result['success'] == true) {
+        final data = result['data'] as List;
+        setState(() {
+          _deliveries = data
+              .map((json) => UnifiedDelivery.fromJson(json))
+              .toList();
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _errorMessage = result['message'] ?? 'Failed to load return requests';
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Error loading return requests: $e';
+        _isLoading = false;
+      });
     }
   }
 
-  void _onSearchChanged(String query) {
-    debugPrint('ReturnRequestsScreen: Search query changed to: "$query"');
-    setState(() {
-      _searchQuery = query;
-    });
-    // Reload return requests from server with new search query
-    _loadReturnRequestsFromServer();
+  Future<void> _handleAccept(int deliveryId) async {
+    try {
+      final result = await UnifiedDeliveryService.acceptDelivery(deliveryId);
+      if (!mounted) return;
+      if (result['success'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Delivery request accepted')),
+        );
+        _loadDeliveries();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result['message'] ?? 'Failed to accept')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
   }
 
-  void _onFilterChanged(String? status) {
-    debugPrint('ReturnRequestsScreen: Status filter changed to: $status');
-    setState(() {
-      _selectedStatus = status;
-    });
-    // Reload return requests from server with new status filter
-    _loadReturnRequestsFromServer();
+  Future<void> _handleReject(int deliveryId) async {
+    final reasonController = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reject Delivery Request'),
+        content: TextField(
+          controller: reasonController,
+          decoration: const InputDecoration(
+            labelText: 'Rejection Reason',
+            hintText: 'Enter reason for rejection',
+          ),
+          maxLines: 3,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, reasonController.text),
+            child: const Text('Reject'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && result.isNotEmpty) {
+      try {
+        final apiResult = await UnifiedDeliveryService.rejectDelivery(
+          deliveryId,
+          result,
+        );
+        if (!mounted) return;
+        if (apiResult['success'] == true) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Delivery request rejected')),
+          );
+          _loadDeliveries();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(apiResult['message'] ?? 'Failed to reject')),
+          );
+        }
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
+  }
+
+  Future<void> _handleStart(int deliveryId) async {
+    try {
+      final result = await UnifiedDeliveryService.startDelivery(deliveryId);
+      if (!mounted) return;
+      if (result['success'] == true) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Delivery started')));
+        _loadDeliveries();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result['message'] ?? 'Failed to start')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
+  }
+
+  Future<void> _handleComplete(int deliveryId) async {
+    try {
+      final result = await UnifiedDeliveryService.completeDelivery(deliveryId);
+      if (!mounted) return;
+      if (result['success'] == true) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Delivery completed')));
+        _loadDeliveries();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result['message'] ?? 'Failed to complete')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: Text(AppLocalizations.of(context).returnRequests),
-        backgroundColor: theme.colorScheme.primary,
-        foregroundColor: theme.colorScheme.onPrimary,
-        elevation: 0,
+        title: Text(localizations.returnRequests),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () {
-              _loadReturnRequestsFromServer();
-            },
+            onPressed: _loadDeliveries,
           ),
         ],
       ),
-      body: Consumer<ReturnRequestProvider>(
-        builder: (context, returnProvider, child) {
-          if (returnProvider.isLoading) {
-            return const Center(child: LoadingIndicator());
-          }
-
-          if (returnProvider.errorMessage != null) {
-            return Center(
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _errorMessage != null
+          ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  ErrorMessage(message: returnProvider.errorMessage!),
+                  Text(_errorMessage!),
                   const SizedBox(height: 16),
                   ElevatedButton(
-                    onPressed: () {
-                      _loadReturnRequestsFromServer();
-                    },
-                    child: Text(AppLocalizations.of(context).retry),
+                    onPressed: _loadDeliveries,
+                    child: const Text('Retry'),
                   ),
                 ],
               ),
-            );
-          }
-
-          // Status filter options for return requests
-          // For delivery manager, show ASSIGNED and IN_PROGRESS by default
-          final statusFilterOptions = [
-            'ASSIGNED',
-            'IN_PROGRESS',
-            'COMPLETED',
-            'PENDING',
-            'APPROVED',
-          ];
-
-          return Column(
-            children: [
-              // Search and Filter Bar
-              Builder(
-                builder: (context) {
-                  final localizations = AppLocalizations.of(context);
-                  return SearchFilterBar(
-                    initialSearchQuery: _searchQuery,
-                    initialFilterValue: _selectedStatus,
-                    searchHint: localizations.searchReturnRequests,
-                    filterLabel: localizations.status,
-                    filterOptions: statusFilterOptions,
-                    onSearchChanged: _onSearchChanged,
-                    onFilterChanged: _onFilterChanged,
-                  );
+            )
+          : _deliveries.isEmpty
+          ? Center(
+              child: Text(
+                'No return delivery requests',
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+            )
+          : RefreshIndicator(
+              onRefresh: _loadDeliveries,
+              child: ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: _deliveries.length,
+                itemBuilder: (context, index) {
+                  final delivery = _deliveries[index];
+                  return _buildDeliveryCard(delivery);
                 },
               ),
-
-              // Return Requests List
-              Expanded(
-                child: RefreshIndicator(
-                  onRefresh: () async {
-                    await _loadReturnRequestsFromServer();
-                  },
-                  child: returnProvider.returnRequests.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.undo_outlined,
-                                size: 64,
-                                color: theme.colorScheme.outline,
-                              ),
-                              const SizedBox(height: 16),
-                              Builder(
-                                builder: (context) {
-                                  final localizations = AppLocalizations.of(
-                                    context,
-                                  );
-                                  return Column(
-                                    children: [
-                                      Text(
-                                        _searchQuery.isNotEmpty ||
-                                                _selectedStatus != null
-                                            ? localizations
-                                                  .noMatchingReturnRequests
-                                            : localizations.noReturnRequests,
-                                        style: theme.textTheme.headlineSmall
-                                            ?.copyWith(
-                                              color: theme
-                                                  .colorScheme
-                                                  .onSurfaceVariant,
-                                            ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        _searchQuery.isNotEmpty ||
-                                                _selectedStatus != null
-                                            ? localizations
-                                                  .tryAdjustingSearchOrFilterReturn
-                                            : localizations
-                                                  .noReturnRequestsDescription,
-                                        style: theme.textTheme.bodyMedium
-                                            ?.copyWith(
-                                              color: theme
-                                                  .colorScheme
-                                                  .onSurfaceVariant,
-                                            ),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                    ],
-                                  );
-                                },
-                              ),
-                            ],
-                          ),
-                        )
-                      : ListView.builder(
-                          padding: const EdgeInsets.all(16),
-                          itemCount: returnProvider.returnRequests.length,
-                          itemBuilder: (context, index) {
-                            final returnRequest =
-                                returnProvider.returnRequests[index];
-                            return _buildReturnRequestCard(
-                              context,
-                              returnRequest,
-                              theme,
-                            );
-                          },
-                        ),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
+            ),
     );
   }
 
-  Widget _buildReturnRequestCard(
-    BuildContext context,
-    ReturnRequest returnRequest,
-    ThemeData theme,
-  ) {
-    // Get status color
-    Color statusColor;
-    switch (returnRequest.status) {
-      case 'IN_PROGRESS':
-        statusColor = Colors.blue;
-        break;
-      case 'COMPLETED':
-        statusColor = Colors.green;
-        break;
-      case 'PENDING':
-        statusColor = Colors.orange;
-        break;
-      case 'APPROVED':
-        statusColor = Colors.teal;
-        break;
-      case 'ASSIGNED':
-        statusColor = Colors.purple;
-        break;
-      default:
-        statusColor = Colors.grey;
-    }
-
+  Widget _buildDeliveryCard(UnifiedDelivery delivery) {
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
         onTap: () {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) =>
-                  ReturnRequestDetailScreen(returnRequest: returnRequest),
+              builder: (context) => DeliveryRequestDetailScreen(
+                delivery: delivery,
+              ),
             ),
           );
         },
-        borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Row(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Content Section
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Book Name
-                    Builder(
-                      builder: (context) {
-                        final localizations = AppLocalizations.of(context);
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              returnRequest.borrowRequest.bookTitle ??
-                                  localizations.unknownBook,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF1A1A1A),
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 8),
-                            // Customer Name
-                            Text(
-                              '${localizations.customer}: ${returnRequest.borrowRequest.customerName ?? localizations.unknown}',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w400,
-                                color: Colors.grey[700],
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            // Fine Information (if fine exists)
-                            if (returnRequest.fineAmount > 0) ...[
-                              const SizedBox(height: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.orange.withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(
-                                    color: Colors.orange.withValues(alpha: 0.3),
-                                    width: 1,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      Icons.warning_amber_rounded,
-                                      size: 14,
-                                      color: Colors.orange,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      'Fine: \$${returnRequest.fineAmount.toStringAsFixed(2)}',
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.orange,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ],
-                        );
-                      },
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Return Request #${delivery.id}',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
                     ),
-                    const SizedBox(height: 8),
-                    // Status Badge
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: statusColor.withValues(alpha: 0.3),
-                          width: 1,
-                        ),
-                      ),
-                      child: Text(
-                        '${AppLocalizations.of(context).status}: ${AppLocalizations.of(context).getReturnRequestStatusLabel(returnRequest.status)}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: statusColor,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                  _buildStatusChip(delivery.deliveryStatus),
+                ],
               ),
-              // Arrow Icon
-              Padding(
-                padding: const EdgeInsets.only(left: 8.0),
-                child: Icon(
-                  Icons.arrow_forward_ios,
-                  size: 16,
-                  color: Colors.grey[400],
-                ),
-              ),
+              const SizedBox(height: 12),
+              Text('Customer: ${delivery.customerName ?? "N/A"}'),
+              const SizedBox(height: 8),
+              Text('Address: ${delivery.deliveryAddress.isNotEmpty ? delivery.deliveryAddress : "Not provided"}'),
+              if (delivery.deliveryCity != null) ...[
+                const SizedBox(height: 4),
+                Text('City: ${delivery.deliveryCity}'),
+              ],
+              const SizedBox(height: 16),
+              _buildActionButtons(delivery),
             ],
           ),
         ),
       ),
     );
+  }
+
+  Widget _buildStatusChip(String status) {
+    Color color;
+    switch (status) {
+      case 'pending':
+        color = Colors.orange;
+        break;
+      case 'assigned':
+        color = Colors.blue;
+        break;
+      case 'accepted':
+        color = Colors.green;
+        break;
+      case 'in_delivery':
+        color = Colors.purple;
+        break;
+      case 'completed':
+        color = Colors.grey;
+        break;
+      case 'rejected':
+        color = Colors.red;
+        break;
+      default:
+        color = Colors.grey;
+    }
+    return Chip(
+      label: Text(status.toUpperCase()),
+      backgroundColor: color.withValues(alpha: 0.2),
+      labelStyle: TextStyle(color: color, fontWeight: FontWeight.bold),
+    );
+  }
+
+  Widget _buildActionButtons(UnifiedDelivery delivery) {
+    // Unified button display logic based on status
+    switch (delivery.deliveryStatus) {
+      case 'assigned':
+        return Row(
+          children: [
+            Expanded(
+              child: ElevatedButton(
+                onPressed: () => _handleAccept(delivery.id),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.success,
+                ),
+                child: const Text('Accept'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () => _handleReject(delivery.id),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.error,
+                ),
+                child: const Text('Reject'),
+              ),
+            ),
+          ],
+        );
+      case 'accepted':
+        return SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: () => _handleStart(delivery.id),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+            child: const Text('Start Delivery'),
+          ),
+        );
+      case 'in_delivery':
+        return Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  // Navigate to location update screen
+                },
+                icon: const Icon(Icons.location_on),
+                label: const Text('Update Location'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: ElevatedButton(
+                onPressed: () => _handleComplete(delivery.id),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.success,
+                ),
+                child: const Text('Complete'),
+              ),
+            ),
+          ],
+        );
+      case 'completed':
+      case 'rejected':
+      default:
+        return const SizedBox.shrink();
+    }
   }
 }

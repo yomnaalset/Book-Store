@@ -101,13 +101,17 @@ class DeliveryProfile(models.Model):
     def __str__(self):
         return f"Delivery Profile for {self.user.get_full_name()}"
     
-    def update_location(self, latitude, longitude, address=None):
+    def update_location(self, latitude=None, longitude=None, address=None):
         """
         Update the delivery manager's location.
+        Can update coordinates, address, or both.
+        Only updates fields that are provided (not None).
         """
-        self.latitude = latitude
-        self.longitude = longitude
-        if address:
+        if latitude is not None:
+            self.latitude = latitude
+        if longitude is not None:
+            self.longitude = longitude
+        if address is not None and address.strip():
             self.address = address
         self.location_updated_at = timezone.now()
         self.save()

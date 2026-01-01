@@ -328,7 +328,7 @@ class _DeliveryRequestsScreenState extends State<DeliveryRequestsScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      request.order?.shippingAddressText ?? 'No address',
+                      request.order?.deliveryAddressText ?? 'No address',
                       style: const TextStyle(fontWeight: FontWeight.w500),
                     ),
                   ),

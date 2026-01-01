@@ -1,11 +1,9 @@
 from .user_model import User, UserProfile
 from .library_model import Book, Author, Library, BookImage, Category, BookEvaluation, Favorite, Like, ReviewReply        
 from .cart_model import Cart, CartItem
-from .payment_model import Payment, CreditCardPayment, CashOnDeliveryPayment    
-from .delivery_model import (
-    Order, OrderItem, 
-    DeliveryActivity, DeliveryRequest, OrderNote
-)
+from .payment_model import Payment, CreditCardPayment, CashOnDeliveryPayment
+from .order_model import Order, OrderItem, DeliveryActivity, OrderNote, Delivery
+from .delivery_model import DeliveryRequest
 from .notification_model import Notification, NotificationType
 from .borrowing_model import (
     BorrowRequest, BorrowExtension, BorrowStatistics,
@@ -27,7 +25,7 @@ __all__ = [
     'Library', 'Book','BookImage', 'Category', 'Author',
     'Cart', 'CartItem',
     'Payment', 'CreditCardPayment', 'CashOnDeliveryPayment',
-    'Order', 'OrderItem', 'DeliveryActivity', 'DeliveryRequest', 'OrderNote',
+    'Order', 'OrderItem', 'DeliveryActivity', 'DeliveryRequest', 'OrderNote', 'Delivery',
     'Notification', 'NotificationType', 'BookEvaluation', 'Favorite', 'Like', 'ReviewReply',
     'BorrowRequest', 'BorrowExtension', 'BorrowFine', 'BorrowStatistics',
     'BorrowStatusChoices', 'ExtensionStatusChoices', 'FineStatusChoices',

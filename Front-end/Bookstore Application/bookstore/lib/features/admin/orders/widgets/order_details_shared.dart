@@ -190,7 +190,7 @@ class OrderDetailsShared {
     // If there's a significant difference between subtotal and total amount (more than 1%)
     if (order.subtotal > 0) {
       final expectedTotal =
-          order.subtotal + order.shippingCost + order.taxAmount;
+          order.subtotal + order.deliveryCost + order.taxAmount;
       final difference = expectedTotal - order.totalAmount;
       if (difference > (expectedTotal * 0.01)) {
         // More than 1% difference

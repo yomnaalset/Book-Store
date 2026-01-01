@@ -271,7 +271,7 @@ class AppLocalizations {
   String get subtotal => get('subtotal');
   String get discount => get('discount');
   String get tax => get('tax');
-  String get shipping => get('shipping');
+  String get delivery => get('delivery');
   String get grandTotal => get('grand_total');
   String get proceedToCheckout => get('proceed_to_checkout');
   String get emptyCart => get('empty_cart');
@@ -306,7 +306,7 @@ class AppLocalizations {
   String get orderDate => get('order_date');
   String get orderStatus => get('order_status');
   String get orderItems => get('order_items');
-  String get shippingAddress => get('shipping_address');
+  String get deliveryAddress => get('delivery_address');
   String get billingAddress => get('billing_address');
   String get paymentMethod => get('payment_method');
   String get trackOrder => get('track_order');
@@ -473,7 +473,6 @@ class AppLocalizations {
   String get cashPayment => get('cash_payment');
   String get fillAllCardDetails => get('fill_all_card_details');
   String get orderSummary => get('order_summary');
-  String get delivery => get('delivery');
   String get continueButton => get('continue_button');
   String get placeOrder => get('place_order');
   String get orderPlaced => get('order_placed');
@@ -489,7 +488,6 @@ class AppLocalizations {
       get('failed_to_load_book_details_short');
   String get loadingYourAddress => get('loading_your_address');
   String get borrowDuration => get('borrow_duration');
-  String get deliveryAddress => get('delivery_address');
   String get enterDeliveryAddress => get('enter_delivery_address');
   String get deliveryAddressRequired => get('delivery_address_required');
   String get editAddressFromProfile => get('edit_address_from_profile');

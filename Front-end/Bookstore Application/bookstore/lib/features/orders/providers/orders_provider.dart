@@ -306,7 +306,7 @@ class OrdersProvider extends ChangeNotifier {
           status: 'cancelled',
           orderType: _orders[orderIndex].orderType,
           totalAmount: _orders[orderIndex].totalAmount,
-          shippingCost: _orders[orderIndex].shippingCost,
+          deliveryCost: _orders[orderIndex].deliveryCost,
           taxAmount: _orders[orderIndex].taxAmount,
           couponCode: _orders[orderIndex].couponCode,
           discountAmount: _orders[orderIndex].discountAmount,
@@ -314,7 +314,7 @@ class OrdersProvider extends ChangeNotifier {
           createdAt: _orders[orderIndex].createdAt,
           updatedAt: DateTime.now(),
           items: _orders[orderIndex].items,
-          shippingAddress: _orders[orderIndex].shippingAddress,
+          deliveryAddress: _orders[orderIndex].deliveryAddress,
           billingAddress: _orders[orderIndex].billingAddress,
           paymentInfo: _orders[orderIndex].paymentInfo,
         );
@@ -356,9 +356,8 @@ class OrdersProvider extends ChangeNotifier {
       return order.orderNumber.toLowerCase().contains(lowerQuery) ||
           order.items.any(
             (item) =>
-                item.book.title.toLowerCase().contains(lowerQuery) ||
-                (item.book.author?.name.toLowerCase().contains(lowerQuery) ??
-                    false),
+                item.bookTitle.toLowerCase().contains(lowerQuery) ||
+                (item.bookAuthor?.toLowerCase().contains(lowerQuery) ?? false),
           );
     }).toList();
   }
@@ -456,14 +455,16 @@ class OrdersProvider extends ChangeNotifier {
     try {
       // Use the new dedicated acceptance endpoint
       // This only accepts the assignment - does NOT start delivery or change manager status to BUSY
-      final result = await _ordersService.acceptDeliveryAssignment(assignmentId);
-      
+      final result = await _ordersService.acceptDeliveryAssignment(
+        assignmentId,
+      );
+
       if (result['success'] == true) {
         debugPrint('DEBUG: Assignment accepted successfully');
-        
+
         // Refresh order data to get updated assignment status
         await loadOrders();
-        
+
         return true;
       } else {
         debugPrint('DEBUG: Failed to accept assignment: ${result['message']}');

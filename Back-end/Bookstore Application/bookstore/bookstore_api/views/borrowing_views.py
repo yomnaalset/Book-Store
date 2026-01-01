@@ -306,7 +306,28 @@ class BorrowRequestDetailView(generics.RetrieveAPIView):
             
             if return_request:
                 # Get or create return fine (this ensures fine is calculated)
-                return_fine = ReturnService.get_or_create_return_fine(return_request)
+                # Handle case where database columns might not exist yet
+                try:
+                    return_fine = ReturnService.get_or_create_return_fine(return_request)
+                except Exception as fine_error:
+                    # If there's an error accessing return fine (e.g., missing columns),
+                    # try to get it with only the fields we need, excluding problematic fields
+                    error_msg = str(fine_error).lower()
+                    if 'late_return' in error_msg or '1054' in error_msg:
+                        logger.warning(f"Database schema issue detected, using alternative query: {str(fine_error)}")
+                        try:
+                            # Use defer to exclude fields that might not exist
+                            return_fine = ReturnFine.objects.defer(
+                                'late_return', 'damaged', 'lost'
+                            ).get(return_request=return_request)
+                        except ReturnFine.DoesNotExist:
+                            return_fine = None
+                        except Exception as e:
+                            logger.error(f"Error accessing return fine with defer: {str(e)}")
+                            return_fine = None
+                    else:
+                        # Re-raise if it's a different error
+                        raise fine_error
                 
                 # Add return fine information to the response
                 if return_fine and return_fine.fine_amount and float(return_fine.fine_amount) > 0:
@@ -320,12 +341,20 @@ class BorrowRequestDetailView(generics.RetrieveAPIView):
                     # Map payment status for frontend compatibility
                     fine_status = 'paid' if return_fine.is_paid else 'pending'
                     
+                    # Safely access days_late (might not exist in old database schema)
+                    days_late = 0
+                    try:
+                        days_late = return_fine.days_late if has_delay else 0
+                    except AttributeError:
+                        # days_late field doesn't exist, use 0
+                        days_late = 0
+                    
                     # Update fine amount and status in the response
                     data['fine_amount'] = float(return_fine.fine_amount)
                     data['fine_status'] = fine_status
-                    data['overdue_days'] = return_fine.days_late if has_delay else 0
-                    data['payment_method'] = return_fine.payment_method
-                    data['is_finalized'] = return_fine.is_finalized
+                    data['overdue_days'] = days_late
+                    data['payment_method'] = getattr(return_fine, 'payment_method', None)
+                    data['is_finalized'] = getattr(return_fine, 'is_finalized', False)
                 else:
                     # No fine or fine amount is 0
                     data['fine_amount'] = 0.0
@@ -613,7 +642,7 @@ class BorrowingDeliveryOrdersView(generics.ListAPIView):
         This ensures delivery managers can see their complete history of assigned requests.
         Supports optional status filtering via query parameter.
         """
-        from ..models.delivery_model import Order
+        from ..models import Order
         from ..models.borrowing_model import BorrowStatusChoices
         from django.db.models import Q
         
@@ -897,7 +926,7 @@ class RejectDeliveryOrderView(APIView):
     
     def post(self, request, order_id):
         try:
-            from ..models.delivery_model import Order
+            from ..models import Order
             order = get_object_or_404(Order, id=order_id, order_type='borrowing')
             
             # Get borrow request
@@ -987,7 +1016,7 @@ class StartDeliveryOrderView(APIView):
     
     def patch(self, request, order_id):
         try:
-            from ..models.delivery_model import Order
+            from ..models import Order
             order = get_object_or_404(Order, id=order_id, order_type='borrowing')
             
             # Get borrow request to check actual status
@@ -1240,7 +1269,7 @@ class CompleteDeliveryView(APIView):
     
     def patch(self, request, order_id):
         try:
-            from ..models.delivery_model import Order
+            from ..models import Order
             order = get_object_or_404(Order, id=order_id, order_type='borrowing')
             
             # Get borrow request to check actual status

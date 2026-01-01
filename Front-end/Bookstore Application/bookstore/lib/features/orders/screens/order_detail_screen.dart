@@ -126,7 +126,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
       // Find matching borrow request by book ID
       if (_order!.items.isNotEmpty) {
-        final bookId = _order!.items.first.book.id;
+        final bookId = _order!.items.first.bookId.toString();
         try {
           _borrowRequest = borrowings.firstWhere(
             (br) => br.bookId == bookId && br.status == 'active',
@@ -232,7 +232,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           debugPrint('DEBUG: Order loaded - TotalAmount: ${order.totalAmount}');
           debugPrint('DEBUG: Order loaded - TaxAmount: ${order.taxAmount}');
           debugPrint(
-            'DEBUG: Order loaded - ShippingCost: ${order.shippingCost}',
+            'DEBUG: Order loaded - DeliveryCost: ${order.deliveryCost}',
           );
           debugPrint('DEBUG: Order loaded - Status: ${order.status}');
           debugPrint(
@@ -1214,7 +1214,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                                           CrossAxisAlignment.start,
                                       children: [
                                         Text(
-                                          item.book.title,
+                                          item.bookTitle,
                                           style: const TextStyle(
                                             fontSize: AppDimensions.fontSizeM,
                                             fontWeight: FontWeight.w600,
@@ -1439,10 +1439,10 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                             : localizations.notProvided,
                       ),
                       _buildInfoRow(localizations.email, _order!.customerEmail),
-                      if (_order!.shippingAddress != null) ...[
+                      if (_order!.deliveryAddress != null) ...[
                         _buildInfoRow(
                           localizations.addressLabel,
-                          _order!.shippingAddressText ??
+                          _order!.deliveryAddressText ??
                               localizations.notProvided,
                         ),
                       ],

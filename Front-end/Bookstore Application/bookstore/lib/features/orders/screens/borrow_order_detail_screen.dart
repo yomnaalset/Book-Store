@@ -765,15 +765,15 @@ class _BorrowOrderDetailScreenState extends State<BorrowOrderDetailScreen>
                         ? _order!.customerEmail
                         : localizations.notProvided,
                   ),
-                  if (_order!.shippingAddress != null) ...[
+                  if (_order!.deliveryAddress != null) ...[
                     _buildInfoRow(
                       localizations.addressLabel,
-                      _order!.shippingAddress!.fullAddress,
+                      _order!.deliveryAddress!.fullAddress,
                     ),
-                    if (_order!.shippingAddress!.phone != null)
+                    if (_order!.deliveryAddress!.phone != null)
                       _buildInfoRow(
                         localizations.phoneLabel,
-                        _order!.shippingAddress!.phone!,
+                        _order!.deliveryAddress!.phone!,
                       ),
                   ],
                 ],

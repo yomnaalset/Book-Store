@@ -76,10 +76,10 @@ class _CustomerOrderDetailsWidgetState
                       textColor: Colors.red,
                     ),
                   ],
-                  if (widget.order.shippingCost > 0) ...[
+                  if (widget.order.deliveryCost > 0) ...[
                     widget.shared.buildInfoRow(
                       'Delivery Cost',
-                      '\$${widget.order.shippingCost.toStringAsFixed(2)}',
+                      '\$${widget.order.deliveryCost.toStringAsFixed(2)}',
                     ),
                   ],
                   // Always show tax if it exists (even if 0, as it might be calculated)

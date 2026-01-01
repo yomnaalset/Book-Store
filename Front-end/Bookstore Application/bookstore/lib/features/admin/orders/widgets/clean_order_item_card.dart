@@ -10,10 +10,10 @@ class CleanOrderItemCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final localizations = AppLocalizations.of(context);
-    // Get book image URL from either book object or snapshot
-    final String? imageUrl = item.book.primaryImageUrl ?? item.bookImage;
-    final String bookTitle = item.book.title;
-    final String? authorName = item.book.author?.name ?? item.bookAuthor;
+    // Get book image URL
+    final String? imageUrl = item.bookImage;
+    final String bookTitle = item.bookTitle;
+    final String? authorName = item.bookAuthor;
 
     return Material(
       color: Colors.white,

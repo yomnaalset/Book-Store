@@ -153,10 +153,10 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                     children: [
                       _buildInfoRow('Name', _currentOrder!.customerName),
                       _buildInfoRow('Email', _currentOrder!.customerEmail),
-                      if (_currentOrder!.shippingAddress != null) ...[
+                      if (_currentOrder!.deliveryAddress != null) ...[
                         _buildInfoRow(
-                          'Shipping Address',
-                          _currentOrder!.shippingAddressText ?? 'No address',
+                          'Delivery Address',
+                          _currentOrder!.deliveryAddressText ?? 'No address',
                         ),
                       ],
                     ],
@@ -313,14 +313,14 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
   }
 
   Widget _buildOrderItemCard(OrderItem item) {
-    // Get book image URL from either book object or snapshot
-    final String? imageUrl = item.book.primaryImageUrl ?? item.bookImage;
+    // Get book image URL
+    final String? imageUrl = item.bookImage;
 
-    // Get book title from either book object or snapshot
-    final String bookTitle = item.book.title;
+    // Get book title
+    final String bookTitle = item.bookTitle;
 
-    // Get author name from either book object or snapshot
-    final String? authorName = item.book.author?.name ?? item.bookAuthor;
+    // Get author name
+    final String? authorName = item.bookAuthor;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8.0),

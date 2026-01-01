@@ -1,16 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/localization/app_localizations.dart';
-import '../../../core/widgets/common/loading_indicator.dart';
-import '../../../core/widgets/common/error_message.dart';
-import '../../auth/providers/auth_provider.dart';
-import '../providers/borrowing_delivery_provider.dart';
-import '../widgets/borrow_order_card.dart';
-import '../../orders/models/order.dart';
-import '../widgets/search_filter_bar.dart';
+import '../../../core/constants/app_colors.dart';
+import '../models/unified_delivery.dart';
+import '../services/unified_delivery_service.dart';
+import '../../../features/auth/providers/auth_provider.dart';
+import 'delivery_request_detail_screen.dart';
 
-/// Borrow Requests Screen with complete workflow management
-/// Shows all requests with dropdown filter: All, Pending, In Delivery, Completed
 class BorrowRequestsScreen extends StatefulWidget {
   const BorrowRequestsScreen({super.key});
 
@@ -19,545 +15,370 @@ class BorrowRequestsScreen extends StatefulWidget {
 }
 
 class _BorrowRequestsScreenState extends State<BorrowRequestsScreen> {
-  String _searchQuery = '';
-  String? _selectedStatus;
+  List<UnifiedDelivery> _deliveries = [];
+  bool _isLoading = false;
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
+    _loadDeliveries();
+  }
 
-    // Load borrowing requests when the screen initializes
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadData();
+  Future<void> _loadDeliveries() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
     });
-  }
-
-  Future<void> _loadData() async {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final borrowProvider = Provider.of<BorrowingDeliveryProvider>(
-      context,
-      listen: false,
-    );
-
-    // Ensure we have a valid token
-    if (authProvider.token == null) {
-      debugPrint('BorrowRequestsScreen: No auth token available');
-      return;
-    }
-
-    debugPrint(
-      'BorrowRequestsScreen: Setting token ${authProvider.token!.substring(0, 20)}...',
-    );
-
-    // Set the auth token before loading requests
-    borrowProvider.setToken(authProvider.token);
-    await _loadBorrowRequestsFromServer();
-  }
-
-  Future<void> _loadBorrowRequestsFromServer() async {
-    final borrowProvider = Provider.of<BorrowingDeliveryProvider>(
-      context,
-      listen: false,
-    );
-
-    debugPrint(
-      'BorrowRequestsScreen: Loading borrow requests from server with filters - status: $_selectedStatus, search: "$_searchQuery"',
-    );
 
     try {
-      await borrowProvider.loadBorrowRequests(
-        status: _selectedStatus,
-        search: _searchQuery.isNotEmpty ? _searchQuery : null,
-      );
-      debugPrint(
-        'BorrowRequestsScreen: Borrow requests loaded successfully. Count: ${borrowProvider.allRequests.length}',
-      );
-    } catch (error) {
-      debugPrint('BorrowRequestsScreen: Error loading borrow requests: $error');
-    }
-  }
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final token = authProvider.token ?? authProvider.getCurrentToken();
 
-  void _onSearchChanged(String query) {
-    setState(() {
-      _searchQuery = query;
-    });
-    _loadBorrowRequestsFromServer();
-  }
-
-  void _onFilterChanged(String? status) {
-    setState(() {
-      _selectedStatus = status;
-    });
-    _loadBorrowRequestsFromServer();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
-      appBar: AppBar(
-        title: Text(AppLocalizations.of(context).borrowRequests),
-        backgroundColor: theme.colorScheme.primary,
-        foregroundColor: theme.colorScheme.onPrimary,
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadBorrowRequestsFromServer,
-          ),
-        ],
-      ),
-      body: Consumer<BorrowingDeliveryProvider>(
-        builder: (context, borrowProvider, child) {
-          if (borrowProvider.isLoading) {
-            return const Center(child: LoadingIndicator());
-          }
-
-          if (borrowProvider.hasError) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  ErrorMessage(message: borrowProvider.errorMessage!),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () {
-                      final authProvider = Provider.of<AuthProvider>(
-                        context,
-                        listen: false,
-                      );
-
-                      borrowProvider.setToken(authProvider.token);
-                      _loadBorrowRequestsFromServer();
-                    },
-                    child: Text(AppLocalizations.of(context).retry),
-                  ),
-                ],
-              ),
-            );
-          }
-
-          final orders = borrowProvider.allRequests;
-
-          return Column(
-            children: [
-              // Search and Filter Bar
-              Builder(
-                builder: (context) {
-                  final localizations = AppLocalizations.of(context);
-                  return SearchFilterBar(
-                    searchHint: localizations.searchBorrowRequests,
-                    filterLabel: localizations.status,
-                    filterOptions: borrowProvider.statusFilterOptions,
-                    onSearchChanged: _onSearchChanged,
-                    onFilterChanged: _onFilterChanged,
-                  );
-                },
-              ),
-
-              // Orders List
-              Expanded(
-                child: RefreshIndicator(
-                  onRefresh: _loadBorrowRequestsFromServer,
-                  child: orders.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.book_online,
-                                size: 64,
-                                color: theme.colorScheme.outline,
-                              ),
-                              const SizedBox(height: 16),
-                              Builder(
-                                builder: (context) {
-                                  final localizations = AppLocalizations.of(
-                                    context,
-                                  );
-                                  return Text(
-                                    _searchQuery.isNotEmpty ||
-                                            _selectedStatus != null
-                                        ? localizations.noMatchingBorrowRequests
-                                        : localizations.noBorrowRequests,
-                                    style: theme.textTheme.headlineSmall
-                                        ?.copyWith(
-                                          color: theme
-                                              .colorScheme
-                                              .onSurfaceVariant,
-                                        ),
-                                  );
-                                },
-                              ),
-                              const SizedBox(height: 8),
-                              Builder(
-                                builder: (context) {
-                                  final localizations = AppLocalizations.of(
-                                    context,
-                                  );
-                                  return Text(
-                                    _searchQuery.isNotEmpty ||
-                                            _selectedStatus != null
-                                        ? localizations
-                                              .tryAdjustingSearchOrFilter
-                                        : localizations
-                                              .noBorrowRequestsDescription,
-                                    style: theme.textTheme.bodyMedium?.copyWith(
-                                      color: theme.colorScheme.onSurfaceVariant,
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  );
-                                },
-                              ),
-                            ],
-                          ),
-                        )
-                      : ListView.builder(
-                          padding: const EdgeInsets.all(16),
-                          itemCount: orders.length,
-                          itemBuilder: (context, index) {
-                            final order = orders[index];
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: _buildOrderCard(order),
-                            );
-                          },
-                        ),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildOrderCard(Order order) {
-    // Determine card type based on order status
-    BorrowOrderCardType cardType;
-    VoidCallback? onAccept;
-    VoidCallback? onReject;
-    VoidCallback? onStartDelivery;
-    VoidCallback? onComplete;
-
-    final status = order.status.toLowerCase();
-
-    // Pending statuses - need Accept/Reject
-    if (status == 'pending' ||
-        status == 'confirmed' ||
-        status == 'assigned' ||
-        status == 'assigned_to_delivery') {
-      cardType = BorrowOrderCardType.pending;
-      onAccept = () => _handleAcceptRequest(order.id);
-      onReject = () => _handleRejectRequest(order.id);
-    }
-    // In-progress statuses - delivery is ongoing
-    else if (status == 'pending_delivery' ||
-        status == 'preparing' ||
-        status == 'out_for_delivery' ||
-        status == 'in_delivery') {
-      cardType = BorrowOrderCardType.inProgress;
-      if (status == 'pending_delivery' || status == 'preparing') {
-        onStartDelivery = () => _handleStartDelivery(order.id);
-      } else if (status == 'in_delivery' || status == 'out_for_delivery') {
-        onComplete = () => _handleCompleteDelivery(order.id);
+      if (token != null) {
+        UnifiedDeliveryService.setToken(token);
       }
-    }
-    // Completed statuses
-    else {
-      cardType = BorrowOrderCardType.completed;
-    }
 
-    return BorrowOrderCard(
-      order: order,
-      cardType: cardType,
-      onAccept: onAccept,
-      onReject: onReject,
-      onStartDelivery: onStartDelivery,
-      onComplete: onComplete,
-    );
-  }
+      final result = await UnifiedDeliveryService.getDeliveryList(
+        deliveryType: 'borrow',
+      );
 
-  // Action Handlers
-
-  Future<void> _handleAcceptRequest(String orderId) async {
-    final provider = Provider.of<BorrowingDeliveryProvider>(
-      context,
-      listen: false,
-    );
-
-    // Show confirmation dialog
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Accept Delivery Request'),
-        content: const Text(
-          'By accepting this request, your status will automatically change to BUSY. '
-          'You won\'t be able to change your status manually until you complete the delivery.\n\n'
-          'Do you want to proceed?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Accept'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      final success = await provider.acceptRequest(orderId);
-
-      if (mounted) {
-        if (success) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Request accepted! Your status is now BUSY.'),
-              backgroundColor: Colors.green,
-            ),
-          );
-          // Reload requests after accepting
-          _loadBorrowRequestsFromServer();
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                provider.errorMessage ?? 'Failed to accept request',
-              ),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
+      if (result['success'] == true) {
+        final data = result['data'] as List;
+        setState(() {
+          _deliveries = data
+              .map((json) => UnifiedDelivery.fromJson(json))
+              .toList();
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _errorMessage = result['message'] ?? 'Failed to load borrow requests';
+          _isLoading = false;
+        });
       }
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Error loading borrow requests: $e';
+        _isLoading = false;
+      });
     }
   }
 
-  Future<void> _handleRejectRequest(String orderId) async {
-    final provider = Provider.of<BorrowingDeliveryProvider>(
-      context,
-      listen: false,
-    );
+  Future<void> _handleAccept(int deliveryId) async {
+    try {
+      final result = await UnifiedDeliveryService.acceptDelivery(deliveryId);
+      if (!mounted) return;
+      if (result['success'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Delivery request accepted')),
+        );
+        _loadDeliveries();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result['message'] ?? 'Failed to accept')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
+  }
 
-    // Show reason dialog
-    final TextEditingController reasonController = TextEditingController();
-
-    final confirmed = await showDialog<bool>(
+  Future<void> _handleReject(int deliveryId) async {
+    final reasonController = TextEditingController();
+    final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Reject Delivery Request'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Please provide a reason for rejection:'),
-            const SizedBox(height: 16),
-            TextField(
-              controller: reasonController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                hintText: 'Enter rejection reason...',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
+        content: TextField(
+          controller: reasonController,
+          decoration: const InputDecoration(
+            labelText: 'Rejection Reason',
+            hintText: 'Enter reason for rejection',
+          ),
+          maxLines: 3,
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
           ),
-          ElevatedButton(
-            onPressed: () {
-              if (reasonController.text.trim().isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Please provide a rejection reason'),
-                    backgroundColor: Colors.orange,
-                  ),
-                );
-                return;
-              }
-              Navigator.pop(context, true);
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+          TextButton(
+            onPressed: () => Navigator.pop(context, reasonController.text),
             child: const Text('Reject'),
           ),
         ],
       ),
     );
 
-    if (confirmed == true && reasonController.text.trim().isNotEmpty) {
-      final success = await provider.rejectRequest(
-        orderId,
-        reasonController.text.trim(),
-      );
-
-      if (mounted) {
-        if (success) {
-          try {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Request rejected successfully'),
-                backgroundColor: Colors.orange,
-              ),
-            );
-          } catch (_) {
-            // Widget disposed, ignore
-          }
-          // Reload requests after rejecting
-          _loadBorrowRequestsFromServer();
+    if (result != null && result.isNotEmpty) {
+      try {
+        final apiResult = await UnifiedDeliveryService.rejectDelivery(
+          deliveryId,
+          result,
+        );
+        if (!mounted) return;
+        if (apiResult['success'] == true) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Delivery request rejected')),
+          );
+          _loadDeliveries();
         } else {
-          try {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  provider.errorMessage ?? 'Failed to reject request',
-                ),
-                backgroundColor: Colors.red,
-              ),
-            );
-          } catch (_) {
-            // Widget disposed, ignore
-          }
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(apiResult['message'] ?? 'Failed to reject')),
+          );
         }
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
-
-    reasonController.dispose();
   }
 
-  Future<void> _handleStartDelivery(String orderId) async {
-    final provider = Provider.of<BorrowingDeliveryProvider>(
-      context,
-      listen: false,
-    );
+  Future<void> _handleStart(int deliveryId) async {
+    try {
+      final result = await UnifiedDeliveryService.startDelivery(deliveryId);
+      if (!mounted) return;
+      if (result['success'] == true) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Delivery started')));
+        _loadDeliveries();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result['message'] ?? 'Failed to start')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
+  }
 
-    // Get delivery manager ID from auth provider before async gap
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final deliveryManagerId = authProvider.user?.id;
+  Future<void> _handleComplete(int deliveryId) async {
+    try {
+      final result = await UnifiedDeliveryService.completeDelivery(deliveryId);
+      if (!mounted) return;
+      if (result['success'] == true) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Delivery completed')));
+        _loadDeliveries();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result['message'] ?? 'Failed to complete')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
+  }
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Start Delivery'),
-        content: const Text(
-          'Confirm that you have picked up the book and are ready to start delivery.',
-        ),
+  @override
+  Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(localizations.borrowRequests),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadDeliveries,
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
+        ],
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _errorMessage != null
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(_errorMessage!),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: _loadDeliveries,
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            )
+          : _deliveries.isEmpty
+          ? Center(
+              child: Text(
+                'No borrow delivery requests',
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+            )
+          : RefreshIndicator(
+              onRefresh: _loadDeliveries,
+              child: ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: _deliveries.length,
+                itemBuilder: (context, index) {
+                  final delivery = _deliveries[index];
+                  return _buildDeliveryCard(delivery);
+                },
+              ),
+            ),
+    );
+  }
+
+  Widget _buildDeliveryCard(UnifiedDelivery delivery) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) =>
+                  DeliveryRequestDetailScreen(delivery: delivery),
+            ),
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Borrow Request #${delivery.id}',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  _buildStatusChip(delivery.deliveryStatus),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text('Customer: ${delivery.customerName ?? "N/A"}'),
+              const SizedBox(height: 8),
+              Text(
+                'Address: ${delivery.deliveryAddress.isNotEmpty ? delivery.deliveryAddress : "Not provided"}',
+              ),
+              if (delivery.deliveryCity != null) ...[
+                const SizedBox(height: 4),
+                Text('City: ${delivery.deliveryCity}'),
+              ],
+              const SizedBox(height: 16),
+              _buildActionButtons(delivery),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusChip(String status) {
+    Color color;
+    switch (status) {
+      case 'pending':
+        color = Colors.orange;
+        break;
+      case 'assigned':
+        color = Colors.blue;
+        break;
+      case 'accepted':
+        color = Colors.green;
+        break;
+      case 'in_delivery':
+        color = Colors.purple;
+        break;
+      case 'completed':
+        color = Colors.grey;
+        break;
+      case 'rejected':
+        color = Colors.red;
+        break;
+      default:
+        color = Colors.grey;
+    }
+    return Chip(
+      label: Text(status.toUpperCase()),
+      backgroundColor: color.withValues(alpha: 0.2),
+      labelStyle: TextStyle(color: color, fontWeight: FontWeight.bold),
+    );
+  }
+
+  Widget _buildActionButtons(UnifiedDelivery delivery) {
+    // Unified button display logic based on status
+    switch (delivery.deliveryStatus) {
+      case 'assigned':
+        return Row(
+          children: [
+            Expanded(
+              child: ElevatedButton(
+                onPressed: () => _handleAccept(delivery.id),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.success,
+                ),
+                child: const Text('Accept'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () => _handleReject(delivery.id),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.error,
+                ),
+                child: const Text('Reject'),
+              ),
+            ),
+          ],
+        );
+      case 'accepted':
+        return SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: () => _handleStart(delivery.id),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
             child: const Text('Start Delivery'),
           ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      if (deliveryManagerId == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Unable to get delivery manager ID. Please login again.',
+        );
+      case 'in_delivery':
+        return Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  // Navigate to location update screen
+                },
+                icon: const Icon(Icons.location_on),
+                label: const Text('Update Location'),
               ),
-              backgroundColor: Colors.red,
             ),
-          );
-        }
-        return;
-      }
-
-      final success = await provider.startDelivery(orderId, deliveryManagerId);
-
-      if (mounted) {
-        if (success) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Delivery started! Status remains BUSY.'),
-              backgroundColor: Colors.blue,
-            ),
-          );
-          // Reload requests after starting delivery
-          _loadBorrowRequestsFromServer();
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                provider.errorMessage ?? 'Failed to start delivery',
+            const SizedBox(width: 8),
+            Expanded(
+              child: ElevatedButton(
+                onPressed: () => _handleComplete(delivery.id),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.success,
+                ),
+                child: const Text('Complete'),
               ),
-              backgroundColor: Colors.red,
             ),
-          );
-        }
-      }
-    }
-  }
-
-  Future<void> _handleCompleteDelivery(String orderId) async {
-    final provider = Provider.of<BorrowingDeliveryProvider>(
-      context,
-      listen: false,
-    );
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Complete Delivery'),
-        content: const Text(
-          'Confirm that the book has been delivered to the customer.\n\n'
-          'Your status will automatically change to ONLINE after completion.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-            child: const Text('Complete'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      final success = await provider.completeDelivery(orderId);
-
-      if (mounted) {
-        if (success) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Delivery completed! Your status is now ONLINE.'),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 3),
-            ),
-          );
-          // Reload requests after completing delivery
-          _loadBorrowRequestsFromServer();
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                provider.errorMessage ?? 'Failed to complete delivery',
-              ),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      }
+          ],
+        );
+      case 'completed':
+      case 'rejected':
+      default:
+        return const SizedBox.shrink();
     }
   }
 }
-
-/// Enum for card types
-enum BorrowOrderCardType { pending, inProgress, completed }

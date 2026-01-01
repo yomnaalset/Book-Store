@@ -1,181 +1,100 @@
-from django.urls import path, include
-from rest_framework.routers import DefaultRouter
-from ..views.delivery_views import (   
-    # Order management views
-    OrderListView,  
-    OrderDetailView,
-    OrderCreateFromPaymentView,
-    OrderStatusUpdateView,
-    OrdersReadyForDeliveryView,
-    OrderViewSet,
-    
-    # New Activity Views
-    NoteActivityView,
-    ContactActivityView,
-    LocationActivityView,
-    RouteActivityView,
-    ETAActivityView,
-    DeliveryActivityView,
-    OrderActivitiesView,
-    StartDeliveryView,
-    CompleteDeliveryView,
-    
-    # Delivery assignment views
-    DeliveryAssignmentListView,
-    DeliveryAssignmentDetailView,
-    DeliveryAssignmentCreateView,
-    AcceptDeliveryAssignmentView,
-    DeliveryAssignmentStatusUpdateView,
-    MyDeliveryAssignmentsView,
-    
-    # Delivery manager views
-    available_delivery_managers_view,
-    DeliveryManagerStatusUpdateView,
-    DeliveryManagerLocationView,
-    get_order_delivery_location_view,
-    get_delivery_manager_location_view,
-    
-    # Bulk operations
-    bulk_assign_orders_view,
-    
-    # Customer views
-    customer_orders_view,
-    order_tracking_view,
-    order_delivery_contact_view,
-    
-    # Delivery request views
-    CustomerDeliveryRequestCreateView,
-    CustomerDeliveryRequestListView,
+from django.urls import path
+from ..views.delivery_views import (
+    DeliveryRequestListView,
     DeliveryRequestDetailView,
-    DeliveryRequestAssignView,
-    DeliveryRequestStatusUpdateView,
-    DeliveryManagerAssignedRequestsView,
-    LibraryAdminRequestListView,
-    LibraryAdminAssignManagerView,
-    
-    # Location tracking views
-    RealTimeTrackingView,
-    LocationTrackingUpdateView,
-    LocationHistoryView,
-    MovementSummaryView,
-    AllTrackingManagersView,
-    RealTimeTrackingSettingsView,
-    
-    # Notifications views
-    DeliveryNotificationsView,
-    DeliveryNotificationMarkReadView,
-    DeliveryNotificationsUnreadCountView,
-    
-    # Task management views
-    TaskETAUpdateView,
+    CustomerOrdersView,
+    OrderDetailView,
+    AvailableDeliveryManagersView,
+    approve_order,
+    assign_delivery_manager,
+    accept_delivery_request,
+    reject_delivery_request,
+    start_delivery,
+    update_location,
+    complete_delivery,
+    manage_delivery_notes,
+    my_assignments,
+    assigned_requests,
+    delivery_notifications,
+    delivery_notification_mark_read,
+    delivery_notifications_unread_count,
 )
 
 app_name = 'delivery'
 
-# Router for OrderViewSet
-router = DefaultRouter()
-router.register(r'orders', OrderViewSet, basename='order')
-
 urlpatterns = [
-    # Include router URLs
-    path('', include(router.urls)),
+    # Customer orders endpoint
+    # GET /orders/?order_type=purchase|borrowing&status=pending|confirmed|processing|delivered|cancelled
+    # POST /orders/ - Create order from cart checkout
+    path('orders/', CustomerOrdersView.as_view(), name='customer-orders-list'),
     
-    # ----------------------------
-    # 🧾 Order management endpoints (legacy)
-    # ----------------------------
-    path('orders-legacy/', OrderListView.as_view(), name='order-list'),
-    path('orders-legacy/<int:pk>/', OrderDetailView.as_view(), name='order-detail'),
-    path('orders-legacy/create-from-payment/', OrderCreateFromPaymentView.as_view(), name='order-create-from-payment'),
-    path('orders-legacy/<int:pk>/update-status/', OrderStatusUpdateView.as_view(), name='order-update-status'),
-    path('orders-legacy/ready-for-delivery/', OrdersReadyForDeliveryView.as_view(), name='orders-ready-for-delivery'),
+    # Order detail endpoint
+    # GET /orders/{id}/ - Get order detail
+    path('orders/<int:pk>/', OrderDetailView.as_view(), name='customer-orders-detail'),
     
-    # -----------------------------------------------------
-    # 📝 New Activity Logging Endpoints (Unified & Updated)
-    # -----------------------------------------------------
-    path('activities/log/', NoteActivityView.as_view(), name='delivery-activity-log'),  # legacy compatibility
-    path('activities/log/note/', NoteActivityView.as_view(), name='note-activity'),
-    path('activities/log/contact/', ContactActivityView.as_view(), name='contact-activity'),
-    path('activities/log/location/', LocationActivityView.as_view(), name='location-activity'),
-    path('activities/log/route/', RouteActivityView.as_view(), name='route-activity'),
-    path('activities/log/eta/', ETAActivityView.as_view(), name='eta-activity'),
-    path('activities/log/delivery/', DeliveryActivityView.as_view(), name='delivery-activity'),
-    path('activities/order/<int:order_id>/', OrderActivitiesView.as_view(), name='order-activities'),
+    # Approve order endpoint
+    # PATCH /orders/{id}/approve/ - Approve order and assign delivery manager
+    path('orders/<int:pk>/approve/', approve_order, name='approve-order'),
     
-    # ---------------------------------------
-    # 🚚 Delivery Assignment Endpoints
-    # ---------------------------------------
-    path('assignments/', DeliveryAssignmentListView.as_view(), name='assignment-list'),
-    path('assignments/<int:pk>/', DeliveryAssignmentDetailView.as_view(), name='assignment-detail'),
-    path('assignments/create/', DeliveryAssignmentCreateView.as_view(), name='assignment-create'),
-    path('assignments/<int:pk>/accept/', AcceptDeliveryAssignmentView.as_view(), name='assignment-accept'),
-    path('assignments/<int:pk>/update-status/', DeliveryAssignmentStatusUpdateView.as_view(), name='assignment-update-status'),
-    path('assignments/my-assignments/', MyDeliveryAssignmentsView.as_view(), name='my-assignments'),
-    path('assignments/bulk-assign/', bulk_assign_orders_view, name='bulk-assign-orders'),
+    # Available delivery managers endpoint
+    # GET /orders/available_delivery_managers/
+    path('orders/available_delivery_managers/', AvailableDeliveryManagersView.as_view(), name='available-delivery-managers'),
     
-    # ---------------------------------------
-    # 👨‍💼 Delivery Manager Endpoints
-    # ---------------------------------------
-    path('managers/available/', available_delivery_managers_view, name='available-delivery-managers'),
-    path('managers/update-status/', DeliveryManagerStatusUpdateView.as_view(), name='update-manager-status'),
+    # List delivery requests (with query parameters for filtering)
+    # GET /delivery-requests/?type=purchase|borrow|return&status=pending|assigned|accepted|in_delivery|completed|rejected
+    path('delivery-requests/', DeliveryRequestListView.as_view(), name='delivery-request-list'),
     
-    # ---------------------------------------
-    # 🧍‍♂️ Customer Endpoints
-    # ---------------------------------------
-    path('customer/orders/', customer_orders_view, name='customer-orders'),
-    path('customer/orders/track/<str:order_number>/', order_tracking_view, name='order-tracking'),
-    path('customer/orders/<int:order_id>/delivery-contact/', order_delivery_contact_view, name='order-delivery-contact'),
-    path('orders/<int:order_id>/delivery-location/', get_order_delivery_location_view, name='order-delivery-location'),
+    # Get delivery request detail
+    # GET /delivery-requests/{id}/
+    path('delivery-requests/<int:pk>/', DeliveryRequestDetailView.as_view(), name='delivery-request-detail'),
     
-    # ---------------------------------------
-    # 📦 Customer Delivery Request Endpoints
-    # ---------------------------------------
-    path('requests/create/', CustomerDeliveryRequestCreateView.as_view(), name='request-create'),
-    path('requests/my-requests/', CustomerDeliveryRequestListView.as_view(), name='my-requests'),
-    path('requests/<int:pk>/', DeliveryRequestDetailView.as_view(), name='request-detail'),
-    path('requests/<int:pk>/track/', DeliveryRequestDetailView.as_view(), name='request-tracking'),
+    # Assign delivery manager (Admin only)
+    # POST /delivery-requests/{id}/assign/
+    path('delivery-requests/<int:delivery_request_id>/assign/', assign_delivery_manager, name='assign-delivery-manager'),
     
-    # Delivery Manager Request Control
-    path('requests/<int:pk>/assign/', DeliveryRequestAssignView.as_view(), name='request-assign'),
-    path('requests/<int:pk>/update-status/', DeliveryRequestStatusUpdateView.as_view(), name='request-update-status'),
-    path('managers/assigned-requests/', DeliveryManagerAssignedRequestsView.as_view(), name='manager-assigned-requests'),
+    # Accept delivery request
+    # POST /delivery-requests/{id}/accept/
+    path('delivery-requests/<int:delivery_request_id>/accept/', accept_delivery_request, name='accept-delivery-request'),
     
-    # ---------------------------------------
-    # 📚 Library Admin Endpoints
-    # ---------------------------------------
-    path('requests/', LibraryAdminRequestListView.as_view(), name='request-list'),
-    path('requests/<int:pk>/assign-manager/', LibraryAdminAssignManagerView.as_view(), name='assign-manager'),
+    # Reject delivery request
+    # POST /delivery-requests/{id}/reject/
+    path('delivery-requests/<int:delivery_request_id>/reject/', reject_delivery_request, name='reject-delivery-request'),
     
-    # ---------------------------------------
-    # 📍 Location Management Endpoints
-    # ---------------------------------------
-    path('location/', DeliveryManagerLocationView.as_view(), name='location-manage'),
-    path('location/<int:delivery_manager_id>/', get_delivery_manager_location_view, name='location-get'),
+    # Start delivery
+    # POST /delivery-requests/{id}/start/
+    path('delivery-requests/<int:delivery_request_id>/start/', start_delivery, name='start-delivery'),
     
-    # ---------------------------------------
-    # 🛰️ Real-Time Tracking Endpoints
-    # ---------------------------------------
-    path('tracking/', RealTimeTrackingView.as_view(), name='real-time-tracking'),
-    path('tracking/update-location/', LocationTrackingUpdateView.as_view(), name='update-tracking-location'),
-    path('tracking/history/', LocationHistoryView.as_view(), name='location-history'),
-    path('tracking/movement-summary/', MovementSummaryView.as_view(), name='movement-summary'),
-    path('tracking/all-managers/', AllTrackingManagersView.as_view(), name='all-tracking-managers'),
-    path('tracking/settings/', RealTimeTrackingSettingsView.as_view(), name='tracking-settings'),
+    # Update location (GPS)
+    # POST /delivery-requests/{id}/update-location/
+    path('delivery-requests/<int:delivery_request_id>/update-location/', update_location, name='update-location'),
     
-    # ---------------------------------------
-    # 🔔 Notifications Endpoints
-    # ---------------------------------------
-    path('notifications/', DeliveryNotificationsView.as_view(), name='delivery-notifications'),
-    path('notifications/unread-count/', DeliveryNotificationsUnreadCountView.as_view(), name='delivery-notifications-unread-count'),
-    path('notifications/<int:notification_id>/mark-read/', DeliveryNotificationMarkReadView.as_view(), name='delivery-notification-mark-read'),
+    # Complete delivery
+    # POST /delivery-requests/{id}/complete/
+    path('delivery-requests/<int:delivery_request_id>/complete/', complete_delivery, name='complete-delivery'),
     
-    # ---------------------------------------
-    # ⏱️ Task Management Endpoints
-    # ---------------------------------------
-    path('tasks/<int:task_id>/eta/', TaskETAUpdateView.as_view(), name='task-update-eta'),
+    # Manage delivery notes
+    # PUT/PATCH /delivery-requests/{id}/notes/ - Add or update delivery notes
+    # DELETE /delivery-requests/{id}/notes/ - Delete delivery notes
+    path('delivery-requests/<int:delivery_request_id>/notes/', manage_delivery_notes, name='manage-delivery-notes'),
     
-    # ---------------------------------------
-    # 🚀 Unified Delivery Endpoints (Backend-Driven)
-    # ---------------------------------------
-    path('start-delivery/', StartDeliveryView.as_view(), name='start-delivery'),
-    path('complete-delivery/', CompleteDeliveryView.as_view(), name='complete-delivery'),
+    # Delivery manager assignments
+    # GET /assignments/my-assignments/ - Get delivery requests assigned to current delivery manager
+    path('assignments/my-assignments/', my_assignments, name='my-assignments'),
+    
+    # Delivery manager assigned requests (alias)
+    # GET /managers/assigned-requests/ - Get delivery requests assigned to current delivery manager
+    path('managers/assigned-requests/', assigned_requests, name='assigned-requests'),
+    
+    # Delivery notifications
+    # GET /notifications/ - Get delivery-related notifications
+    path('notifications/', delivery_notifications, name='delivery-notifications'),
+    
+    # Mark delivery notification as read
+    # POST /notifications/{id}/mark-read/ - Mark a delivery notification as read
+    path('notifications/<int:notification_id>/mark-read/', delivery_notification_mark_read, name='delivery-notification-mark-read'),
+    
+    # Delivery notifications unread count
+    # GET /notifications/unread-count/ - Get unread count for delivery notifications
+    path('notifications/unread-count/', delivery_notifications_unread_count, name='delivery-notifications-unread-count'),
 ]
+

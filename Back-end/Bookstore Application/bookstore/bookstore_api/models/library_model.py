@@ -856,8 +856,8 @@ class BookEvaluation(models.Model):
             models.Index(fields=['rating']),
             models.Index(fields=['created_at']),
         ]
-        # Ensure a user can only have one evaluation per book
-        unique_together = ['book', 'user']
+        # Allow users to create multiple reviews for the same book
+        # unique_together constraint removed to allow unlimited reviews
     
     def __str__(self):
         rating_text = f"{self.rating}-star" if self.rating else "evaluation"

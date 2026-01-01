@@ -83,7 +83,7 @@ class ReturnService:
         borrowing.save()
         
         # Create return_collection order if it doesn't exist
-        from ..models.delivery_model import Order
+        from ..models import Order
         from ..services.delivery_services import BorrowingDeliveryService
         
         # Check if return_collection order already exists for this borrow_request
@@ -348,10 +348,54 @@ class ReturnService:
         borrow_request = return_request.borrowing
         
         # Check if a fine already exists
+        # Use defer() to exclude fields that might not exist in the database
         try:
-            return_fine = ReturnFine.objects.get(return_request=return_request)
+            return_fine = ReturnFine.objects.defer(
+                'late_return', 'damaged', 'lost'
+            ).get(return_request=return_request)
         except ReturnFine.DoesNotExist:
             return_fine = None
+        except Exception as e:
+            # If there's a database error (e.g., column doesn't exist), try without defer
+            error_msg = str(e).lower()
+            if 'late_return' in error_msg or '1054' in error_msg:
+                # Column doesn't exist, try to query without those fields using raw SQL
+                from django.db import connection
+                try:
+                    with connection.cursor() as cursor:
+                        cursor.execute(
+                            """
+                            SELECT id, return_request_id, fine_amount, fine_reason, 
+                                   days_late, is_paid, payment_method, is_finalized
+                            FROM return_fine 
+                            WHERE return_request_id = %s
+                            """,
+                            [return_request.id]
+                        )
+                        row = cursor.fetchone()
+                        if row:
+                            # Create a minimal ReturnFine object with only available fields
+                            return_fine = ReturnFine()
+                            return_fine.id = row[0]
+                            return_fine.return_request_id = row[1]
+                            return_fine.fine_amount = row[2]
+                            return_fine.fine_reason = row[3]
+                            return_fine.days_late = row[4] if row[4] else 0
+                            return_fine.is_paid = bool(row[5])
+                            return_fine.payment_method = row[6]
+                            return_fine.is_finalized = bool(row[7]) if len(row) > 7 else False
+                            # Set boolean fields based on fine_reason
+                            return_fine.late_return = return_fine.fine_reason == 'late_return' if return_fine.fine_reason else False
+                            return_fine.damaged = return_fine.fine_reason == 'damaged' if return_fine.fine_reason else False
+                            return_fine.lost = return_fine.fine_reason == 'lost' if return_fine.fine_reason else False
+                        else:
+                            return_fine = None
+                except Exception as sql_error:
+                    logger.error(f"Error querying return_fine with raw SQL: {str(sql_error)}")
+                    return_fine = None
+            else:
+                # Different error, re-raise
+                raise e
         
         # Calculate fine amount if needed
         days_late = 0
@@ -387,28 +431,49 @@ class ReturnService:
             return None
         
         # Create or update fine
+        # Check if boolean fields exist in the database schema
+        from django.db import connection
+        has_boolean_fields = False
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT COUNT(*) FROM information_schema.COLUMNS 
+                    WHERE TABLE_SCHEMA = DATABASE() 
+                    AND TABLE_NAME = 'return_fine' 
+                    AND COLUMN_NAME = 'late_return'
+                """)
+                has_boolean_fields = cursor.fetchone()[0] > 0
+        except Exception:
+            # If we can't check, assume fields don't exist to be safe
+            has_boolean_fields = False
+        
         if return_fine:
             # Only update if not finalized
             if not return_fine.is_finalized:
                 return_fine.fine_amount = fine_amount
                 return_fine.fine_reason = ReturnService._build_fine_reason(late_return, damaged, lost, days_late)
-                return_fine.late_return = late_return
-                return_fine.damaged = damaged
-                return_fine.lost = lost
+                if has_boolean_fields:
+                    return_fine.late_return = late_return
+                    return_fine.damaged = damaged
+                    return_fine.lost = lost
                 return_fine.days_late = days_late if late_return else 0
                 return_fine.save()
         else:
             # Create new fine
-            return_fine = ReturnFine.objects.create(
-                return_request=return_request,
-                fine_amount=fine_amount,
-                fine_reason=ReturnService._build_fine_reason(late_return, damaged, lost, days_late),
-                late_return=late_return,
-                damaged=damaged,
-                lost=lost,
-                days_late=days_late if late_return else 0,
-                is_paid=False
-            )
+            create_kwargs = {
+                'return_request': return_request,
+                'fine_amount': fine_amount,
+                'fine_reason': ReturnService._build_fine_reason(late_return, damaged, lost, days_late),
+                'days_late': days_late if late_return else 0,
+                'is_paid': False
+            }
+            # Only include boolean fields if they exist in the database
+            if has_boolean_fields:
+                create_kwargs['late_return'] = late_return
+                create_kwargs['damaged'] = damaged
+                create_kwargs['lost'] = lost
+            
+            return_fine = ReturnFine.objects.create(**create_kwargs)
         
         return return_fine
 

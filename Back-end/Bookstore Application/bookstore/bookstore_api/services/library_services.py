@@ -1312,13 +1312,8 @@ class EvaluationManagementService:
                     'error_code': 'BOOK_NOT_FOUND'
                 }
             
-            # Check if user already has an evaluation for this book
-            if BookEvaluation.objects.filter(book=book, user=user).exists():
-                return {
-                    'success': False,
-                    'message': 'You have already evaluated this book. You can update your existing evaluation.',
-                    'error_code': 'EVALUATION_EXISTS'
-                }
+            # Allow users to create multiple reviews for the same book
+            # No restriction on number of reviews per user per book
             
             # Create the evaluation
             evaluation = BookEvaluation.objects.create(
@@ -1497,8 +1492,47 @@ class EvaluationManagementService:
             book_name = evaluation.book.name
             user_email = evaluation.user.email
             
-            # Delete the evaluation
-            evaluation.delete()
+            # Delete related likes from the unified Like table first
+            # This prevents cascade delete issues with the deprecated ReviewLike table
+            from ..models import Like
+            
+            # Delete related likes from Like table
+            Like.objects.filter(
+                target_type='review',
+                review=evaluation
+            ).delete()
+            
+            # Delete related replies and their likes
+            from ..models import ReviewReply
+            replies = ReviewReply.objects.filter(review=evaluation)
+            for reply in replies:
+                # Delete likes for each reply
+                Like.objects.filter(
+                    target_type='reply',
+                    reply=reply
+                ).delete()
+            # Delete replies
+            replies.delete()
+            
+            # Delete the evaluation using raw SQL to bypass Django's ORM cascade logic
+            # This avoids issues with the deprecated review_like table that doesn't exist
+            # Since we've already manually deleted all related objects (likes and replies),
+            # we can safely delete the evaluation directly from the database
+            from django.db import connection
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        "DELETE FROM book_evaluation WHERE id = %s",
+                        [evaluation_id]
+                    )
+                logger.info(f"Successfully deleted evaluation {evaluation_id} using raw SQL")
+            except Exception as sql_error:
+                logger.error(f"Failed to delete evaluation via raw SQL: {str(sql_error)}")
+                # Verify if evaluation was deleted
+                if not BookEvaluation.objects.filter(id=evaluation_id).exists():
+                    logger.info(f"Evaluation {evaluation_id} was already deleted")
+                else:
+                    raise sql_error
             
             logger.info(f"Evaluation for book '{book_name}' by {user_email} deleted by {user.email}")
             

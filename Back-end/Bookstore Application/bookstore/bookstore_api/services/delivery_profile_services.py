@@ -136,14 +136,15 @@ class DeliveryProfileService:
             raise ValueError(f"Failed to get/create delivery profile: {str(e)}")
     
     @staticmethod
-    def update_location(user, latitude, longitude, address=None):
+    def update_location(user, latitude=None, longitude=None, address=None):
         """
         Update the delivery manager's location.
+        Can update coordinates, address, or both.
         
         Args:
             user: User instance
-            latitude: Latitude coordinate
-            longitude: Longitude coordinate
+            latitude: Optional latitude coordinate
+            longitude: Optional longitude coordinate
             address: Optional address string
             
         Returns:
@@ -152,11 +153,22 @@ class DeliveryProfileService:
         if not user.is_delivery_admin():
             raise ValueError("Only delivery administrators can update location")
         
+        # Validate that if coordinates are provided, both are provided
+        if (latitude is not None and longitude is None) or (longitude is not None and latitude is None):
+            raise ValueError("Both latitude and longitude must be provided together, or neither.")
+        
+        # At least one of coordinates or address must be provided
+        if latitude is None and longitude is None and (address is None or address.strip() == ''):
+            raise ValueError("Either coordinates (latitude and longitude) or address must be provided.")
+        
         try:
             delivery_profile = DeliveryProfileService.get_or_create_delivery_profile(user)
             delivery_profile.update_location(latitude, longitude, address)
             
-            logger.info(f"Updated location for user {user.id}: {latitude}, {longitude}")
+            if latitude is not None and longitude is not None:
+                logger.info(f"Updated location for user {user.id}: {latitude}, {longitude}")
+            if address:
+                logger.info(f"Updated address for user {user.id}: {address}")
             return delivery_profile
             
         except Exception as e:
@@ -539,7 +551,7 @@ class DeliveryProfileService:
             raise ValueError(f"Failed to get delivery admin profiles: {str(e)}")
     
     @staticmethod
-    def has_active_deliveries(user, exclude_order_id=None, exclude_return_id=None):
+    def has_active_deliveries(user, exclude_order_id=None, exclude_return_id=None, exclude_delivery_request_id=None):
         """
         UNIFIED FUNCTION: Check if a delivery manager has any active deliveries.
         This is the SINGLE SOURCE OF TRUTH for determining active delivery status.
@@ -548,6 +560,7 @@ class DeliveryProfileService:
             user: User instance (must be a delivery administrator)
             exclude_order_id: Optional order ID to exclude from check
             exclude_return_id: Optional return request ID to exclude from check
+            exclude_delivery_request_id: Optional delivery request ID to exclude from check
             
         Returns:
             bool: True if delivery manager has active deliveries, False otherwise
@@ -560,27 +573,35 @@ class DeliveryProfileService:
             from ..models.borrowing_model import BorrowRequest, BorrowStatusChoices
             from ..models.return_model import ReturnRequest, ReturnStatus
             
-            # Check for active delivery requests (orders in delivery)
+            # Check for active delivery requests (accepted, in_delivery, or other active statuses)
             active_requests_query = DeliveryRequest.objects.filter(
                 delivery_manager=user,
-                status__in=['picked_up', 'in_transit', 'in_progress']
+                status__in=['accepted', 'in_delivery', 'picked_up', 'in_transit', 'in_progress']
             ).exclude(
-                status__in=['completed', 'delivered', 'cancelled']
-            ).exclude(
-                order__status__in=['completed', 'delivered', 'cancelled', 'rejected_by_admin', 'rejected_by_delivery_manager']
+                status__in=['completed', 'delivered', 'cancelled', 'rejected']
             )
             
             if exclude_order_id:
                 active_requests_query = active_requests_query.exclude(order_id=exclude_order_id)
             
+            if exclude_delivery_request_id:
+                active_requests_query = active_requests_query.exclude(id=exclude_delivery_request_id)
+            
             if active_requests_query.exists():
+                logger.info(f"Found active DeliveryRequest for user {user.id}")
                 return True
             
             # Check for active orders in delivery
+            # Only count orders that have active delivery requests (not completed ones)
             active_orders_query = Order.objects.filter(
-                delivery_request__delivery_manager=user,
+                delivery_requests__delivery_manager=user,
+                delivery_requests__status__in=['accepted', 'in_delivery', 'picked_up', 'in_transit', 'in_progress'],
                 status__in=['in_delivery', 'in_progress', 'delivery_in_progress']
-            ).exclude(status__in=['completed', 'delivered', 'rejected_by_admin', 'rejected_by_delivery_manager', 'cancelled'])
+            ).exclude(
+                status__in=['completed', 'delivered', 'rejected_by_admin', 'rejected_by_delivery_manager', 'cancelled']
+            ).exclude(
+                delivery_requests__status__in=['completed', 'delivered', 'cancelled', 'rejected']
+            )
             
             # For 'delivered' orders, only count them as active if they're borrow orders
             # with borrow_request status OUT_FOR_DELIVERY (not ACTIVE)
@@ -594,6 +615,8 @@ class DeliveryProfileService:
                 active_orders_query = active_orders_query.exclude(id=exclude_order_id)
             
             if active_orders_query.exists():
+                active_order_list = list(active_orders_query.values('id', 'order_number', 'status', 'order_type'))
+                logger.info(f"Found active Order for user {user.id}: {active_order_list}")
                 return True
             
             # Check for active borrow requests (OUT_FOR_DELIVERY means delivery started but not completed)
@@ -606,6 +629,8 @@ class DeliveryProfileService:
             ).exclude(status__in=[BorrowStatusChoices.ACTIVE, BorrowStatusChoices.DELIVERED])
             
             if active_borrows.exists():
+                active_borrow_list = list(active_borrows.values('id', 'status'))
+                logger.info(f"Found active BorrowRequest for user {user.id}: {active_borrow_list}")
                 return True
             
             # Check for active return requests (IN_PROGRESS means delivery started but not completed)
@@ -618,13 +643,19 @@ class DeliveryProfileService:
                 active_returns_query = active_returns_query.exclude(id=exclude_return_id)
             
             if active_returns_query.exists():
+                active_return_list = list(active_returns_query.values('id', 'status'))
+                logger.info(f"Found active ReturnRequest for user {user.id}: {active_return_list}")
                 return True
             
-            # Check for active delivery requests
-            if DeliveryRequest.objects.filter(
+            # Check for active delivery requests with 'in_operation' status
+            in_operation_query = DeliveryRequest.objects.filter(
                 delivery_manager=user,
                 status='in_operation'
-            ).exists():
+            )
+            if exclude_delivery_request_id:
+                in_operation_query = in_operation_query.exclude(id=exclude_delivery_request_id)
+            if in_operation_query.exists():
+                logger.info(f"Found DeliveryRequest with 'in_operation' status for user {user.id}")
                 return True
             
             return False

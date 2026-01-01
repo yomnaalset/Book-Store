@@ -427,11 +427,11 @@ class CartProvider extends ChangeNotifier {
             (item) => {
               'book_id': item.book.id,
               'quantity': item.quantity,
-              'price': item.price,
+              // Price is calculated server-side for security
             },
           )
           .toList(),
-      'total_price': total,
+      // total_price is calculated server-side - do not send it
       'address': '', // This will be set from the checkout form
       'payment_method': 'cash', // Default payment method
     };

@@ -72,7 +72,7 @@ class _ReviewsListState extends State<ReviewsList> {
 
         return Column(
           children: [
-            // Reviews header
+            // Reviews header with Add Review button
             Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: AppDimensions.paddingM,
@@ -98,9 +98,10 @@ class _ReviewsListState extends State<ReviewsList> {
                   Builder(
                     builder: (context) {
                       final localizations = AppLocalizations.of(context);
-                      return TextButton(
+                      return TextButton.icon(
                         onPressed: () => _showAddReviewDialog(),
-                        child: Text(localizations.writeReviewLink),
+                        icon: const Icon(Icons.add, size: 18),
+                        label: Text(localizations.writeAReview),
                       );
                     },
                   ),

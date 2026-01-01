@@ -134,11 +134,16 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
           'Authorization': 'Bearer $token',
         },
         body: jsonEncode({
-          'cart_items': cartProvider.items.map((item) => item.id).toList(),
-          'total_price': cartProvider.items.fold(
-            0.0,
-            (sum, item) => sum + item.totalPrice,
-          ),
+          'cart_items': cartProvider.items
+              .map(
+                (item) => {
+                  'book_id': item.book.id,
+                  'quantity': item.quantity,
+                  // Price is calculated server-side for security
+                },
+              )
+              .toList(),
+          // total_price is calculated server-side - do not send it
           'address': _addressController.text,
           'payment_method': _selectedPaymentMethod,
           'delivery_notes': _notesController.text,

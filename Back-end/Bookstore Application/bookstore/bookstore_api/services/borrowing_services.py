@@ -355,7 +355,7 @@ class BorrowingService:
         # Update associated Order status if it exists
         # This ensures the order remains visible in the Borrowing Requests list
         try:
-            from ..models.delivery_model import Order
+            from ..models import Order
             order = Order.objects.filter(borrow_request=borrow_request, order_type='borrowing').first()
             if order:
                 # Keep order status as 'assigned' - the BorrowRequest status 'preparing' 
@@ -431,7 +431,7 @@ class BorrowingService:
                 tracking.save()
             
             # Get delivery request if exists
-            from ..models.delivery_model import Order, DeliveryRequest
+            from ..models import Order, DeliveryRequest
             try:
                 order = Order.objects.filter(
                     borrow_request=borrow_request,
