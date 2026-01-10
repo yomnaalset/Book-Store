@@ -407,6 +407,64 @@ class ProfileService {
     }
   }
 
+  // Upload profile picture from bytes (for web)
+  Future<bool> uploadProfilePictureBytes(
+    String token,
+    List<int> imageBytes, {
+    String fileName = 'profile_picture.jpg',
+  }) async {
+    _clearError();
+
+    try {
+      var request = http.MultipartRequest(
+        'PATCH',
+        Uri.parse('$baseUrl/users/profile/'),
+      );
+
+      request.headers['Authorization'] = 'Bearer $token';
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'profile_picture',
+          imageBytes,
+          filename: fileName,
+        ),
+      );
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      debugPrint(
+        'ProfileService: Profile picture upload (bytes) response status: ${response.statusCode}',
+      );
+      debugPrint(
+        'ProfileService: Profile picture upload (bytes) response body: ${response.body}',
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          debugPrint('ProfileService: Profile picture uploaded successfully');
+          return true;
+        } else {
+          _setError(data['message'] ?? 'Failed to upload profile picture');
+          return false;
+        }
+      } else {
+        try {
+          final data = json.decode(response.body);
+          _setError(data['message'] ?? 'Failed to upload profile picture');
+        } catch (e) {
+          _setError('Failed to upload profile picture');
+        }
+        return false;
+      }
+    } catch (e) {
+      debugPrint('ProfileService: Error uploading profile picture: $e');
+      _setError('Network error: ${e.toString()}');
+      return false;
+    }
+  }
+
   // Get user profile
   Future<Map<String, dynamic>?> getUserProfile(String token) async {
     _clearError();

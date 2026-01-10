@@ -84,21 +84,96 @@ class BooksService {
 
       if (ApiClient.isSuccess(response)) {
         final data = json.decode(response.body);
+        debugPrint(
+          'BooksService: getBooks - Raw API response type: ${data.runtimeType}',
+        );
 
         // Handle different response formats
         List<dynamic> booksJson = [];
-        if (data['data'] != null) {
-          booksJson = data['data'] as List<dynamic>;
-        } else if (data['results'] != null) {
-          booksJson = data['results'] as List<dynamic>;
-        } else if (data['books'] != null) {
-          booksJson = data['books'] as List<dynamic>;
+
+        if (data is List) {
+          // Direct list response
+          booksJson = data;
+          debugPrint(
+            'BooksService: Direct list response with ${booksJson.length} items',
+          );
+        } else if (data is Map<String, dynamic>) {
+          // Check for nested structure: results.data
+          if (data['results'] != null) {
+            final results = data['results'];
+            debugPrint(
+              'BooksService: Found results field, type: ${results.runtimeType}',
+            );
+
+            if (results is Map<String, dynamic>) {
+              // Nested structure: {results: {success: true, data: [...]}}
+              booksJson = results['data'] ?? [];
+              debugPrint(
+                'BooksService: Extracted ${booksJson.length} books from results.data',
+              );
+            } else if (results is List) {
+              // Direct list in results: {results: [...]}
+              booksJson = results;
+              debugPrint(
+                'BooksService: Extracted ${booksJson.length} books from results list',
+              );
+            }
+          } else if (data['data'] != null) {
+            // Handle paginated response: data['data'] might be a Map with 'results' key
+            final dataField = data['data'];
+            if (dataField is List) {
+              booksJson = dataField;
+              debugPrint(
+                'BooksService: Extracted ${booksJson.length} books from data field (List)',
+              );
+            } else if (dataField is Map<String, dynamic>) {
+              // Paginated response: {data: {count: ..., results: [...]}}
+              booksJson = dataField['results'] is List
+                  ? dataField['results']
+                  : [];
+              debugPrint(
+                'BooksService: Extracted ${booksJson.length} books from data.results (paginated)',
+              );
+            }
+          } else if (data['books'] != null) {
+            booksJson = data['books'] is List ? data['books'] : [];
+            debugPrint(
+              'BooksService: Extracted ${booksJson.length} books from books field',
+            );
+          }
         }
 
         debugPrint(
           'BooksService: API response successful, found ${booksJson.length} books',
         );
-        return booksJson.map((json) => Book.fromJson(json)).toList();
+
+        // Safely parse books, handling any parsing errors
+        try {
+          return booksJson
+              .map((json) {
+                try {
+                  if (json is Map<String, dynamic>) {
+                    return Book.fromJson(json);
+                  } else {
+                    debugPrint(
+                      'BooksService: Skipping invalid book JSON (not a Map): $json',
+                    );
+                    return null;
+                  }
+                } catch (e) {
+                  debugPrint(
+                    'BooksService: Error parsing book JSON: $e, JSON: $json',
+                  );
+                  return null;
+                }
+              })
+              .whereType<Book>()
+              .toList();
+        } catch (e) {
+          debugPrint('BooksService: Error mapping books: $e');
+          _setError('Error parsing books: ${e.toString()}');
+          return [];
+        }
       } else {
         final data = json.decode(response.body);
         debugPrint(
@@ -127,7 +202,25 @@ class BooksService {
 
       if (ApiClient.isSuccess(response)) {
         final data = json.decode(response.body);
-        final List<dynamic> booksJson = data['results'] ?? data['books'] ?? [];
+
+        // Handle different response structures
+        List<dynamic> booksJson = [];
+
+        if (data is List) {
+          booksJson = data;
+        } else if (data is Map<String, dynamic>) {
+          if (data['results'] != null) {
+            final results = data['results'];
+            if (results is Map<String, dynamic>) {
+              booksJson = results['data'] ?? [];
+            } else if (results is List) {
+              booksJson = results;
+            }
+          } else {
+            booksJson = data['books'] ?? data['data'] ?? [];
+          }
+        }
+
         return booksJson.map((json) => Book.fromJson(json)).toList();
       } else {
         final data = json.decode(response.body);
@@ -160,60 +253,142 @@ class BooksService {
 
       if (ApiClient.isSuccess(response)) {
         final data = json.decode(response.body);
-        // Handle both list response and object with books/results field
+        debugPrint('BooksService: Raw API response type: ${data.runtimeType}');
+        debugPrint(
+          'BooksService: Raw API response keys: ${data is Map ? data.keys.toList() : 'N/A'}',
+        );
+
+        // Handle different response structures
         List<dynamic> booksJson = [];
+
         if (data is List) {
+          // Direct list response
           booksJson = data;
-        } else {
-          booksJson = data['results'] ?? data['books'] ?? data['data'] ?? [];
+          debugPrint(
+            'BooksService: Direct list response with ${booksJson.length} items',
+          );
+        } else if (data is Map<String, dynamic>) {
+          // Check for nested structure: results.data
+          if (data['results'] != null) {
+            final results = data['results'];
+            debugPrint(
+              'BooksService: Found results field, type: ${results.runtimeType}',
+            );
+
+            if (results is Map<String, dynamic>) {
+              // Nested structure: {results: {success: true, data: [...]}}
+              booksJson = results['data'] ?? [];
+              debugPrint(
+                'BooksService: Extracted ${booksJson.length} books from results.data',
+              );
+            } else if (results is List) {
+              // Direct list in results: {results: [...]}
+              booksJson = results;
+              debugPrint(
+                'BooksService: Extracted ${booksJson.length} books from results list',
+              );
+            }
+          } else {
+            // Try other possible fields
+            booksJson = data['books'] ?? data['data'] ?? [];
+            debugPrint(
+              'BooksService: Extracted ${booksJson.length} books from data/books field',
+            );
+          }
         }
+
+        debugPrint(
+          'BooksService: Successfully parsed ${booksJson.length} books',
+        );
         return booksJson.map((json) => Book.fromJson(json)).toList();
       } else {
         final data = json.decode(response.body);
         _setError(data['message'] ?? 'Failed to load most borrowed books');
         return [];
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       _setError('Network error: ${e.toString()}');
       debugPrint('BooksService: Error getting most borrowed books: $e');
+      debugPrint('BooksService: Stack trace: $stackTrace');
       return [];
     }
   }
 
   // Get most popular books (using general books endpoint)
+  // Returns ALL books from database without filtering by availability
   Future<List<Book>> getMostPopularBooks({int limit = 10}) async {
     _clearError();
 
     try {
-      // Use the general books endpoint with default sorting
+      // Use the general books endpoint to get ALL books
+      // Don't pass is_available parameter to get all books regardless of availability
       final response = await ApiClient.get(
         '/library/books/',
         queryParams: {
           'limit': limit.toString(),
-          'sort_by': 'created_at',
-          'sort_order': 'desc',
+          'ordering': 'newest', // Sort by newest, but show all books
         },
         token: _token,
       );
 
       if (ApiClient.isSuccess(response)) {
         final data = json.decode(response.body);
-        // Handle both list response and object with books/results field
+        debugPrint(
+          'BooksService: getMostPopularBooks - Raw API response type: ${data.runtimeType}',
+        );
+
+        // Handle different response structures
         List<dynamic> booksJson = [];
+
         if (data is List) {
+          // Direct list response
           booksJson = data;
-        } else {
-          booksJson = data['results'] ?? data['books'] ?? data['data'] ?? [];
+          debugPrint(
+            'BooksService: Direct list response with ${booksJson.length} items',
+          );
+        } else if (data is Map<String, dynamic>) {
+          // Check for nested structure: results.data
+          if (data['results'] != null) {
+            final results = data['results'];
+            debugPrint(
+              'BooksService: Found results field, type: ${results.runtimeType}',
+            );
+
+            if (results is Map<String, dynamic>) {
+              // Nested structure: {results: {success: true, data: [...]}}
+              booksJson = results['data'] ?? [];
+              debugPrint(
+                'BooksService: Extracted ${booksJson.length} books from results.data',
+              );
+            } else if (results is List) {
+              // Direct list in results: {results: [...]}
+              booksJson = results;
+              debugPrint(
+                'BooksService: Extracted ${booksJson.length} books from results list',
+              );
+            }
+          } else {
+            // Try other possible fields
+            booksJson = data['books'] ?? data['data'] ?? [];
+            debugPrint(
+              'BooksService: Extracted ${booksJson.length} books from data/books field',
+            );
+          }
         }
+
+        debugPrint(
+          'BooksService: Successfully parsed ${booksJson.length} books',
+        );
         return booksJson.map((json) => Book.fromJson(json)).toList();
       } else {
         final data = json.decode(response.body);
         _setError(data['message'] ?? 'Failed to load most popular books');
         return [];
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       _setError('Network error: ${e.toString()}');
       debugPrint('BooksService: Error getting most popular books: $e');
+      debugPrint('BooksService: Stack trace: $stackTrace');
       return [];
     }
   }
@@ -252,13 +427,19 @@ class BooksService {
   }
 
   // Get top-rated books
+  // Returns ALL books with ratings, regardless of availability
   Future<List<Book>> getTopRatedBooks({int limit = 10}) async {
     _clearError();
 
     try {
+      // Get top-rated books - backend now returns all books regardless of availability
       final response = await ApiClient.get(
         '/library/books/top-rated/',
-        queryParams: {'limit': limit.toString()},
+        queryParams: {
+          'limit': limit.toString(),
+          'min_reviews': '1', // Minimum 1 review to be included
+          'min_rating': '0.0', // No minimum rating - show all rated books
+        },
         token: _token,
       );
 
@@ -318,31 +499,56 @@ class BooksService {
         final data = json.decode(response.body);
 
         debugPrint('BooksService: Full API response: $data');
+        debugPrint(
+          'BooksService: Response type: ${data.runtimeType}, Keys: ${data is Map ? data.keys.toList() : 'N/A'}',
+        );
 
         // Handle both paginated and non-paginated responses
         List<dynamic> booksJson = [];
-        if (data['data'] != null) {
-          // Non-paginated response - this is the correct format for our API
-          booksJson = data['data'] as List<dynamic>;
-          debugPrint(
-            'BooksService: Found books in data field: ${booksJson.length}',
-          );
-        } else if (data['results'] != null) {
-          // Paginated response
-          booksJson = data['results'] as List<dynamic>;
-          debugPrint(
-            'BooksService: Found books in results field: ${booksJson.length}',
-          );
+
+        // Check if this is a paginated response (has 'count', 'next', 'previous', 'results')
+        if (data['results'] != null && data['count'] != null) {
+          // Standard DRF paginated response
+          final results = data['results'];
+          if (results is Map && results['data'] != null) {
+            // Backend wrapped paginated response: {results: {data: [...], success: true, ...}}
+            booksJson = results['data'] is List ? results['data'] : [];
+            debugPrint(
+              'BooksService: Found ${booksJson.length} books in paginated results.data',
+            );
+          } else if (results is List) {
+            // Standard paginated response: {results: [...]}
+            booksJson = results;
+            debugPrint(
+              'BooksService: Found ${booksJson.length} books in paginated results',
+            );
+          }
+        } else if (data['data'] != null) {
+          // Non-paginated response - check if data is a list or nested
+          if (data['data'] is List) {
+            booksJson = data['data'];
+            debugPrint(
+              'BooksService: Found ${booksJson.length} books in data field (List)',
+            );
+          } else if (data['data'] is Map && data['data']['data'] != null) {
+            // Nested data structure
+            booksJson = data['data']['data'] is List
+                ? data['data']['data']
+                : [];
+            debugPrint(
+              'BooksService: Found ${booksJson.length} books in nested data.data',
+            );
+          }
         } else if (data['books'] != null) {
           // Alternative field name
-          booksJson = data['books'] as List<dynamic>;
+          booksJson = data['books'] is List ? data['books'] : [];
           debugPrint(
-            'BooksService: Found books in books field: ${booksJson.length}',
+            'BooksService: Found ${booksJson.length} books in books field',
           );
         } else {
           debugPrint('BooksService: No books found in response data');
           debugPrint(
-            'BooksService: Available keys in response: ${data.keys.toList()}',
+            'BooksService: Available keys in response: ${data is Map ? data.keys.toList() : 'N/A'}',
           );
         }
 
@@ -350,22 +556,45 @@ class BooksService {
           'BooksService: Category API response successful, found ${booksJson.length} books',
         );
 
+        if (booksJson.isEmpty) {
+          debugPrint(
+            'BooksService: WARNING - No books found in response for category $categoryId',
+          );
+          debugPrint(
+            'BooksService: This might mean: 1) Category has no books, 2) Response structure mismatch, or 3) Filtering issue',
+          );
+        }
+
         // Parse each book and log the result
         final List<Book> books = [];
         for (int i = 0; i < booksJson.length; i++) {
           try {
-            final book = Book.fromJson(booksJson[i]);
+            if (booksJson[i] is! Map<String, dynamic>) {
+              debugPrint(
+                'BooksService: Skipping book $i - not a Map, type: ${booksJson[i].runtimeType}',
+              );
+              continue;
+            }
+            final book = Book.fromJson(booksJson[i] as Map<String, dynamic>);
             books.add(book);
             debugPrint(
-              'BooksService: Parsed book $i: ${book.title} by ${book.author?.name}',
+              'BooksService: Parsed book $i: "${book.title}" by ${book.author?.name ?? "Unknown"} (Category: ${book.category?.name ?? "Unknown"})',
             );
-          } catch (e) {
+          } catch (e, stackTrace) {
             debugPrint('BooksService: Error parsing book $i: $e');
+            debugPrint('BooksService: Stack trace: $stackTrace');
             debugPrint('BooksService: Book data: ${booksJson[i]}');
           }
         }
 
-        debugPrint('BooksService: Successfully parsed ${books.length} books');
+        debugPrint(
+          'BooksService: Successfully parsed ${books.length} out of ${booksJson.length} books',
+        );
+        if (books.length != booksJson.length) {
+          debugPrint(
+            'BooksService: WARNING - Some books failed to parse (${booksJson.length - books.length} failed)',
+          );
+        }
         return books;
       } else {
         final data = json.decode(response.body);
@@ -736,19 +965,56 @@ class BooksService {
 
       if (ApiClient.isSuccess(response)) {
         final data = json.decode(response.body);
+        debugPrint(
+          'BooksService getAuthors: Response data structure: ${data is Map ? data.keys.toList() : data.runtimeType}',
+        );
+
         // Handle both paginated and non-paginated responses
+        List<dynamic> authorsJson = [];
         if (data['data'] != null) {
           // Check if data is a list or contains nested data
           if (data['data'] is List) {
-            return data['data'];
+            authorsJson = data['data'];
+            debugPrint(
+              'BooksService getAuthors: Found ${authorsJson.length} authors in data array',
+            );
           } else if (data['data']['data'] != null) {
             // Paginated response with nested data
-            return data['data']['data'] is List ? data['data']['data'] : [];
+            authorsJson = data['data']['data'] is List
+                ? data['data']['data']
+                : [];
+            debugPrint(
+              'BooksService getAuthors: Found ${authorsJson.length} authors in nested data',
+            );
+          } else if (data['data'] is Map) {
+            // Single author object wrapped in data
+            authorsJson = [data['data']];
+            debugPrint(
+              'BooksService getAuthors: Found single author in data object',
+            );
           }
         } else if (data['results'] != null) {
-          return data['results'];
+          authorsJson = data['results'];
+          debugPrint(
+            'BooksService getAuthors: Found ${authorsJson.length} authors in results',
+          );
+        } else if (data is List) {
+          // Direct list response
+          authorsJson = data;
+          debugPrint(
+            'BooksService getAuthors: Found ${authorsJson.length} authors in direct list',
+          );
+        } else {
+          debugPrint(
+            'BooksService getAuthors: Warning - No authors found in response',
+          );
+          debugPrint('BooksService getAuthors: Response structure: $data');
         }
-        return [];
+
+        debugPrint(
+          'BooksService getAuthors: Returning ${authorsJson.length} authors',
+        );
+        return authorsJson;
       } else {
         final data = json.decode(response.body);
         _setError(data['message'] ?? 'Failed to load authors');
@@ -846,25 +1112,59 @@ class BooksService {
 
       if (ApiClient.isSuccess(response)) {
         final data = json.decode(response.body);
+        debugPrint(
+          'BooksService getCategories: Response data structure: ${data is Map ? data.keys.toList() : data.runtimeType}',
+        );
+
         // Handle both paginated and non-paginated responses
         List<dynamic> categoriesJson = [];
         if (data['data'] != null) {
           // Check if data is a list or contains nested data
           if (data['data'] is List) {
             categoriesJson = data['data'];
+            debugPrint(
+              'BooksService getCategories: Found ${categoriesJson.length} categories in data array',
+            );
           } else if (data['data']['data'] != null) {
             // Paginated response with nested data
             categoriesJson = data['data']['data'] is List
                 ? data['data']['data']
                 : [];
+            debugPrint(
+              'BooksService getCategories: Found ${categoriesJson.length} categories in nested data',
+            );
+          } else if (data['data'] is Map) {
+            // Single category object wrapped in data
+            categoriesJson = [data['data']];
+            debugPrint(
+              'BooksService getCategories: Found single category in data object',
+            );
           }
         } else if (data['results'] != null) {
           categoriesJson = data['results'];
+          debugPrint(
+            'BooksService getCategories: Found ${categoriesJson.length} categories in results',
+          );
+        } else if (data is List) {
+          // Direct list response
+          categoriesJson = data;
+          debugPrint(
+            'BooksService getCategories: Found ${categoriesJson.length} categories in direct list',
+          );
+        } else {
+          debugPrint(
+            'BooksService getCategories: Warning - No categories found in response',
+          );
+          debugPrint('BooksService getCategories: Response structure: $data');
         }
 
-        return categoriesJson
+        final categories = categoriesJson
             .map((json) => book_category.Category.fromJson(json))
             .toList();
+        debugPrint(
+          'BooksService getCategories: Parsed ${categories.length} categories successfully',
+        );
+        return categories;
       } else {
         final data = json.decode(response.body);
         _setError(data['message'] ?? 'Failed to load categories');

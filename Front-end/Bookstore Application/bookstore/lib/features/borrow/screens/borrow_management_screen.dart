@@ -42,10 +42,30 @@ class _BorrowManagementScreenState extends State<BorrowManagementScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Borrow Management'),
-        backgroundColor: AppColors.primary,
-        foregroundColor: AppColors.white,
+        title: const Text(
+          'Borrow Management',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+            letterSpacing: 0.5,
+          ),
+        ),
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Theme.of(context).colorScheme.onPrimary,
         elevation: 0,
+        shadowColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Theme.of(context).colorScheme.primary,
+                Theme.of(context).colorScheme.primary.withValues(alpha: 204),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: AppColors.white,
@@ -339,7 +359,8 @@ class _BorrowManagementScreenState extends State<BorrowManagementScreen>
 
   Widget _buildLoanCard(BorrowRequest loan) {
     final isOverdue = loan.dueDate?.isBefore(DateTime.now()) ?? false;
-    final daysUntilDue = loan.dueDate?.difference(DateTime.now()).inDays ?? 0;
+    final minutesUntilDue =
+        loan.dueDate?.difference(DateTime.now()).inMinutes ?? 0;
 
     return Card(
       margin: const EdgeInsets.only(bottom: AppDimensions.spacingM),
@@ -391,15 +412,15 @@ class _BorrowManagementScreenState extends State<BorrowManagementScreen>
               ),
               if (isOverdue)
                 Text(
-                  'Overdue by ${daysUntilDue.abs()} days',
+                  'Overdue by ${minutesUntilDue.abs()} minutes',
                   style: const TextStyle(
                     color: AppColors.error,
                     fontWeight: FontWeight.bold,
                   ),
                 )
-              else if (daysUntilDue <= 3)
+              else if (minutesUntilDue <= 180) // 3 hours = 180 minutes
                 Text(
-                  'Due in $daysUntilDue days',
+                  'Due in $minutesUntilDue minutes',
                   style: const TextStyle(
                     color: AppColors.warning,
                     fontWeight: FontWeight.bold,

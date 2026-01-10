@@ -48,8 +48,8 @@ class DeliveryProfileViewSet(viewsets.ModelViewSet):
         """
         user = self.request.user
         
-        # If user is admin, they can see all delivery admin profiles
-        if user.is_staff or user.is_superuser:
+        # If user is admin or library admin, they can see all delivery admin profiles
+        if user.is_staff or user.is_superuser or user.is_library_admin():
             return DeliveryProfileService.get_delivery_admin_profiles()
         
         # If user is delivery admin, they can see their own profile
@@ -62,11 +62,12 @@ class DeliveryProfileViewSet(viewsets.ModelViewSet):
     def get_object(self):
         """
         Get the delivery profile object.
+        Allows library admins to access any delivery manager profile for location tracking.
         """
         user = self.request.user
         
-        # If user is admin, they can access any profile
-        if user.is_staff or user.is_superuser:
+        # If user is staff/superuser or library admin, they can access any profile
+        if user.is_staff or user.is_superuser or user.is_library_admin():
             return super().get_object()
         
         # If user is delivery admin, they can only access their own profile
@@ -354,7 +355,7 @@ class DeliveryProfileViewSet(viewsets.ModelViewSet):
                 'data': {
                     'user_id': request.user.id,
                     'delivery_status': delivery_profile.delivery_status,
-                    'can_change_manually': delivery_profile.can_change_status_manually(),
+                    'can_change_manually': True,  # Managers can always change between online/offline
                     'is_tracking_active': delivery_profile.is_tracking_active,
                     'last_updated': delivery_profile.updated_at
                 }

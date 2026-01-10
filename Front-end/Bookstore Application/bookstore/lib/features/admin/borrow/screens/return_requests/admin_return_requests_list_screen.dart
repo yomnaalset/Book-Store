@@ -284,7 +284,19 @@ class _AdminReturnRequestsListScreenState
   Widget _buildReturnRequestCard(ReturnRequest returnRequest) {
     final localizations = AppLocalizations.of(context);
     final borrowRequest = returnRequest.borrowRequest;
-    final status = returnRequest.status;
+
+    // GOLDEN RULE: Use deliveryRequestStatus as the single source of truth
+    // This comes directly from the API's delivery_request_status field
+    // Do NOT use deliveryRequest.status (nested object) - it's outdated
+    final status = returnRequest.deliveryRequestStatus ?? returnRequest.status;
+
+    // Debug: Log status for troubleshooting
+    debugPrint(
+      'AdminReturnRequestsList: ReturnRequest #${returnRequest.id} '
+      'status="$status" deliveryManagerId=${returnRequest.deliveryManagerId} '
+      'deliveryRequestStatus=${returnRequest.deliveryRequestStatus} '
+      'deliveryRequest.status=${returnRequest.deliveryRequest?.status ?? "null"}',
+    );
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12.0),
@@ -302,19 +314,24 @@ class _AdminReturnRequestsListScreenState
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Builder(
-                    builder: (context) {
-                      final localizations = AppLocalizations.of(context);
-                      return Text(
-                        '${localizations.requestPrefix} #${returnRequest.id}',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.blue,
-                        ),
-                      );
-                    },
+                  Expanded(
+                    child: Builder(
+                      builder: (context) {
+                        final localizations = AppLocalizations.of(context);
+                        return Text(
+                          '${localizations.requestPrefix} #${returnRequest.id}',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        );
+                      },
+                    ),
                   ),
+                  const SizedBox(width: 8),
+                  // Show status (uses deliveryRequestStatus as primary if available)
                   StatusChip(status: status),
                 ],
               ),
@@ -390,12 +407,19 @@ class _AdminReturnRequestsListScreenState
     );
   }
 
-  void _navigateToDetail(ReturnRequest returnRequest) {
-    Navigator.pushNamed(
+  void _navigateToDetail(ReturnRequest returnRequest) async {
+    // Navigate to detail screen and wait for return
+    await Navigator.pushNamed(
       context,
       AppRoutes.adminReturnRequestDetail,
       arguments: int.parse(returnRequest.id),
     );
+
+    // Refresh the list when returning from detail screen
+    // This ensures status updates are reflected in the list
+    if (mounted) {
+      _loadReturnRequests();
+    }
   }
 
   String _formatDate(DateTime date) {

@@ -290,8 +290,13 @@ class CustomerOrAdmin(permissions.BasePermission):
         
         # Customers can access their own data
         if request.user.user_type == 'customer':
+            # Check for 'customer' field (used in Order, Cart, Payment, etc.)
+            if hasattr(obj, 'customer'):
+                return obj.customer == request.user
+            # Check for 'user' field (used in some models)
             if hasattr(obj, 'user'):
                 return obj.user == request.user
+            # Check if object is the user itself (for User model)
             if hasattr(obj, 'email'):
                 return obj == request.user
         

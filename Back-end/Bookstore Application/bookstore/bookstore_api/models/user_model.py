@@ -247,29 +247,19 @@ class User(AbstractUser):
         return LocationHistory.get_movement_summary(self, hours)
     
     def has_unpaid_fines(self):
-        """Check if user has any unpaid fines (including pending_payment status)."""
+        """Check if user has any unpaid fines."""
         if not self.is_customer():
             return False
         
         from .borrowing_model import BorrowRequest, FineStatusChoices
-        from .return_model import ReturnRequest, ReturnFine, ReturnFinePaymentStatus
+        from .return_model import ReturnRequest, ReturnFine
         
-        # Check BorrowFine (legacy fines)
-        from ..models.return_model import ReturnFine, ReturnFinePaymentStatus
-        
-        # Check borrow fines (using unified ReturnFine with fine_type='borrow')
-        has_borrow_fine = ReturnFine.objects.filter(
-            fine_type='borrow',
-            borrow_request__customer=self,
-            payment_status__in=[ReturnFinePaymentStatus.PENDING, ReturnFinePaymentStatus.PENDING_PAYMENT],
-            fine_amount__gt=0
-        ).exists()
-        
-        # Check return fines
+        # Check return fines (unpaid fines)
+        # Note: ReturnFine model doesn't have fine_type or payment_status fields
+        # Using is_paid=False to check for unpaid fines
         has_return_fine = ReturnFine.objects.filter(
-            fine_type='return',
             return_request__borrowing__customer=self,
-            payment_status=ReturnFinePaymentStatus.PENDING_PAYMENT,
+            is_paid=False,
             fine_amount__gt=0
         ).exists()
         
@@ -280,7 +270,7 @@ class User(AbstractUser):
             fine_amount__gt=0
         ).exists()
         
-        return has_borrow_fine or has_return_fine or has_legacy_fine
+        return has_return_fine or has_legacy_fine
     
     def get_total_unpaid_fines(self):
         """Get total amount of unpaid fines."""
@@ -303,6 +293,37 @@ class User(AbstractUser):
         
         if self.has_unpaid_fines():
             return False, "You cannot borrow new books until your outstanding fine is paid."
+        
+        # Check for active/pending borrow requests or unreturned books
+        from .borrowing_model import BorrowRequest, BorrowStatusChoices
+        
+        # Check for pending requests (not yet approved or payment pending)
+        pending_requests = BorrowRequest.objects.filter(
+            customer=self,
+            status__in=[
+                BorrowStatusChoices.PAYMENT_PENDING,
+                BorrowStatusChoices.PENDING,
+                BorrowStatusChoices.APPROVED,
+            ]
+        ).exists()
+        
+        if pending_requests:
+            return False, "You already have a pending borrow request. Please wait for it to be processed or cancel it before submitting a new request."
+        
+        # Check for active borrowings (books not yet returned)
+        active_borrowings = BorrowRequest.objects.filter(
+            customer=self,
+            status__in=[
+                BorrowStatusChoices.DELIVERED,
+                BorrowStatusChoices.ACTIVE,
+                BorrowStatusChoices.EXTENDED,
+                BorrowStatusChoices.LATE,
+                BorrowStatusChoices.RETURN_REQUESTED,
+            ]
+        ).exists()
+        
+        if active_borrowings:
+            return False, "You have unreturned books. Please return them before submitting a new borrow request."
         
         return True, "Can submit borrow request"
     

@@ -97,9 +97,9 @@ class _BorrowStatusScreenState extends State<BorrowStatusScreen> {
     // Calculate if the book is overdue (current date > due date)
     final isOverdue = dueDate != null && now.isAfter(dueDate);
 
-    // Calculate days overdue (positive number when overdue)
-    final daysOverdue = dueDate != null && isOverdue
-        ? now.difference(dueDate).inDays
+    // Calculate hours overdue (positive number when overdue)
+    final hoursOverdue = dueDate != null && isOverdue
+        ? now.difference(dueDate).inHours
         : 0;
 
     final status = request.status.toLowerCase();
@@ -112,288 +112,196 @@ class _BorrowStatusScreenState extends State<BorrowStatusScreen> {
     return Card(
       margin: const EdgeInsets.only(bottom: AppDimensions.spacingL),
       elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: BorderSide(color: statusColor.withValues(alpha: 0.2), width: 1.5),
-      ),
-      child: InkWell(
-        onTap: () {
-          Navigator.pushNamed(
-            context,
-            '/borrow-status-detail',
-            arguments: {'borrowRequestId': request.id},
-          );
-        },
-        borderRadius: BorderRadius.circular(20),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [AppColors.white, statusColor.withValues(alpha: 0.03)],
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
             ),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(AppDimensions.paddingL),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Top Header with Request ID and Status
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(AppDimensions.paddingL),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Make the top part clickable to view details
+              InkWell(
+                onTap: () {
+                  Navigator.pushNamed(
+                    context,
+                    '/borrow-status-detail',
+                    arguments: {'borrowRequestId': request.id},
+                  );
+                },
+                borderRadius: BorderRadius.circular(16),
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
+                    // Top Header with Request ID and Status
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: AppDimensions.paddingS,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: AppColors.primaryLight,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  '#${request.id}',
-                                  style: const TextStyle(
-                                    fontSize: AppDimensions.fontSizeXS,
-                                    color: AppColors.primary,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 0.5,
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: AppDimensions.paddingS,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.primaryLight,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      '#${request.id}',
+                                      style: const TextStyle(
+                                        fontSize: AppDimensions.fontSizeXS,
+                                        color: AppColors.primary,
+                                        fontWeight: FontWeight.w600,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
                                   ),
-                                ),
+                                ],
                               ),
-                            ],
-                          ),
-                          const SizedBox(height: AppDimensions.spacingS),
-                          Text(
-                            request.book?.title ??
-                                AppLocalizations.of(context).unknownBook,
-                            style: TextStyle(
-                              fontSize: AppDimensions.fontSizeXL,
-                              fontWeight: FontWeight.bold,
-                              color: context.textColor,
-                              height: 1.2,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: AppDimensions.spacingXS),
-                          if (request.book?.authors?.isNotEmpty ?? false)
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.person_outline,
-                                  size: 16,
-                                  color: context.secondaryTextColor,
+                              const SizedBox(height: AppDimensions.spacingS),
+                              Text(
+                                request.book?.title ??
+                                    AppLocalizations.of(context).unknownBook,
+                                style: TextStyle(
+                                  fontSize: AppDimensions.fontSizeXL,
+                                  fontWeight: FontWeight.bold,
+                                  color: context.textColor,
+                                  height: 1.2,
                                 ),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    request.book!.authors!.first,
-                                    style: TextStyle(
-                                      fontSize: AppDimensions.fontSizeM,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: AppDimensions.spacingXS),
+                              if (request.book?.authors?.isNotEmpty ?? false)
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.person_outline,
+                                      size: 16,
                                       color: context.secondaryTextColor,
                                     ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: AppDimensions.spacingM),
-                    _buildStatusChip(request.status, context),
-                  ],
-                ),
-
-                const SizedBox(height: AppDimensions.spacingL),
-
-                // Book Cover and Key Info Row
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Book Cover with enhanced styling
-                    Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: statusColor.withValues(alpha: 0.2),
-                            blurRadius: 12,
-                            offset: const Offset(0, 4),
-                          ),
-                          BoxShadow(
-                            color: AppColors.black.withValues(alpha: 0.05),
-                            blurRadius: 4,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
-                        child: Image.network(
-                          request.book?.coverImageUrl ?? '',
-                          width: 90,
-                          height: 135,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(
-                              width: 90,
-                              height: 135,
-                              decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: [
-                                    AppColors.primaryLight,
-                                    AppColors.primary,
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        request.book!.authors!.first,
+                                        style: TextStyle(
+                                          fontSize: AppDimensions.fontSizeM,
+                                          color: context.secondaryTextColor,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
                                   ],
                                 ),
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: const Icon(
-                                Icons.book,
-                                color: AppColors.white,
-                                size: 50,
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: AppDimensions.spacingL),
-                    // Key Information
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Builder(
-                            builder: (context) {
-                              final localizations = AppLocalizations.of(
-                                context,
-                              );
-                              return Column(
-                                children: [
-                                  _buildInfoItem(
-                                    Icons.calendar_today_outlined,
-                                    localizations.requestDateLabel,
-                                    requestDate,
-                                  ),
-                                  const SizedBox(
-                                    height: AppDimensions.spacingM,
-                                  ),
-                                  if (dueDate != null)
-                                    _buildInfoItem(
-                                      isOverdue
-                                          ? Icons.warning_amber_rounded
-                                          : Icons.event_outlined,
-                                      localizations.dueDateLabel,
-                                      dueDateFormatted,
-                                      isWarning: isOverdue,
-                                    ),
-                                  const SizedBox(
-                                    height: AppDimensions.spacingM,
-                                  ),
-                                  _buildInfoItem(
-                                    Icons.access_time_outlined,
-                                    localizations.durationLabel,
-                                    '${request.durationDays} ${localizations.days}',
-                                  ),
-                                ],
-                              );
-                            },
-                          ),
-                          // Show overdue indicator when overdue (for both active and delivered status)
-                          if (isOverdue &&
-                              (status == 'active' ||
-                                  status == 'delivered')) ...[
-                            const SizedBox(height: AppDimensions.spacingM),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: AppDimensions.paddingS,
-                                vertical: AppDimensions.paddingXS,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppColors.error.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: AppColors.error.withValues(alpha: 0.3),
-                                  width: 1,
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.schedule,
-                                    color: AppColors.error,
-                                    size: 16,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Builder(
-                                    builder: (context) {
-                                      final localizations = AppLocalizations.of(
-                                        context,
-                                      );
-                                      return Text(
-                                        localizations.overdueByDays(
-                                          daysOverdue,
-                                        ),
-                                        style: const TextStyle(
-                                          color: AppColors.error,
-                                          fontSize: AppDimensions.fontSizeXS,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-
-                // Delivery Manager Section (if assigned)
-                if (deliveryManager != null) ...[
-                  const SizedBox(height: AppDimensions.spacingL),
-                  Container(
-                    padding: const EdgeInsets.all(AppDimensions.paddingM),
-                    decoration: BoxDecoration(
-                      color: AppColors.infoLight.withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: AppColors.info.withValues(alpha: 0.2),
-                        width: 1,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: AppColors.info,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(
-                            Icons.local_shipping,
-                            color: AppColors.white,
-                            size: 20,
+                            ],
                           ),
                         ),
                         const SizedBox(width: AppDimensions.spacingM),
+                        // UNIFIED DELIVERY STATUS: Always use the primary status (delivery_request_status when available)
+                        // The status field now contains the unified status from delivery_request_status
+                        _buildStatusChip(request.status, context),
+                      ],
+                    ),
+
+                    const SizedBox(height: AppDimensions.spacingL),
+
+                    // Book Cover and Key Info Row
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Book Cover with enhanced styling
+                        Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: statusColor.withValues(alpha: 0.2),
+                                blurRadius: 12,
+                                offset: const Offset(0, 4),
+                              ),
+                              BoxShadow(
+                                color: AppColors.black.withValues(alpha: 0.05),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(16),
+                            child:
+                                request.book?.coverImageUrl != null &&
+                                    request.book!.coverImageUrl!.isNotEmpty
+                                ? Image.network(
+                                    request.book!.coverImageUrl!,
+                                    width: 90,
+                                    height: 135,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return Container(
+                                        width: 90,
+                                        height: 135,
+                                        decoration: BoxDecoration(
+                                          gradient: const LinearGradient(
+                                            begin: Alignment.topLeft,
+                                            end: Alignment.bottomRight,
+                                            colors: [
+                                              AppColors.primaryLight,
+                                              AppColors.primary,
+                                            ],
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            16,
+                                          ),
+                                        ),
+                                        child: const Icon(
+                                          Icons.book,
+                                          color: AppColors.white,
+                                          size: 50,
+                                        ),
+                                      );
+                                    },
+                                  )
+                                : Container(
+                                    width: 90,
+                                    height: 135,
+                                    decoration: BoxDecoration(
+                                      gradient: const LinearGradient(
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                        colors: [
+                                          AppColors.primaryLight,
+                                          AppColors.primary,
+                                        ],
+                                      ),
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: const Icon(
+                                      Icons.book,
+                                      color: AppColors.white,
+                                      size: 50,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                        const SizedBox(width: AppDimensions.spacingL),
+                        // Key Information
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -404,142 +312,294 @@ class _BorrowStatusScreenState extends State<BorrowStatusScreen> {
                                     context,
                                   );
                                   return Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
                                     children: [
-                                      Text(
-                                        localizations.deliveryManagerLabel,
-                                        style: TextStyle(
-                                          fontSize: AppDimensions.fontSizeXS,
-                                          color: context.secondaryTextColor,
-                                          fontWeight: FontWeight.w500,
-                                        ),
+                                      _buildInfoItem(
+                                        Icons.calendar_today_outlined,
+                                        localizations.requestDateLabel,
+                                        requestDate,
                                       ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        deliveryManager.fullName.isNotEmpty
-                                            ? deliveryManager.fullName
-                                            : localizations.assigned,
-                                        style: TextStyle(
-                                          fontSize: AppDimensions.fontSizeM,
-                                          color: context.textColor,
-                                          fontWeight: FontWeight.w600,
-                                        ),
+                                      const SizedBox(
+                                        height: AppDimensions.spacingM,
                                       ),
-                                      if (deliveryManager.email.isNotEmpty) ...[
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          deliveryManager.email,
-                                          style: TextStyle(
-                                            fontSize: AppDimensions.fontSizeXS,
-                                            color: context.secondaryTextColor,
-                                          ),
+                                      if (dueDate != null)
+                                        _buildInfoItem(
+                                          isOverdue
+                                              ? Icons.warning_amber_rounded
+                                              : Icons.event_outlined,
+                                          localizations.dueDateLabel,
+                                          dueDateFormatted,
+                                          isWarning: isOverdue,
                                         ),
-                                      ],
+                                      const SizedBox(
+                                        height: AppDimensions.spacingM,
+                                      ),
+                                      _buildInfoItem(
+                                        Icons.access_time_outlined,
+                                        localizations.durationLabel,
+                                        '${request.durationDays} ${localizations.days}',
+                                      ),
                                     ],
                                   );
                                 },
                               ),
+                              // Show overdue indicator when overdue (for both active and delivered status)
+                              if (isOverdue &&
+                                  (status == 'active' ||
+                                      status == 'delivered')) ...[
+                                const SizedBox(height: AppDimensions.spacingM),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: AppDimensions.paddingS,
+                                    vertical: AppDimensions.paddingXS,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.error.withValues(
+                                      alpha: 0.1,
+                                    ),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: AppColors.error.withValues(
+                                        alpha: 0.3,
+                                      ),
+                                      width: 1,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.schedule,
+                                        color: AppColors.error,
+                                        size: 16,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Overdue by $hoursOverdue hour${hoursOverdue != 1 ? 's' : ''}',
+                                        style: const TextStyle(
+                                          color: AppColors.error,
+                                          fontSize: AppDimensions.fontSizeXS,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ),
                       ],
                     ),
-                  ),
-                ],
 
-                // Order Status and Timeline Section
-                const SizedBox(height: AppDimensions.spacingL),
-                Container(
-                  padding: const EdgeInsets.all(AppDimensions.paddingM),
-                  decoration: BoxDecoration(
-                    color: AppColors.greyLight.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.borderLight, width: 1),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Builder(
-                        builder: (context) {
-                          final localizations = AppLocalizations.of(context);
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
+                    // Delivery Manager Section (if assigned)
+                    if (deliveryManager != null) ...[
+                      const SizedBox(height: AppDimensions.spacingL),
+                      Container(
+                        padding: const EdgeInsets.all(AppDimensions.paddingM),
+                        decoration: BoxDecoration(
+                          color: AppColors.infoLight.withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: AppColors.info.withValues(alpha: 0.2),
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: AppColors.info,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(
+                                Icons.local_shipping,
+                                color: AppColors.white,
+                                size: 20,
+                              ),
+                            ),
+                            const SizedBox(width: AppDimensions.spacingM),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Icon(
-                                    Icons.info_outline,
-                                    size: 18,
-                                    color: context.secondaryTextColor,
-                                  ),
-                                  const SizedBox(width: AppDimensions.spacingS),
-                                  Text(
-                                    localizations.orderStatusLabel,
-                                    style: TextStyle(
-                                      fontSize: AppDimensions.fontSizeS,
-                                      fontWeight: FontWeight.w600,
-                                      color: context.textColor,
-                                    ),
+                                  Builder(
+                                    builder: (context) {
+                                      final localizations = AppLocalizations.of(
+                                        context,
+                                      );
+                                      return Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            localizations.deliveryManagerLabel,
+                                            style: TextStyle(
+                                              fontSize:
+                                                  AppDimensions.fontSizeXS,
+                                              color: context.secondaryTextColor,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            deliveryManager.fullName.isNotEmpty
+                                                ? deliveryManager.fullName
+                                                : localizations.assigned,
+                                            style: TextStyle(
+                                              fontSize: AppDimensions.fontSizeM,
+                                              color: context.textColor,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          if (deliveryManager
+                                              .email
+                                              .isNotEmpty) ...[
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              deliveryManager.email,
+                                              style: TextStyle(
+                                                fontSize:
+                                                    AppDimensions.fontSizeXS,
+                                                color:
+                                                    context.secondaryTextColor,
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      );
+                                    },
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: AppDimensions.spacingS),
-                              Text(
-                                localizations.getBorrowStatusLabel(
-                                  request.status,
-                                ),
-                                style: TextStyle(
-                                  fontSize: AppDimensions.fontSizeM,
-                                  fontWeight: FontWeight.bold,
-                                  color: statusColor,
-                                ),
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                      if (request.approvalDate != null ||
-                          request.deliveryDate != null ||
-                          request.finalReturnDate != null) ...[
-                        const SizedBox(height: AppDimensions.spacingM),
-                        const Divider(height: 1),
-                        const SizedBox(height: AppDimensions.spacingM),
-                        Builder(
-                          builder: (context) {
-                            final localizations = AppLocalizations.of(context);
-                            return Wrap(
-                              spacing: AppDimensions.spacingS,
-                              runSpacing: AppDimensions.spacingS,
-                              children: [
-                                if (request.approvalDate != null)
-                                  _buildDetailChip(
-                                    Icons.check_circle_outline,
-                                    localizations.approvedStatus,
-                                    _formatDate(request.approvalDate!),
-                                  ),
-                                if (request.deliveryDate != null)
-                                  _buildDetailChip(
-                                    Icons.local_shipping_outlined,
-                                    localizations.deliveredStatus,
-                                    _formatDate(request.deliveryDate!),
-                                  ),
-                                if (request.finalReturnDate != null)
-                                  _buildDetailChip(
-                                    Icons.assignment_returned_outlined,
-                                    localizations.returnedStatus,
-                                    _formatDate(request.finalReturnDate!),
-                                  ),
-                              ],
-                            );
-                          },
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ],
-                  ),
+
+                    // Order Status and Timeline Section
+                    const SizedBox(height: AppDimensions.spacingL),
+                    Container(
+                      padding: const EdgeInsets.all(AppDimensions.paddingM),
+                      decoration: BoxDecoration(
+                        color: AppColors.greyLight.withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: AppColors.borderLight,
+                          width: 1,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Builder(
+                            builder: (context) {
+                              final localizations = AppLocalizations.of(
+                                context,
+                              );
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.info_outline,
+                                        size: 18,
+                                        color: context.secondaryTextColor,
+                                      ),
+                                      const SizedBox(
+                                        width: AppDimensions.spacingS,
+                                      ),
+                                      Text(
+                                        localizations.orderStatusLabel,
+                                        style: TextStyle(
+                                          fontSize: AppDimensions.fontSizeS,
+                                          fontWeight: FontWeight.w600,
+                                          color: context.textColor,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(
+                                    height: AppDimensions.spacingS,
+                                  ),
+                                  // UNIFIED DELIVERY STATUS: Always show the primary unified status
+                                  // The status field now contains delivery_request_status when available
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.local_shipping,
+                                        size: 18,
+                                        color: statusColor,
+                                      ),
+                                      const SizedBox(
+                                        width: AppDimensions.spacingXS,
+                                      ),
+                                      Expanded(
+                                        child: Text(
+                                          // Use unified status label - this now reflects delivery_request_status
+                                          localizations.getBorrowStatusLabel(
+                                            request.status,
+                                          ),
+                                          style: TextStyle(
+                                            fontSize: AppDimensions.fontSizeM,
+                                            fontWeight: FontWeight.bold,
+                                            color: statusColor,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                          if (request.approvalDate != null ||
+                              request.deliveryDate != null ||
+                              request.finalReturnDate != null) ...[
+                            const SizedBox(height: AppDimensions.spacingM),
+                            const Divider(height: 1),
+                            const SizedBox(height: AppDimensions.spacingM),
+                            Builder(
+                              builder: (context) {
+                                final localizations = AppLocalizations.of(
+                                  context,
+                                );
+                                return Wrap(
+                                  spacing: AppDimensions.spacingS,
+                                  runSpacing: AppDimensions.spacingS,
+                                  children: [
+                                    if (request.approvalDate != null)
+                                      _buildDetailChip(
+                                        Icons.check_circle_outline,
+                                        localizations.approvedStatus,
+                                        _formatDate(request.approvalDate!),
+                                      ),
+                                    if (request.deliveryDate != null)
+                                      _buildDetailChip(
+                                        Icons.local_shipping_outlined,
+                                        localizations.deliveredStatus,
+                                        _formatDate(request.deliveryDate!),
+                                      ),
+                                    if (request.finalReturnDate != null)
+                                      _buildDetailChip(
+                                        Icons.assignment_returned_outlined,
+                                        localizations.returnedStatus,
+                                        _formatDate(request.finalReturnDate!),
+                                      ),
+                                  ],
+                                );
+                              },
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -632,11 +692,33 @@ class _BorrowStatusScreenState extends State<BorrowStatusScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text(AppLocalizations.of(context).borrowStatus),
-        backgroundColor: AppColors.primary,
-        foregroundColor: AppColors.white,
+        title: Text(
+          AppLocalizations.of(context).borrowStatus,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+            letterSpacing: 0.5,
+          ),
+        ),
+        backgroundColor: theme.colorScheme.primary,
+        foregroundColor: theme.colorScheme.onPrimary,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                theme.colorScheme.primary,
+                theme.colorScheme.primary.withValues(alpha: 204),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
       ),
       body: Consumer<BorrowProvider>(
         builder: (context, borrowProvider, child) {

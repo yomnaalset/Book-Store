@@ -73,7 +73,9 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
         final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${localizations.errorLoadingComplaint}: ${e.toString()}'),
+            content: Text(
+              '${localizations.errorLoadingComplaint}: ${e.toString()}',
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -101,14 +103,42 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
     final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text(localizations.complaintDetails),
+        title: Text(
+          localizations.complaintDetails,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+            letterSpacing: 0.5,
+          ),
+        ),
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Theme.of(context).colorScheme.onPrimary,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Theme.of(context).colorScheme.primary,
+                Theme.of(context).colorScheme.primary.withValues(alpha: 204),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadComplaintDetails,
-            tooltip: localizations.refresh,
+          Container(
+            margin: const EdgeInsets.only(right: 8, top: 8, bottom: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              shape: BoxShape.circle,
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _loadComplaintDetails,
+              tooltip: localizations.refresh,
+            ),
           ),
         ],
       ),
@@ -183,7 +213,10 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  _getLocalizedStatus(_complaint!.status, localizations),
+                                  _getLocalizedStatus(
+                                    _complaint!.status,
+                                    localizations,
+                                  ),
                                   style: Theme.of(context).textTheme.titleLarge
                                       ?.copyWith(
                                         fontWeight: FontWeight.bold,
@@ -385,9 +418,13 @@ class _ComplaintDetailScreenState extends State<ComplaintDetailScreen> {
                                           const SizedBox(height: 2),
                                           Builder(
                                             builder: (context) {
-                                              final localizations = AppLocalizations.of(context);
+                                              final localizations =
+                                                  AppLocalizations.of(context);
                                               return Text(
-                                                _formatDate(response.createdAt, localizations),
+                                                _formatDate(
+                                                  response.createdAt,
+                                                  localizations,
+                                                ),
                                                 style: Theme.of(context)
                                                     .textTheme
                                                     .bodySmall

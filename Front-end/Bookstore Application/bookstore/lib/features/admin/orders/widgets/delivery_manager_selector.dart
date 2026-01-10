@@ -105,7 +105,7 @@ class DeliveryManagerSelector extends StatelessWidget {
                   ),
                   if (!isAvailable)
                     const Text(
-                      'Busy',
+                      'Offline',
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.grey,
@@ -129,12 +129,15 @@ class DeliveryManagerSelector extends StatelessWidget {
   }
 
   Color _getStatusColor(String status) {
-    switch (status) {
+    // Handle legacy 'busy' status by treating it as 'online'
+    final normalizedStatus = status.toLowerCase() == 'busy'
+        ? 'online'
+        : status.toLowerCase();
+
+    switch (normalizedStatus) {
       case 'online':
       case 'available':
         return Colors.green;
-      case 'busy':
-        return Colors.orange;
       case 'offline':
         return Colors.red;
       default:

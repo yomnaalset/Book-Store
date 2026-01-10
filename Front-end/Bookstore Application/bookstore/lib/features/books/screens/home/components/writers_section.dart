@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/localization/app_localizations.dart';
+import '../../../../../core/services/api_config.dart';
 import '../../../providers/authors_provider.dart';
 import '../../../../auth/providers/auth_provider.dart';
 import '../../../models/author.dart';
@@ -17,7 +18,10 @@ class _WritersSectionState extends State<WritersSection> {
   @override
   void initState() {
     super.initState();
-    _loadWriters();
+    // Defer loading until after the build phase to avoid setState during build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadWriters();
+    });
   }
 
   Future<void> _loadWriters() async {
@@ -69,7 +73,7 @@ class _WritersSectionState extends State<WritersSection> {
                     builder: (context) {
                       final localizations = AppLocalizations.of(context);
                       return Text(
-                        localizations.browseWriters,
+                        localizations.browseAuthors,
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
@@ -126,7 +130,7 @@ class _WritersSectionState extends State<WritersSection> {
                             return Column(
                               children: [
                                 Text(
-                                  localizations.noWritersAvailable,
+                                  localizations.noAuthorsAvailable,
                                   style: const TextStyle(
                                     color: AppColors.textHint,
                                     fontSize: 14,
@@ -135,7 +139,7 @@ class _WritersSectionState extends State<WritersSection> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  localizations.addWritersInAdminPanel,
+                                  localizations.addAuthorsInAdminPanel,
                                   style: const TextStyle(
                                     color: AppColors.textHint,
                                     fontSize: 12,
@@ -194,27 +198,8 @@ class _WritersSectionState extends State<WritersSection> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Icon Container
-            Container(
-              width: 50,
-              height: 50,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: AppColors.primaryGradient,
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.primary.withValues(alpha: 0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: const Icon(Icons.person, color: AppColors.white, size: 24),
-            ),
+            // Author Photo or Icon
+            _buildAuthorAvatar(writer),
 
             const SizedBox(height: 12),
 
@@ -247,6 +232,108 @@ class _WritersSectionState extends State<WritersSection> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildAuthorAvatar(Author author) {
+    final photoUrl = author.photoUrl ?? author.photo;
+    final fullPhotoUrl = photoUrl != null && photoUrl.isNotEmpty
+        ? ApiConfig.buildImageUrl(photoUrl) ?? photoUrl
+        : null;
+
+    if (fullPhotoUrl != null && fullPhotoUrl.isNotEmpty) {
+      return Container(
+        width: 50,
+        height: 50,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primary.withValues(alpha: 0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: ClipOval(
+          child: Image.network(
+            fullPhotoUrl,
+            width: 50,
+            height: 50,
+            fit: BoxFit.cover,
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) return child;
+              return Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: AppColors.primaryGradient,
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  shape: BoxShape.circle,
+                ),
+                child: const Center(
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(AppColors.white),
+                  ),
+                ),
+              );
+            },
+            errorBuilder: (context, error, stackTrace) {
+              debugPrint('WritersSection: Error loading author photo: $error');
+              return Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: AppColors.primaryGradient,
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primary.withValues(alpha: 0.3),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.person,
+                  color: AppColors.white,
+                  size: 24,
+                ),
+              );
+            },
+          ),
+        ),
+      );
+    }
+
+    // Fallback to icon if no photo
+    return Container(
+      width: 50,
+      height: 50,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: AppColors.primaryGradient,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: const Icon(Icons.person, color: AppColors.white, size: 24),
     );
   }
 }

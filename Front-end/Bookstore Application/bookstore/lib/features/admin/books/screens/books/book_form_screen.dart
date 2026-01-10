@@ -11,6 +11,7 @@ import '../../../models/category.dart';
 import '../../../models/author.dart';
 import '../../../../auth/providers/auth_provider.dart';
 import '../../../../../../core/localization/app_localizations.dart';
+import '../../../../../../core/services/api_config.dart';
 
 class BookFormScreen extends StatefulWidget {
   final Book? book;
@@ -48,7 +49,10 @@ class _BookFormScreenState extends State<BookFormScreen> {
   @override
   void initState() {
     super.initState();
-    _loadData();
+    // Defer data loading until after the build phase to avoid setState during build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadData();
+    });
     if (widget.book != null) {
       _populateForm();
     }
@@ -558,31 +562,8 @@ class _BookFormScreenState extends State<BookFormScreen> {
                             ),
                             const SizedBox(height: 12),
 
-                            // Selected Image Preview
-                            if (_selectedImage != null ||
-                                _selectedImageBytes != null)
-                              Container(
-                                height: 200,
-                                width: double.infinity,
-                                decoration: BoxDecoration(
-                                  border: Border.all(color: Colors.grey),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: kIsWeb && _selectedImageBytes != null
-                                      ? Image.memory(
-                                          _selectedImageBytes!,
-                                          fit: BoxFit.cover,
-                                        )
-                                      : _selectedImage != null
-                                      ? Image.file(
-                                          _selectedImage!,
-                                          fit: BoxFit.cover,
-                                        )
-                                      : const SizedBox.shrink(),
-                                ),
-                              ),
+                            // Image Preview (newly selected or existing)
+                            _buildImagePreview(),
                           ],
                         ),
                       ),
@@ -630,6 +611,7 @@ class _BookFormScreenState extends State<BookFormScreen> {
                                 return DropdownButtonFormField<Category>(
                                   // ignore: deprecated_member_use
                                   value: _selectedCategory,
+                                  isExpanded: true,
                                   decoration: InputDecoration(
                                     labelText: '${localizations.category} *',
                                     border: const OutlineInputBorder(),
@@ -645,10 +627,31 @@ class _BookFormScreenState extends State<BookFormScreen> {
                                         .map((category) {
                                           return DropdownMenuItem(
                                             value: category as Category?,
-                                            child: Text(category.name),
+                                            child: Text(
+                                              category.name,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
                                           );
                                         }),
                                   ],
+                                  selectedItemBuilder: (context) {
+                                    return [
+                                      Text(
+                                        localizations.selectCategory,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      ...provider.categories
+                                          .where(
+                                            (category) => category.isActive,
+                                          )
+                                          .map((category) {
+                                            return Text(
+                                              category.name,
+                                              overflow: TextOverflow.ellipsis,
+                                            );
+                                          }),
+                                    ];
+                                  },
                                   onChanged: (value) {
                                     setState(() {
                                       _selectedCategory = value;
@@ -674,6 +677,7 @@ class _BookFormScreenState extends State<BookFormScreen> {
                                 return DropdownButtonFormField<Author>(
                                   // ignore: deprecated_member_use
                                   value: _selectedAuthor,
+                                  isExpanded: true,
                                   decoration: InputDecoration(
                                     labelText: '${localizations.author} *',
                                     border: const OutlineInputBorder(),
@@ -691,10 +695,29 @@ class _BookFormScreenState extends State<BookFormScreen> {
                                         .map((author) {
                                           return DropdownMenuItem(
                                             value: author as Author?,
-                                            child: Text(author.name),
+                                            child: Text(
+                                              author.name,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
                                           );
                                         }),
                                   ],
+                                  selectedItemBuilder: (context) {
+                                    return [
+                                      Text(
+                                        localizations.selectAuthorLabel,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      ...provider.authors
+                                          .where((author) => author.isActive)
+                                          .map((author) {
+                                            return Text(
+                                              author.name,
+                                              overflow: TextOverflow.ellipsis,
+                                            );
+                                          }),
+                                    ];
+                                  },
                                   onChanged: (value) {
                                     setState(() {
                                       _selectedAuthor = value;
@@ -1105,5 +1128,86 @@ class _BookFormScreenState extends State<BookFormScreen> {
         }
       }
     }
+  }
+
+  Widget _buildImagePreview() {
+    // Show newly selected image if available
+    if (kIsWeb && _selectedImageBytes != null) {
+      return Container(
+        height: 200,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.memory(_selectedImageBytes!, fit: BoxFit.cover),
+        ),
+      );
+    } else if (!kIsWeb && _selectedImage != null) {
+      return Container(
+        height: 200,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.file(_selectedImage!, fit: BoxFit.cover),
+        ),
+      );
+    }
+
+    // Show existing book image if available
+    final existingImageUrl = _imageUrlController.text.trim().isNotEmpty
+        ? _imageUrlController.text.trim()
+        : widget.book?.primaryImageUrl ??
+              widget.book?.coverImageUrl ??
+              (widget.book?.images != null && widget.book!.images!.isNotEmpty
+                  ? widget.book!.images!.first
+                  : null);
+
+    if (existingImageUrl != null && existingImageUrl.isNotEmpty) {
+      final fullImageUrl =
+          ApiConfig.buildImageUrl(existingImageUrl) ?? existingImageUrl;
+      debugPrint(
+        'BookFormScreen: Displaying existing book image: $fullImageUrl',
+      );
+      return Container(
+        height: 200,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.network(
+            fullImageUrl,
+            fit: BoxFit.cover,
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) return child;
+              return const Center(child: CircularProgressIndicator());
+            },
+            errorBuilder: (context, error, stackTrace) {
+              debugPrint(
+                'BookFormScreen: Error loading existing book image: $error',
+              );
+              return Container(
+                color: Colors.grey[300],
+                child: const Center(
+                  child: Icon(Icons.image_not_supported, size: 64),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+    }
+
+    // No image available
+    return const SizedBox.shrink();
   }
 }

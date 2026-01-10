@@ -7,6 +7,7 @@ import '../../widgets/customer_order_details_widget.dart';
 import '../../widgets/admin_order_details_widget.dart';
 import '../../widgets/delivery_manager_order_details_widget.dart';
 import '../../widgets/order_details_shared.dart';
+import '../../../../../core/localization/app_localizations.dart';
 
 class OrderDetailsPage extends StatefulWidget {
   final Order order;
@@ -112,7 +113,16 @@ class _OrderDetailsPageState extends State<OrderDetailsPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Order #${_currentOrder?.id ?? widget.order.id}'),
+        title: Builder(
+          builder: (context) {
+            final localizations = AppLocalizations.of(context);
+            final order = _currentOrder ?? widget.order;
+            final orderNumber = order.orderNumber.isNotEmpty
+                ? order.orderNumber
+                : 'ORD-${order.id.toString().padLeft(4, '0')}';
+            return Text(localizations.orderNumberPrefix(orderNumber));
+          },
+        ),
         backgroundColor: Theme.of(context).primaryColor,
         foregroundColor: Colors.white,
         leading: IconButton(

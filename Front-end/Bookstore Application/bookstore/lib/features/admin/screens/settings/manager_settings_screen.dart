@@ -6,6 +6,9 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/services/auth_service.dart';
 import '../../../../core/translations.dart';
 import '../../../../core/localization/app_localizations.dart';
+import '../../../../core/services/ip_address_service.dart';
+import '../../../../core/services/api_config.dart';
+import '../../../../core/widgets/common/custom_text_field.dart';
 import '../../../auth/providers/auth_provider.dart';
 import '../../../profile/providers/language_preference_provider.dart';
 
@@ -27,6 +30,8 @@ class _ManagerSettingsScreenState extends State<ManagerSettingsScreen> {
   bool _autoRefresh = true;
   int _refreshInterval = 30;
   ThemeService? _themeService;
+  final TextEditingController _ipAddressController = TextEditingController();
+  String? _ipAddressError;
 
   @override
   void initState() {
@@ -35,6 +40,7 @@ class _ManagerSettingsScreenState extends State<ManagerSettingsScreen> {
     // Defer loading settings until after build phase completes
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadSettings();
+      _loadIpAddress();
       _themeService = context.read<ThemeService>();
       _themeService?.addListener(_onThemeChanged);
     });
@@ -42,9 +48,19 @@ class _ManagerSettingsScreenState extends State<ManagerSettingsScreen> {
 
   @override
   void dispose() {
+    _ipAddressController.dispose();
     // Remove theme listener using saved reference
     _themeService?.removeListener(_onThemeChanged);
     super.dispose();
+  }
+
+  Future<void> _loadIpAddress() async {
+    final ip = await IpAddressService.getIpAddress();
+    if (mounted) {
+      setState(() {
+        _ipAddressController.text = ip;
+      });
+    }
   }
 
   void _onThemeChanged() {
@@ -550,6 +566,49 @@ class _ManagerSettingsScreenState extends State<ManagerSettingsScreen> {
                   ),
                   const SizedBox(height: 16),
 
+                  // Server IP Address
+                  Builder(
+                    builder: (context) {
+                      return _buildSectionCard(
+                        title: 'Server IP Address',
+                        icon: Icons.dns,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                CustomTextField(
+                                  label: 'IP Address',
+                                  hint: '192.168.1.5',
+                                  controller: _ipAddressController,
+                                  type: TextFieldType.text,
+                                  keyboardType: TextInputType.number,
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _ipAddressError = null;
+                                    });
+                                  },
+                                  errorText: _ipAddressError,
+                                ),
+                                const SizedBox(height: 16),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: ElevatedButton.icon(
+                                    onPressed: _saveIpAddress,
+                                    icon: const Icon(Icons.save),
+                                    label: const Text('Save'),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 16),
+
                   // Account Actions
                   Builder(
                     builder: (context) {
@@ -732,5 +791,55 @@ class _ManagerSettingsScreenState extends State<ManagerSettingsScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _saveIpAddress() async {
+    final ipAddress = _ipAddressController.text.trim();
+
+    // Validate IP address
+    if (ipAddress.isEmpty) {
+      setState(() {
+        _ipAddressError = 'IP address cannot be empty';
+      });
+      return;
+    }
+
+    if (!IpAddressService.isValidIpAddress(ipAddress)) {
+      setState(() {
+        _ipAddressError = 'Invalid IP address';
+      });
+      return;
+    }
+
+    // Store context-dependent values before async operations
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
+    // Save IP address
+    final success = await IpAddressService.saveIpAddress(ipAddress);
+
+    if (!mounted) return;
+
+    if (success) {
+      // Refresh API config
+      await ApiConfig.refreshBaseUrl();
+
+      if (!mounted) return;
+
+      scaffoldMessenger.showSnackBar(
+        const SnackBar(
+          content: Text('IP Address saved successfully'),
+          backgroundColor: AppColors.success,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    } else {
+      scaffoldMessenger.showSnackBar(
+        const SnackBar(
+          content: Text('Failed to save IP address'),
+          backgroundColor: AppColors.error,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
   }
 }

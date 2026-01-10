@@ -74,8 +74,8 @@ class BorrowRequest(models.Model):
         help_text="Payment method selected by customer"
     )
     borrow_period_days = models.PositiveIntegerField(
-        validators=[MinValueValidator(1), MaxValueValidator(30)],
-        help_text="Number of days to borrow the book (1-30)"
+        validators=[MinValueValidator(0), MaxValueValidator(30)],
+        help_text="Number of days to borrow the book (0-30). Use 0 for 4-minute testing duration."
     )
     
     # Dates and timestamps
@@ -196,13 +196,24 @@ class BorrowRequest(models.Model):
             return delta.days
         return 0
     
-    def calculate_fine(self):
-        """Calculate fine amount for late return."""
+    def get_hours_overdue(self):
+        """Get the number of hours overdue."""
         if self.is_overdue():
-            days_overdue = self.get_days_overdue()
-            # Fine rate: 1.00 per day overdue
-            fine_rate = 1.00
-            return days_overdue * fine_rate
+            delta = timezone.now() - self.expected_return_date
+            total_seconds = delta.total_seconds()
+            return int(total_seconds / 3600)  # Convert to hours
+        return 0
+    
+    def calculate_fine(self):
+        """Calculate fine amount for late return.
+        Fine is imposed after 1 hour at $0.10 per hour.
+        Note: This method is for reference. Actual fine calculation is done in ReturnService."""
+        if self.is_overdue():
+            hours_overdue = self.get_hours_overdue()
+            if hours_overdue > 0:
+                # Fine rate: $0.10 per hour overdue
+                fine_rate = 0.10
+                return hours_overdue * fine_rate
         return 0.00
     
     def set_deposit_amount(self, amount):
@@ -415,17 +426,16 @@ class BorrowStatistics(models.Model):
         ).count()
         
         # Count fines issued today (using unified ReturnFine model)
-        from ..models.return_model import ReturnFine, ReturnFinePaymentStatus
+        # Note: ReturnFine model doesn't have fine_type field, so we count all return fines
+        from ..models.return_model import ReturnFine
         stats.fines_issued = ReturnFine.objects.filter(
-            created_at__date=today,
-            fine_type='borrow'
+            created_at__date=today
         ).count()
         
         # Count fines paid today
         stats.fines_paid = ReturnFine.objects.filter(
             paid_at__date=today,
-            fine_type='borrow',
-            payment_status=ReturnFinePaymentStatus.COMPLETED
+            is_paid=True
         ).count()
         
         stats.save()

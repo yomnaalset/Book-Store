@@ -421,7 +421,7 @@ class CartProvider extends ChangeNotifier {
 
   // Prepare checkout data
   Map<String, dynamic> getCheckoutData() {
-    return {
+    final data = {
       'cart_items': _items
           .map(
             (item) => {
@@ -435,6 +435,16 @@ class CartProvider extends ChangeNotifier {
       'address': '', // This will be set from the checkout form
       'payment_method': 'cash', // Default payment method
     };
+
+    // Include discount information if available
+    if (_discountCode != null && _discountCode!.isNotEmpty) {
+      data['discount_code'] = _discountCode!;
+    }
+    if (_discountAmount > 0) {
+      data['discount_amount'] = _discountAmount;
+    }
+
+    return data;
   }
 
   // Process checkout with custom data

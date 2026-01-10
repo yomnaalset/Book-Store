@@ -64,6 +64,7 @@ class DeliveryService:
     def assign_delivery_manager(delivery_request_id, delivery_manager):
         """
         Assign a delivery manager to a delivery request.
+        Checks if the manager is available before assigning.
         
         Args:
             delivery_request_id: ID of the delivery request
@@ -79,6 +80,21 @@ class DeliveryService:
         
         if not delivery_manager.is_delivery_admin():
             raise ValidationError("User must be a delivery manager.")
+        
+        # Check if delivery manager is available - only 'online' (available) managers can be assigned
+        delivery_profile, created = DeliveryProfile.objects.get_or_create(
+            user=delivery_manager,
+            defaults={'delivery_status': 'offline'}
+        )
+        
+        # Only allow assignment if manager is 'online' (available)
+        # 'busy' and 'offline' managers cannot be assigned
+        if delivery_profile.delivery_status != 'online':
+            status_display = delivery_profile.get_delivery_status_display() if delivery_profile.delivery_status else 'offline'
+            raise ValidationError(
+                f"Cannot assign request: Delivery manager is {status_display.lower()}. "
+                f"Only available (online) managers can be assigned new requests."
+            )
         
         delivery_request.delivery_manager = delivery_manager
         delivery_request.status = 'assigned'
@@ -156,7 +172,11 @@ class DeliveryService:
         delivery_request = DeliveryRequest.objects.get(id=delivery_request_id)
         
         if delivery_request.status != 'assigned':
-            raise ValidationError("Only assigned delivery requests can be accepted.")
+            raise ValidationError(
+                f"Only assigned delivery requests can be accepted. "
+                f"Current status: '{delivery_request.status}'. "
+                f"Please ensure the delivery request is assigned to a delivery manager first."
+            )
         
         if delivery_request.delivery_manager != delivery_manager:
             raise ValidationError("Only the assigned delivery manager can accept this request.")
@@ -183,13 +203,12 @@ class DeliveryService:
             from ..models.return_model import ReturnRequest, ReturnStatus
             
             # Check for active delivery requests
+            # Availability Rule: Manager is unavailable if exists DeliveryRequest with status IN ('accepted', 'in_delivery')
             active_deliveries = DeliveryRequest.objects.filter(
                 delivery_manager=delivery_manager,
-                status__in=['accepted', 'in_delivery', 'picked_up', 'in_transit', 'in_progress']
+                status__in=['accepted', 'in_delivery']
             ).exclude(
                 id=delivery_request_id
-            ).exclude(
-                status__in=['completed', 'delivered', 'cancelled', 'rejected']
             )
             
             if active_deliveries.exists():
@@ -204,14 +223,10 @@ class DeliveryService:
                 )
             
             # Check for active orders (only those with active delivery requests)
+            # Availability Rule: Manager is unavailable if exists DeliveryRequest with status IN ('accepted', 'in_delivery')
             active_orders = Order.objects.filter(
                 delivery_requests__delivery_manager=delivery_manager,
-                delivery_requests__status__in=['accepted', 'in_delivery', 'picked_up', 'in_transit', 'in_progress'],
-                status__in=['in_delivery', 'in_progress', 'delivery_in_progress']
-            ).exclude(
-                status__in=['completed', 'delivered', 'rejected_by_admin', 'rejected_by_delivery_manager', 'cancelled']
-            ).exclude(
-                delivery_requests__status__in=['completed', 'delivered', 'cancelled', 'rejected']
+                delivery_requests__status__in=['accepted', 'in_delivery']
             )
             
             if active_orders.exists():
@@ -274,16 +289,9 @@ class DeliveryService:
         delivery_request.accepted_at = timezone.now()
         delivery_request.save()
         
-        # CRITICAL: Update delivery manager availability to busy when accepting
-        # This indicates they are now committed to this delivery task
-        # This MUST happen in the service layer to ensure consistency
-        try:
-            DeliveryService.update_delivery_manager_availability(delivery_manager, 'busy')
-            logger.info(f"Successfully updated delivery manager {delivery_manager.id} availability to 'busy' after accepting delivery {delivery_request_id}")
-        except Exception as e:
-            logger.error(f"CRITICAL: Failed to update delivery manager {delivery_manager.id} availability to 'busy': {str(e)}")
-            # Re-raise to ensure transaction rollback if availability update fails
-            raise ValidationError(f"Failed to update availability status: {str(e)}")
+        # Note: Delivery manager availability remains unchanged when accepting
+        # Only 'online' (available) managers can accept orders, and they stay 'online'
+        # Availability only changes when manager manually sets to 'offline'
         
         # Send notification to customer
         try:
@@ -346,6 +354,9 @@ class DeliveryService:
         delivery_request.assigned_at = None
         delivery_request.save()
         
+        # Note: Delivery manager availability remains unchanged when rejecting
+        # Availability only changes when manager manually sets to 'offline' or 'online'
+        
         # Send notification to customer
         try:
             NotificationService.create_notification(
@@ -392,18 +403,26 @@ class DeliveryService:
         """
         delivery_request = DeliveryRequest.objects.get(id=delivery_request_id)
         
+        # Log current status for debugging
+        logger.info(f"Attempting to start delivery {delivery_request_id}. Current status: {delivery_request.status}, Delivery manager: {delivery_manager.id}, Assigned manager: {delivery_request.delivery_manager.id if delivery_request.delivery_manager else None}")
+        
         if delivery_request.status != 'accepted':
-            raise ValidationError("Only accepted delivery requests can be started.")
+            error_msg = f"Only accepted delivery requests can be started. Current status: '{delivery_request.status}'. Please accept the delivery request first."
+            logger.warning(f"Start delivery failed for {delivery_request_id}: {error_msg}")
+            raise ValidationError(error_msg)
         
         if delivery_request.delivery_manager != delivery_manager:
-            raise ValidationError("Only the assigned delivery manager can start this delivery.")
+            error_msg = f"Only the assigned delivery manager can start this delivery. Assigned: {delivery_request.delivery_manager.id if delivery_request.delivery_manager else 'None'}, Current: {delivery_manager.id}"
+            logger.warning(f"Start delivery failed for {delivery_request_id}: {error_msg}")
+            raise ValidationError(error_msg)
         
         # Check if delivery manager already has an active delivery (excluding this one)
         from ..services.delivery_profile_services import DeliveryProfileService
         exclude_order_id = delivery_request.order.id if delivery_request.order else None
         has_active = DeliveryProfileService.has_active_deliveries(
             delivery_manager, 
-            exclude_order_id=exclude_order_id
+            exclude_order_id=exclude_order_id,
+            exclude_delivery_request_id=delivery_request.id  # Exclude the current delivery request from the check
         )
         if has_active:
             raise ValidationError(
@@ -417,8 +436,9 @@ class DeliveryService:
             delivery_request.start_notes = notes
         delivery_request.save()
         
-        # Update delivery manager availability to busy
-        DeliveryService.update_delivery_manager_availability(delivery_manager, 'busy')
+        # Note: Delivery manager availability remains unchanged when starting delivery
+        # Only 'online' (available) managers can start deliveries, and they stay 'online'
+        # Availability only changes when manager manually sets to 'offline'
         
         # Send notification to customer
         try:
@@ -494,33 +514,107 @@ class DeliveryService:
         delivery_request.completed_at = timezone.now()
         delivery_request.save()
         
-        # Update associated entity based on delivery type
+        # Update associated entity based on delivery type (same pattern as purchase orders)
         if delivery_request.delivery_type == 'purchase' and delivery_request.order:
             delivery_request.order.status = 'delivered'
             delivery_request.order.save()
+            
+            # Automatically update payment status to 'completed' for cash on delivery orders
+            try:
+                # Refresh order to get latest payment relationship
+                delivery_request.order.refresh_from_db()
+                
+                if delivery_request.order.payment:
+                    from ..models import Payment
+                    # Get fresh payment instance from database
+                    payment = Payment.objects.select_for_update().get(id=delivery_request.order.payment.id)
+                    logger.info(f"Checking payment {payment.id} for order {delivery_request.order.id}: payment_type='{payment.payment_type}', status='{payment.status}'")
+                    
+                    # Check if payment method is cash on delivery and status is pending or processing
+                    if payment.payment_type == 'cash_on_delivery' and payment.status in ['pending', 'processing']:
+                        old_status = payment.status
+                        payment.status = 'completed'
+                        payment.completed_at = timezone.now()
+                        payment.save(update_fields=['status', 'completed_at', 'updated_at'])
+                        
+                        # Verify the update was saved by refreshing from database
+                        payment.refresh_from_db()
+                        logger.info(f"SUCCESS: Updated payment {payment.id} status from '{old_status}' to '{payment.status}' for cash on delivery order {delivery_request.order.id}")
+                        
+                        # Refresh the order's payment relationship to ensure it reflects the updated payment
+                        delivery_request.order.refresh_from_db()
+                        # Force reload of payment relationship by clearing cache
+                        if hasattr(delivery_request.order, '_payment_cache'):
+                            delattr(delivery_request.order, '_payment_cache')
+                    else:
+                        logger.warning(f"Payment {payment.id} not updated: payment_type='{payment.payment_type}' (expected 'cash_on_delivery'), status='{payment.status}' (expected 'pending' or 'processing')")
+                else:
+                    logger.warning(f"Order {delivery_request.order.id} has no payment associated")
+            except Exception as e:
+                logger.error(f"Error updating payment status for order {delivery_request.order.id}: {str(e)}", exc_info=True)
         elif delivery_request.delivery_type == 'borrow' and delivery_request.borrow_request:
-            # For borrow requests, set status to DELIVERED (which transitions to ACTIVE after pickup)
+            # Update borrow request status to DELIVERED (which transitions to ACTIVE after pickup)
             delivery_request.borrow_request.status = BorrowStatusChoices.DELIVERED
+            delivery_request.borrow_request.delivery_date = timezone.now()
+            if not delivery_request.borrow_request.final_return_date:
+                delivery_request.borrow_request.final_return_date = delivery_request.borrow_request.expected_return_date
+            
+            # Automatically update deposit_paid to True when delivery is completed for cash on delivery
+            if delivery_request.borrow_request.payment_method == 'cash' or delivery_request.borrow_request.payment_method == 'cash_on_delivery':
+                if not delivery_request.borrow_request.deposit_paid and delivery_request.borrow_request.deposit_amount > 0:
+                    delivery_request.borrow_request.deposit_paid = True
+                    logger.info(f"Updated deposit_paid to True for borrow request {delivery_request.borrow_request.id} on delivery completion")
+            
             delivery_request.borrow_request.save()
+            
+            # Update associated Order (if exists) to 'delivered' status - same as purchase orders
+            from ..models import Order
+            associated_order = Order.objects.filter(
+                borrow_request=delivery_request.borrow_request,
+                order_type='borrowing'
+            ).first()
+            if associated_order:
+                associated_order.status = 'delivered'
+                associated_order.save()
+                logger.info(f"Updated associated order {associated_order.id} to 'delivered' status for borrow delivery {delivery_request_id}")
+            
+            # Increment borrow count when book is successfully delivered
+            delivery_request.borrow_request.book.borrow_count += 1
+            delivery_request.borrow_request.book.save()
+            
         elif delivery_request.delivery_type == 'return' and delivery_request.return_request:
+            # Update return request status to COMPLETED
             delivery_request.return_request.status = ReturnStatus.COMPLETED
+            delivery_request.return_request.completed_at = timezone.now()
             delivery_request.return_request.save()
+            
+            # Update associated borrowing status
+            borrowing = delivery_request.return_request.borrowing
+            borrowing.status = BorrowStatusChoices.RETURNED
+            return_date = timezone.now()
+            borrowing.actual_return_date = return_date
+            borrowing.final_return_date = return_date  # Set final_return_date for frontend display
+            borrowing.save()
+            
+            # Check if there's an associated order for the return (return_collection orders)
+            from ..models import Order
+            associated_order = Order.objects.filter(
+                borrow_request=borrowing,
+                order_type='borrowing'
+            ).first()
+            if associated_order:
+                # For return deliveries, we might want to mark the order as completed/delivered
+                # This follows the same pattern as purchase orders
+                associated_order.status = 'delivered'
+                associated_order.save()
+                logger.info(f"Updated associated order {associated_order.id} to 'delivered' status for return delivery {delivery_request_id}")
+            
+            # Increment available copies when book is returned
+            borrowing.book.available_copies += 1
+            borrowing.book.save()
         
-        # Update delivery manager availability to online only if no other active deliveries
-        # Check if there are other active deliveries before setting to online
-        from ..services.delivery_profile_services import DeliveryProfileService
-        exclude_order_id = delivery_request.order.id if delivery_request.order else None
-        has_other_active = DeliveryProfileService.has_active_deliveries(
-            delivery_manager,
-            exclude_order_id=exclude_order_id
-        )
-        
-        if not has_other_active:
-            # No other active deliveries, safe to set to online
-            DeliveryService.update_delivery_manager_availability(delivery_manager, 'online')
-        else:
-            # Still has other active deliveries, keep status as busy
-            logger.info(f"Delivery manager {delivery_manager.id} completed delivery {delivery_request_id} but has other active deliveries, keeping status as 'busy'")
+        # Note: Delivery manager availability remains unchanged when completing delivery
+        # Availability only changes when manager manually sets to 'offline' or 'online'
         
         # Send notification to customer
         try:
@@ -551,6 +645,50 @@ class DeliveryService:
         return delivery_request
     
     @staticmethod
+    def set_availability_status(delivery_manager, status):
+        """
+        Manually set delivery manager availability status.
+        This allows managers to toggle between 'available' (online) and 'offline'.
+        
+        Args:
+            delivery_manager: User instance (delivery_admin)
+            status: 'available' or 'offline'
+        
+        Returns:
+            dict with success status and message
+        """
+        if not delivery_manager.is_delivery_admin():
+            raise ValidationError("User must be a delivery manager.")
+        
+        if status not in ['available', 'offline']:
+            raise ValidationError('Invalid status. Must be "available" or "offline".')
+        
+        # Map 'available' to 'online' for internal storage
+        internal_status = 'online' if status == 'available' else 'offline'
+        
+        try:
+            delivery_profile, created = DeliveryProfile.objects.get_or_create(
+                user=delivery_manager,
+                defaults={'delivery_status': internal_status}
+            )
+            
+            if not created:
+                delivery_profile.delivery_status = internal_status
+                delivery_profile.save()
+            
+            logger.info(f"Delivery manager {delivery_manager.id} manually set availability to {status} (internal: {internal_status})")
+            
+            return {
+                'success': True,
+                'message': f'Your availability is now set to {status}.'
+            }
+        except ValidationError:
+            raise
+        except Exception as e:
+            logger.error(f"Error setting availability for delivery manager {delivery_manager.id}: {str(e)}")
+            raise ValidationError(f"Failed to update availability status: {str(e)}")
+    
+    @staticmethod
     def update_delivery_manager_availability(delivery_manager, availability_status):
         """
         Update delivery manager availability status.
@@ -558,7 +696,7 @@ class DeliveryService:
         
         Args:
             delivery_manager: User instance (delivery_admin)
-            availability_status: 'online', 'offline', or 'busy'
+            availability_status: 'online' or 'offline'
         """
         if not delivery_manager.is_delivery_admin():
             raise ValidationError("User must be a delivery manager.")

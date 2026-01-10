@@ -41,18 +41,46 @@ class _AllWritersScreenState extends State<AllWritersScreen> {
         title: Builder(
           builder: (context) {
             final localizations = AppLocalizations.of(context);
-            return Text(localizations.authors);
+            return Text(
+              localizations.authors,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 20,
+                letterSpacing: 0.5,
+              ),
+            );
           },
         ),
-        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
-        foregroundColor: Theme.of(context).appBarTheme.foregroundColor,
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Theme.of(context).colorScheme.onPrimary,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Theme.of(context).colorScheme.primary,
+                Theme.of(context).colorScheme.primary.withValues(alpha: 204),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
         actions: [
-          IconButton(
-            onPressed: () {
-              _loadWriters();
-            },
-            icon: const Icon(Icons.refresh),
-            tooltip: AppLocalizations.of(context).refresh,
+          Container(
+            margin: const EdgeInsets.only(right: 8, top: 8, bottom: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              shape: BoxShape.circle,
+            ),
+            child: IconButton(
+              onPressed: () {
+                _loadWriters();
+              },
+              icon: const Icon(Icons.refresh),
+              tooltip: AppLocalizations.of(context).refresh,
+            ),
           ),
         ],
       ),

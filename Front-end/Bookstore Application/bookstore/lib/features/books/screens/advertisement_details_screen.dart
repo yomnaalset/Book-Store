@@ -27,7 +27,7 @@ class _AdvertisementDetailsScreenState
   @override
   void initState() {
     super.initState();
-    _adsService = AdsService(baseUrl: ApiConfig.getAndroidEmulatorUrl());
+    _adsService = AdsService(baseUrl: ApiConfig.getBaseUrl());
     _loadDetailedAdvertisement();
   }
 
@@ -116,17 +116,27 @@ class _AdvertisementDetailsScreenState
             return Text(
               localizations.advertisementDetails,
               style: const TextStyle(
-                color: Colors.white,
                 fontWeight: FontWeight.bold,
+                fontSize: 20,
+                letterSpacing: 0.5,
               ),
             );
           },
         ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
         elevation: 0,
+        shadowColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                AppColors.uranianBlue,
+                AppColors.uranianBlue.withValues(alpha: 204),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
       ),
       body: _isLoading
           ? const Center(

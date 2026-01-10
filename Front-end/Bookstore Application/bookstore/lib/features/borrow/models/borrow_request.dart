@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'book.dart';
 import 'user.dart';
+import 'delivery_request.dart';
 
 class TimelineEvent {
   final String status;
@@ -43,6 +45,10 @@ class BorrowRequest {
   final DateTime? finalReturnDate;
   final String status;
   final String? statusDisplay;
+  // Admin-specific: separate borrow_status and delivery_status
+  final String?
+  borrowStatus; // Official BorrowRequest status (from backend borrow_status field)
+  final String? borrowStatusDisplay;
   final String? rejectionReason;
   final double? fineAmount;
   final String? fineStatus; // 'paid' or 'unpaid'
@@ -62,6 +68,8 @@ class BorrowRequest {
   final User? approvedBy;
   final int? daysRemaining;
   final int? daysOverdue;
+  final BorrowDeliveryRequest?
+  deliveryRequest; // DeliveryRequest info when status is approved/assigned_to_delivery
 
   BorrowRequest({
     required this.id,
@@ -77,6 +85,8 @@ class BorrowRequest {
     this.finalReturnDate,
     required this.status,
     this.statusDisplay,
+    this.borrowStatus,
+    this.borrowStatusDisplay,
     this.rejectionReason,
     this.fineAmount,
     this.fineStatus,
@@ -96,9 +106,69 @@ class BorrowRequest {
     this.approvedBy,
     this.daysRemaining,
     this.daysOverdue,
+    this.deliveryRequest,
   });
 
+  /// Parse fine amount from JSON - handles both string and numeric values
+  static double? _parseFineAmount(dynamic value) {
+    if (value == null) return null;
+
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) {
+      if (value.isEmpty) return null;
+      return double.tryParse(value);
+    }
+
+    // Fallback: try to convert to string then parse
+    return double.tryParse(value.toString());
+  }
+
   factory BorrowRequest.fromJson(Map<String, dynamic> json) {
+    // Debug: Log status parsing for troubleshooting
+    final borrowStatusFromJson = json['borrow_status'];
+    final statusFromJson = json['status'];
+    final deliveryRequestStatus = json['delivery_request']?['status'];
+    final deliveryRequestStatusField =
+        json['delivery_request_status']; // New unified field
+
+    if (borrowStatusFromJson != null ||
+        statusFromJson != null ||
+        deliveryRequestStatusField != null) {
+      debugPrint('DEBUG: BorrowRequest.fromJson - Parsing status:');
+      debugPrint('  - borrow_status from API: $borrowStatusFromJson');
+      debugPrint('  - status from API: $statusFromJson');
+      debugPrint('  - delivery_request.status: $deliveryRequestStatus');
+      debugPrint(
+        '  - delivery_request_status field: $deliveryRequestStatusField',
+      );
+    }
+
+    // UNIFIED DELIVERY STATUS: Use delivery_request_status if available (primary source)
+    // This becomes the source of truth for customers and delivery managers
+    String finalStatus;
+    String? finalBorrowStatus;
+
+    if (deliveryRequestStatusField != null) {
+      // Use delivery_request_status as primary (unified delivery status approach)
+      finalStatus =
+          deliveryRequestStatusField; // Use the status from the DeliveryRequest
+      finalBorrowStatus =
+          deliveryRequestStatusField; // Do not use the old status - use unified status
+      debugPrint('  - Using delivery_request_status as primary: $finalStatus');
+      debugPrint(
+        '  - Both finalStatus and finalBorrowStatus set to unified status',
+      );
+    } else {
+      // Fallback only if there is no delivery_request
+      finalStatus = borrowStatusFromJson ?? statusFromJson ?? 'pending';
+      finalBorrowStatus = finalStatus; // Use same value for consistency
+      debugPrint('  - Using fallback logic: $finalStatus');
+    }
+
+    debugPrint('  - Final status used: $finalStatus');
+    debugPrint('  - Final borrowStatus used: $finalBorrowStatus');
+
     return BorrowRequest(
       id: json['id'] ?? 0,
       customer: json['customer'] != null
@@ -130,10 +200,15 @@ class BorrowRequest {
       finalReturnDate: json['final_return_date'] != null
           ? DateTime.parse(json['final_return_date'])
           : null,
-      status: json['status'] ?? 'pending',
-      statusDisplay: json['status_display'],
+      status:
+          finalStatus, // Primary status (delivery_request_status or fallback)
+      statusDisplay: json['borrow_status_display'] ?? json['status_display'],
+      borrowStatus:
+          finalBorrowStatus, // Keep separate for admin (original borrow status)
+      borrowStatusDisplay:
+          json['borrow_status_display'] ?? json['status_display'],
       rejectionReason: json['rejection_reason'],
-      fineAmount: json['fine_amount']?.toDouble(),
+      fineAmount: _parseFineAmount(json['fine_amount']),
       fineStatus: json['fine_status'],
       paymentMethod: json['payment_method'],
       isOverdue: json['is_overdue'] ?? false,
@@ -161,6 +236,9 @@ class BorrowRequest {
           : null,
       daysRemaining: json['days_remaining'],
       daysOverdue: json['days_overdue'],
+      deliveryRequest: json['delivery_request'] != null
+          ? BorrowDeliveryRequest.fromJson(json['delivery_request'])
+          : null,
     );
   }
 

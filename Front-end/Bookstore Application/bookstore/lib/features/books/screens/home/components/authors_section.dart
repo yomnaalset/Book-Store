@@ -17,7 +17,10 @@ class _AuthorsSectionState extends State<AuthorsSection> {
   @override
   void initState() {
     super.initState();
-    _loadAuthors();
+    // Defer loading until after the build phase to avoid setState during build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadAuthors();
+    });
   }
 
   Future<void> _loadAuthors() async {

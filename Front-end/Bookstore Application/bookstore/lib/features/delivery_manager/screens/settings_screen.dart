@@ -6,6 +6,9 @@ import '../../../core/services/theme_service.dart' as theme_service;
 import '../../../core/services/auth_service.dart';
 import '../../../core/localization/app_localizations.dart';
 import '../../../core/widgets/common/radio_group.dart' as custom;
+import '../../../core/services/ip_address_service.dart';
+import '../../../core/services/api_config.dart';
+import '../../../core/widgets/common/custom_text_field.dart';
 import 'location_management_screen.dart';
 import '../../../features/delivery_manager/providers/delivery_status_provider.dart';
 import '../../../features/auth/providers/auth_provider.dart';
@@ -21,10 +24,33 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  final TextEditingController _ipAddressController = TextEditingController();
+  String? _ipAddressError;
+
   @override
   void initState() {
     super.initState();
-    _loadSettings();
+    // Defer provider calls to after the first frame to avoid
+    // "setState() or markNeedsBuild() called during build" error
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadSettings();
+      _loadIpAddress();
+    });
+  }
+
+  @override
+  void dispose() {
+    _ipAddressController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadIpAddress() async {
+    final ip = await IpAddressService.getIpAddress();
+    if (mounted) {
+      setState(() {
+        _ipAddressController.text = ip;
+      });
+    }
   }
 
   Future<void> _loadSettings() async {
@@ -57,10 +83,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: Text(AppTranslations.t(context, 'settings')),
+        title: Text(
+          AppTranslations.t(context, 'settings'),
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+            letterSpacing: 0.5,
+          ),
+        ),
         backgroundColor: theme.colorScheme.primary,
         foregroundColor: theme.colorScheme.onPrimary,
         elevation: 0,
+        shadowColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                theme.colorScheme.primary,
+                theme.colorScheme.primary.withValues(alpha: 204),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
       ),
       body: Consumer2<DeliveryStatusProvider, AuthProvider>(
         builder: (context, statusProvider, authProvider, child) {
@@ -81,6 +127,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _buildAppSettingsSection(),
                 const SizedBox(height: 24),
 
+                // Server IP Address
+                _buildServerIpSection(),
+                const SizedBox(height: 24),
+
                 // Account Actions
                 _buildAccountActionsSection(),
               ],
@@ -93,112 +143,131 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildProfileSection(AuthProvider authProvider) {
     final theme = Theme.of(context);
-    return Card(
-      child: InkWell(
-        onTap: () {
-          Navigator.pushNamed(context, AppRoutes.deliveryProfile);
-        },
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    AppTranslations.t(context, 'profile'),
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.onSurface,
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+            spreadRadius: 0,
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            Navigator.pushNamed(context, AppRoutes.deliveryProfile);
+          },
+          borderRadius: BorderRadius.circular(20),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      AppTranslations.t(context, 'profile'),
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.onSurface,
+                      ),
                     ),
-                  ),
-                  Icon(
-                    Icons.arrow_forward_ios,
-                    size: 16,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  CircleAvatar(
-                    radius: 30,
-                    backgroundColor: theme.colorScheme.primary.withValues(
-                      alpha: 0.1,
+                    Icon(
+                      Icons.arrow_forward_ios,
+                      size: 16,
+                      color: theme.colorScheme.onSurfaceVariant,
                     ),
-                    child: Icon(
-                      Icons.person,
-                      size: 30,
-                      color: theme.colorScheme.primary,
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 30,
+                      backgroundColor: theme.colorScheme.primary.withValues(
+                        alpha: 0.1,
+                      ),
+                      child: Icon(
+                        Icons.person,
+                        size: 30,
+                        color: theme.colorScheme.primary,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Builder(
-                          builder: (context) {
-                            final localizations = AppLocalizations.of(context);
-                            return Text(
-                              '${authProvider.user?.firstName ?? ''} ${authProvider.user?.lastName ?? ''}'
-                                      .trim()
-                                      .isEmpty
-                                  ? localizations.deliveryManager
-                                  : '${authProvider.user?.firstName ?? ''} ${authProvider.user?.lastName ?? ''}'
-                                        .trim(),
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: theme.colorScheme.onSurface,
-                              ),
-                            );
-                          },
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          authProvider.user?.email ?? 'delivery@manager.com',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Builder(
-                          builder: (context) {
-                            final localizations = AppLocalizations.of(context);
-                            return Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: theme.colorScheme.primary.withValues(
-                                  alpha: 0.1,
-                                ),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                localizations.deliveryManager,
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Builder(
+                            builder: (context) {
+                              final localizations = AppLocalizations.of(
+                                context,
+                              );
+                              return Text(
+                                '${authProvider.user?.firstName ?? ''} ${authProvider.user?.lastName ?? ''}'
+                                        .trim()
+                                        .isEmpty
+                                    ? localizations.deliveryManager
+                                    : '${authProvider.user?.firstName ?? ''} ${authProvider.user?.lastName ?? ''}'
+                                          .trim(),
                                 style: TextStyle(
-                                  fontSize: 12,
-                                  color: theme.colorScheme.primary,
-                                  fontWeight: FontWeight.w500,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: theme.colorScheme.onSurface,
                                 ),
-                              ),
-                            );
-                          },
-                        ),
-                      ],
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            authProvider.user?.email ?? 'delivery@manager.com',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Builder(
+                            builder: (context) {
+                              final localizations = AppLocalizations.of(
+                                context,
+                              );
+                              return Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.primary.withValues(
+                                    alpha: 0.1,
+                                  ),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  localizations.deliveryManager,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: theme.colorScheme.primary,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -209,10 +278,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final theme = Theme.of(context);
     return Consumer<UserSettingsProvider>(
       builder: (context, userSettings, child) {
-        return Card(
-          color: Theme.of(context).cardColor,
+        return Container(
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.08),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+                spreadRadius: 0,
+              ),
+            ],
+          ),
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -315,10 +395,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildAppSettingsSection() {
     final theme = Theme.of(context);
-    return Card(
-      color: Theme.of(context).cardColor,
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+            spreadRadius: 0,
+          ),
+        ],
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -396,6 +487,124 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Widget _buildServerIpSection() {
+    final theme = Theme.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+            spreadRadius: 0,
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.dns_outlined, color: theme.colorScheme.primary),
+                const SizedBox(width: 12),
+                Text(
+                  'Server IP Address',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            CustomTextField(
+              label: 'IP Address',
+              hint: '192.168.1.5',
+              controller: _ipAddressController,
+              type: TextFieldType.text,
+              keyboardType: TextInputType.number,
+              onChanged: (value) {
+                setState(() {
+                  _ipAddressError = null;
+                });
+              },
+              errorText: _ipAddressError,
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _saveIpAddress,
+                icon: const Icon(Icons.save),
+                label: const Text('Save'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: theme.colorScheme.primary,
+                  foregroundColor: theme.colorScheme.onPrimary,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _saveIpAddress() async {
+    final ipAddress = _ipAddressController.text.trim();
+
+    // Validate IP address
+    if (ipAddress.isEmpty) {
+      setState(() {
+        _ipAddressError = 'IP address cannot be empty';
+      });
+      return;
+    }
+
+    if (!IpAddressService.isValidIpAddress(ipAddress)) {
+      setState(() {
+        _ipAddressError = 'Invalid IP address';
+      });
+      return;
+    }
+
+    // Store context-dependent values before async operations
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
+    // Save IP address
+    final success = await IpAddressService.saveIpAddress(ipAddress);
+
+    if (!mounted) return;
+
+    if (success) {
+      // Refresh API config
+      await ApiConfig.refreshBaseUrl();
+
+      if (!mounted) return;
+
+      scaffoldMessenger.showSnackBar(
+        const SnackBar(
+          content: Text('IP Address saved successfully'),
+          backgroundColor: AppColors.success,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    } else {
+      scaffoldMessenger.showSnackBar(
+        const SnackBar(
+          content: Text('Failed to save IP address'),
+          backgroundColor: AppColors.error,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
   Widget _buildSettingsItem(
     IconData icon,
     String title,
@@ -415,10 +624,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildAccountActionsSection() {
     final theme = Theme.of(context);
-    return Card(
-      color: Theme.of(context).cardColor,
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+            spreadRadius: 0,
+          ),
+        ],
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

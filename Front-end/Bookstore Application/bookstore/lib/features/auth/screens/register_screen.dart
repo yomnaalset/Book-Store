@@ -86,35 +86,77 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: Text(l10n.registerTitle),
+        title: Text(
+          l10n.registerTitle,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+            letterSpacing: 0.5,
+          ),
+        ),
         backgroundColor: theme.colorScheme.primary,
         foregroundColor: theme.colorScheme.onPrimary,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                theme.colorScheme.primary,
+                theme.colorScheme.primary.withValues(alpha: 204),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(AppDimensions.paddingL),
+          padding: const EdgeInsets.all(20),
           child: Form(
             key: _formKey,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: AppDimensions.spacingL),
+                const SizedBox(height: 24),
 
-                // User Type Selection
-                _buildUserTypeSelection(),
+                // Registration Form Card
+                Container(
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surface,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.08),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                        spreadRadius: 0,
+                      ),
+                    ],
+                  ),
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // User Type Selection
+                      _buildUserTypeSelection(),
 
-                const SizedBox(height: AppDimensions.spacingL),
+                      const SizedBox(height: 24),
 
-                // Registration Form
-                _buildRegistrationForm(l10n),
+                      // Registration Form
+                      _buildRegistrationForm(l10n),
 
-                const SizedBox(height: AppDimensions.spacingL),
+                      const SizedBox(height: 24),
 
-                // Register Button
-                _buildRegisterButton(l10n),
+                      // Register Button
+                      _buildRegisterButton(l10n),
+                    ],
+                  ),
+                ),
 
-                const SizedBox(height: AppDimensions.spacingL),
+                const SizedBox(height: 24),
 
                 // Login Link
                 _buildLoginLink(l10n),
@@ -135,52 +177,75 @@ class _RegisterScreenState extends State<RegisterScreen> {
         Builder(
           builder: (context) {
             final localizations = AppLocalizations.of(context);
-            return Text(
-              localizations.userType,
-              style: TextStyle(
-                fontSize: AppDimensions.fontSizeM,
-                fontWeight: FontWeight.w500,
-                color: theme.colorScheme.onSurface,
-              ),
+            return Row(
+              children: [
+                Icon(
+                  Icons.person_outline,
+                  size: 20,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  localizations.userType,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+              ],
             );
           },
         ),
-        const SizedBox(height: AppDimensions.spacingS),
+        const SizedBox(height: 12),
         _isLoadingUserTypes
             ? const LoadingIndicator()
-            : DropdownButtonFormField<String>(
-                initialValue: _selectedUserType,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: AppDimensions.paddingM,
-                    vertical: AppDimensions.paddingM,
+            : Container(
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest.withValues(
+                    alpha: 0.3,
                   ),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                items: _userTypeOptions.map((userType) {
-                  final localizations = AppLocalizations.of(context);
-                  final value = userType['value'] ?? '';
-                  String label;
-                  switch (value) {
-                    case 'customer':
-                      label = localizations.customer;
-                      break;
-                    case 'delivery_admin':
-                      label = localizations.deliveryManager;
-                      break;
-                    default:
-                      label = userType['label'] ?? value;
-                  }
-                  return DropdownMenuItem<String>(
-                    value: value,
-                    child: Text(label),
-                  );
-                }).toList(),
-                onChanged: (value) {
-                  setState(() {
-                    _selectedUserType = value!;
-                  });
-                },
+                child: DropdownButtonFormField<String>(
+                  initialValue: _selectedUserType,
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                    filled: true,
+                    fillColor: Colors.transparent,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 16,
+                    ),
+                  ),
+                  items: _userTypeOptions.map((userType) {
+                    final localizations = AppLocalizations.of(context);
+                    final value = userType['value'] ?? '';
+                    String label;
+                    switch (value) {
+                      case 'customer':
+                        label = localizations.customer;
+                        break;
+                      case 'delivery_admin':
+                        label = localizations.deliveryManager;
+                        break;
+                      default:
+                        label = userType['label'] ?? value;
+                    }
+                    return DropdownMenuItem<String>(
+                      value: value,
+                      child: Text(label),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedUserType = value!;
+                    });
+                  },
+                ),
               ),
       ],
     );
@@ -268,15 +333,29 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Widget _buildRegisterButton(AppLocalizations l10n) {
+    final theme = Theme.of(context);
     return Consumer<AuthProvider>(
       builder: (context, authProvider, child) {
-        return CustomButton(
-          text: l10n.registerButton,
-          onPressed: authProvider.isLoading ? null : _handleRegister,
-          type: ButtonType.primary,
-          size: ButtonSize.large,
-          isFullWidth: true,
-          isLoading: authProvider.isLoading,
+        return Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: theme.colorScheme.primary.withValues(alpha: 77),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+                spreadRadius: 0,
+              ),
+            ],
+          ),
+          child: CustomButton(
+            text: l10n.registerButton,
+            onPressed: authProvider.isLoading ? null : _handleRegister,
+            type: ButtonType.primary,
+            size: ButtonSize.large,
+            isFullWidth: true,
+            isLoading: authProvider.isLoading,
+          ),
         );
       },
     );

@@ -301,7 +301,7 @@ class AppRoutes {
           fineId: args?['fineId'],
           borrowRequestId: args?['borrowRequestId'],
           fineAmount: args?['fineAmount'] ?? 0.0,
-          daysOverdue: args?['daysOverdue'] ?? 0,
+          hoursOverdue: args?['hoursOverdue'] ?? 0,
         ),
         settings: settings,
       );

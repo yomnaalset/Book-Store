@@ -38,10 +38,30 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: Text(AppLocalizations.of(context).notifications),
+        title: Text(
+          AppLocalizations.of(context).notifications,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+            letterSpacing: 0.5,
+          ),
+        ),
         backgroundColor: theme.colorScheme.primary,
         foregroundColor: theme.colorScheme.onPrimary,
         elevation: 0,
+        shadowColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                theme.colorScheme.primary,
+                theme.colorScheme.primary.withValues(alpha: 204),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
         actions: [
           Consumer<DeliveryNotificationsProvider>(
             builder: (context, provider, child) {
@@ -131,10 +151,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           }
 
           final urgentNotifications = provider.urgentNotifications;
-          final recentNotifications = provider.recentNotifications;
+          final allNotifications = provider.notifications;
           final unreadCount = provider.unreadCount;
 
-          if (urgentNotifications.isEmpty && recentNotifications.isEmpty) {
+          // Show all notifications if available, otherwise check urgent/recent
+          if (allNotifications.isEmpty) {
             // Check if there's a mismatch between unread count and empty list
             if (unreadCount > 0) {
               return Center(
@@ -256,41 +277,58 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     }),
                     const SizedBox(height: 24),
                   ],
-                  if (recentNotifications.isNotEmpty) ...[
-                    Builder(
-                      builder: (context) {
-                        final localizations = AppLocalizations.of(context);
-                        return _buildSectionHeader(
-                          localizations.recentNotifications,
-                          AppColors.primary,
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    ...recentNotifications.take(10).map((notification) {
-                      final localizations = AppLocalizations.of(context);
-                      final originalTitle = notification['title'] ?? '';
-                      final originalMessage = notification['message'] ?? '';
-                      return _buildNotificationCard(
-                        notification: notification,
-                        title: NotificationTranslator.translateTitle(
-                          originalTitle,
-                          localizations,
-                        ),
-                        subtitle: NotificationTranslator.translateMessage(
-                          originalMessage,
-                          localizations,
-                        ),
-                        time:
-                            DateTime.tryParse(
-                              notification['created_at'] ?? '',
-                            ) ??
-                            DateTime.now(),
-                        type: NotificationType.info,
-                        isRead: notification['is_read'] ?? false,
-                        onTap: () => _showNotificationDetails(notification),
-                      );
-                    }),
+                  // Show all notifications (not just recent ones)
+                  if (allNotifications.isNotEmpty) ...[
+                    if (urgentNotifications.isNotEmpty)
+                      Builder(
+                        builder: (context) {
+                          final localizations = AppLocalizations.of(context);
+                          return _buildSectionHeader(
+                            localizations.recentNotifications,
+                            AppColors.primary,
+                          );
+                        },
+                      )
+                    else
+                      const SizedBox.shrink(),
+                    if (urgentNotifications.isNotEmpty)
+                      const SizedBox(height: 12),
+                    // Show all notifications, excluding urgent ones that were already shown
+                    ...allNotifications
+                        .where((notification) {
+                          // Exclude urgent notifications that were already shown
+                          return !urgentNotifications.contains(notification);
+                        })
+                        .map((notification) {
+                          final localizations = AppLocalizations.of(context);
+                          final originalTitle = notification['title'] ?? '';
+                          final originalMessage = notification['message'] ?? '';
+                          // Determine notification type based on priority
+                          final priority = notification['priority'] ?? '';
+                          final isUrgent =
+                              priority == 'high' || priority == 'urgent';
+                          return _buildNotificationCard(
+                            notification: notification,
+                            title: NotificationTranslator.translateTitle(
+                              originalTitle,
+                              localizations,
+                            ),
+                            subtitle: NotificationTranslator.translateMessage(
+                              originalMessage,
+                              localizations,
+                            ),
+                            time:
+                                DateTime.tryParse(
+                                  notification['created_at'] ?? '',
+                                ) ??
+                                DateTime.now(),
+                            type: isUrgent
+                                ? NotificationType.urgent
+                                : NotificationType.info,
+                            isRead: notification['is_read'] ?? false,
+                            onTap: () => _showNotificationDetails(notification),
+                          );
+                        }),
                   ],
                 ],
               ),
@@ -353,73 +391,88 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         break;
     }
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: color.withValues(alpha: 0.1),
-          child: Icon(icon, color: color, size: 20),
-        ),
-        title: Text(
-          title,
-          style: TextStyle(
-            fontWeight: isRead ? FontWeight.w500 : FontWeight.w600,
-            fontSize: 14,
-            color: isRead
-                ? theme.colorScheme.onSurfaceVariant
-                : theme.colorScheme.onSurface,
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+            spreadRadius: 0,
           ),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 4),
-            Text(
-              subtitle,
-              style: TextStyle(
-                fontSize: 12,
-                color: isRead
-                    ? theme.colorScheme.onSurfaceVariant
-                    : theme.colorScheme.onSurfaceVariant,
-              ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: ListTile(
+          leading: CircleAvatar(
+            backgroundColor: color.withValues(alpha: 0.1),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          title: Text(
+            title,
+            style: TextStyle(
+              fontWeight: isRead ? FontWeight.w500 : FontWeight.w600,
+              fontSize: 14,
+              color: isRead
+                  ? theme.colorScheme.onSurfaceVariant
+                  : theme.colorScheme.onSurface,
             ),
-            const SizedBox(height: 4),
-            Text(
-              _formatTime(time, context),
-              style: TextStyle(
-                fontSize: 11,
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-        onTap: onTap,
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.delete_outline, size: 20),
-              color: theme.colorScheme.error,
-              onPressed: () => _deleteNotification(notification),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-            ),
-            if (!isRead)
-              Container(
-                width: 8,
-                height: 8,
-                decoration: const BoxDecoration(
-                  color: AppColors.primary,
-                  shape: BoxShape.circle,
+          ),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 4),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isRead
+                      ? theme.colorScheme.onSurfaceVariant
+                      : theme.colorScheme.onSurfaceVariant,
                 ),
               ),
-            const SizedBox(width: 8),
-            Icon(
-              Icons.arrow_forward_ios,
-              size: 16,
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ],
+              const SizedBox(height: 4),
+              Text(
+                _formatTime(time, context),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+          onTap: onTap,
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.delete_outline, size: 20),
+                color: theme.colorScheme.error,
+                onPressed: () => _deleteNotification(notification),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              ),
+              if (!isRead)
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: AppColors.primary,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              const SizedBox(width: 8),
+              Icon(
+                Icons.arrow_forward_ios,
+                size: 16,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -8,14 +8,22 @@ import '../../../shared/widgets/custom_text_field.dart';
 import '../models/borrow_request.dart';
 import '../models/book.dart';
 import '../providers/borrow_provider.dart';
+import '../../auth/providers/auth_provider.dart';
 import 'request_submitted_success_screen.dart';
 
 class PaymentScreen extends StatefulWidget {
-  final BorrowRequest borrowRequest;
+  final BorrowRequest?
+  borrowRequest; // Now optional - null means request not created yet
   final Book book;
   final double borrowingFee;
   final double deliveryFee;
   final double totalFee;
+
+  // New fields for creating the request after payment
+  final String? bookId;
+  final int? borrowPeriodDays;
+  final String? deliveryAddress;
+  final String? notes;
 
   const PaymentScreen({
     super.key,
@@ -24,6 +32,10 @@ class PaymentScreen extends StatefulWidget {
     required this.borrowingFee,
     required this.deliveryFee,
     required this.totalFee,
+    this.bookId,
+    this.borrowPeriodDays,
+    this.deliveryAddress,
+    this.notes,
   });
 
   @override
@@ -70,6 +82,17 @@ class _PaymentScreenState extends State<PaymentScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     final borrowProvider = Provider.of<BorrowProvider>(context, listen: false);
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+    // Ensure provider has the current token
+    if (authProvider.token != null) {
+      borrowProvider.setToken(authProvider.token);
+      debugPrint(
+        'DEBUG: Payment - Updated provider with token: ${authProvider.token!.substring(0, 20)}...',
+      );
+    } else {
+      debugPrint('DEBUG: Payment - No token available from AuthProvider');
+    }
 
     String? cardNumber;
     String? cardholderName;
@@ -85,48 +108,146 @@ class _PaymentScreenState extends State<PaymentScreen> {
       cvv = _cvvController.text.trim();
     }
 
-    final success = await borrowProvider.confirmPayment(
-      requestId: widget.borrowRequest.id,
-      paymentMethod: _selectedPaymentMethod,
-      cardNumber: cardNumber,
-      cardholderName: cardholderName,
-      expiryMonth: expiryMonth,
-      expiryYear: expiryYear,
-      cvv: cvv,
-    );
+    // NEW FLOW: If borrowRequest is null, we need to create it first, then confirm payment
+    if (widget.borrowRequest == null) {
+      // Step 1: Create the borrow request
+      debugPrint('=== CREATING BORROW REQUEST AFTER PAYMENT ===');
+      debugPrint('Book ID: ${widget.bookId}');
+      debugPrint('Borrow Period: ${widget.borrowPeriodDays} days');
+      debugPrint('Delivery Address: ${widget.deliveryAddress}');
+      debugPrint('Notes: ${widget.notes}');
 
-    if (mounted) {
-      if (success) {
-        // Navigate to success screen
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => RequestSubmittedSuccessScreen(
-              borrowRequest: widget.borrowRequest,
-              book: widget.book,
+      final requestCreated = await borrowProvider.requestBorrow(
+        bookId: widget.bookId!,
+        borrowPeriodDays: widget.borrowPeriodDays!,
+        deliveryAddress: widget.deliveryAddress!,
+        notes: widget.notes,
+      );
+
+      if (!requestCreated) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                borrowProvider.errorMessage ??
+                    'Failed to create borrow request',
+              ),
+              backgroundColor: AppColors.error,
             ),
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              borrowProvider.errorMessage ?? 'Failed to confirm payment',
+          );
+        }
+        return;
+      }
+
+      // Get the created request
+      final createdRequest = borrowProvider.borrowRequests.firstWhere(
+        (req) => req.book?.id.toString() == widget.bookId,
+        orElse: () => borrowProvider.borrowRequests.first,
+      );
+
+      debugPrint('Borrow request created with ID: ${createdRequest.id}');
+
+      // Step 2: Confirm payment for the newly created request
+      final paymentSuccess = await borrowProvider.confirmPayment(
+        requestId: createdRequest.id,
+        paymentMethod: _selectedPaymentMethod,
+        cardNumber: cardNumber,
+        cardholderName: cardholderName,
+        expiryMonth: expiryMonth,
+        expiryYear: expiryYear,
+        cvv: cvv,
+      );
+
+      if (mounted) {
+        if (paymentSuccess) {
+          // Navigate to success screen
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => RequestSubmittedSuccessScreen(
+                borrowRequest: createdRequest,
+                book: widget.book,
+              ),
             ),
-            backgroundColor: AppColors.error,
-          ),
-        );
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                borrowProvider.errorMessage ?? 'Failed to confirm payment',
+              ),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+      }
+    } else {
+      // OLD FLOW: Request already exists, just confirm payment
+      final success = await borrowProvider.confirmPayment(
+        requestId: widget.borrowRequest!.id,
+        paymentMethod: _selectedPaymentMethod,
+        cardNumber: cardNumber,
+        cardholderName: cardholderName,
+        expiryMonth: expiryMonth,
+        expiryYear: expiryYear,
+        cvv: cvv,
+      );
+
+      if (mounted) {
+        if (success) {
+          // Navigate to success screen
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => RequestSubmittedSuccessScreen(
+                borrowRequest: widget.borrowRequest!,
+                book: widget.book,
+              ),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                borrowProvider.errorMessage ?? 'Failed to confirm payment',
+              ),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Payment'),
-        backgroundColor: AppColors.primary,
-        foregroundColor: AppColors.white,
+        title: const Text(
+          'Payment',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+            letterSpacing: 0.5,
+          ),
+        ),
+        backgroundColor: theme.colorScheme.primary,
+        foregroundColor: theme.colorScheme.onPrimary,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                theme.colorScheme.primary,
+                theme.colorScheme.primary.withValues(alpha: 204),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
       ),
       body: Consumer<BorrowProvider>(
         builder: (context, borrowProvider, child) {
@@ -140,52 +261,70 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 children: [
                   // Book Info Card
                   Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(AppDimensions.paddingM),
-                      child: Row(
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Image.network(
-                              widget.book.coverImageUrl ?? '',
-                              width: 80,
-                              height: 120,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) {
-                                return Container(
-                                  width: 80,
-                                  height: 120,
-                                  color: AppColors.surface,
-                                  child: const Icon(Icons.book),
-                                );
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: AppDimensions.spacingM),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  widget.book.title,
-                                  style: const TextStyle(
-                                    fontSize: AppDimensions.fontSizeL,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: AppDimensions.spacingS),
-                                if (widget.book.author != null)
-                                  Text(
-                                    'by ${widget.book.author}',
-                                    style: const TextStyle(
-                                      fontSize: AppDimensions.fontSizeM,
-                                      color: AppColors.textSecondary,
-                                    ),
-                                  ),
-                              ],
-                            ),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.05),
+                            blurRadius: 10,
+                            offset: const Offset(0, 2),
                           ),
                         ],
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(AppDimensions.paddingM),
+                        child: Row(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.network(
+                                widget.book.coverImageUrl ?? '',
+                                width: 80,
+                                height: 120,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return Container(
+                                    width: 80,
+                                    height: 120,
+                                    color: AppColors.surface,
+                                    child: const Icon(Icons.book),
+                                  );
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: AppDimensions.spacingM),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    widget.book.title,
+                                    style: const TextStyle(
+                                      fontSize: AppDimensions.fontSizeL,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(
+                                    height: AppDimensions.spacingS,
+                                  ),
+                                  if (widget.book.author != null)
+                                    Text(
+                                      'by ${widget.book.author}',
+                                      style: const TextStyle(
+                                        fontSize: AppDimensions.fontSizeM,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -202,69 +341,85 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   ),
                   const SizedBox(height: AppDimensions.spacingM),
                   Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(AppDimensions.paddingM),
-                      child: Column(
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text(
-                                'Borrowing Fee:',
-                                style: TextStyle(
-                                  fontSize: AppDimensions.fontSizeM,
-                                ),
-                              ),
-                              Text(
-                                '\$${widget.borrowingFee.toStringAsFixed(2)}',
-                                style: const TextStyle(
-                                  fontSize: AppDimensions.fontSizeM,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: AppDimensions.spacingS),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text(
-                                'Delivery Fee:',
-                                style: TextStyle(
-                                  fontSize: AppDimensions.fontSizeM,
-                                ),
-                              ),
-                              Text(
-                                '\$${widget.deliveryFee.toStringAsFixed(2)}',
-                                style: const TextStyle(
-                                  fontSize: AppDimensions.fontSizeM,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const Divider(),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text(
-                                'Total:',
-                                style: TextStyle(
-                                  fontSize: AppDimensions.fontSizeL,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              Text(
-                                '\$${widget.totalFee.toStringAsFixed(2)}',
-                                style: const TextStyle(
-                                  fontSize: AppDimensions.fontSizeL,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.primary,
-                                ),
-                              ),
-                            ],
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.05),
+                            blurRadius: 10,
+                            offset: const Offset(0, 2),
                           ),
                         ],
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(AppDimensions.paddingM),
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                  'Borrowing Fee:',
+                                  style: TextStyle(
+                                    fontSize: AppDimensions.fontSizeM,
+                                  ),
+                                ),
+                                Text(
+                                  '\$${widget.borrowingFee.toStringAsFixed(2)}',
+                                  style: const TextStyle(
+                                    fontSize: AppDimensions.fontSizeM,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: AppDimensions.spacingS),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                  'Delivery Fee:',
+                                  style: TextStyle(
+                                    fontSize: AppDimensions.fontSizeM,
+                                  ),
+                                ),
+                                Text(
+                                  '\$${widget.deliveryFee.toStringAsFixed(2)}',
+                                  style: const TextStyle(
+                                    fontSize: AppDimensions.fontSizeM,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const Divider(),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                  'Total:',
+                                  style: TextStyle(
+                                    fontSize: AppDimensions.fontSizeL,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                Text(
+                                  '\$${widget.totalFee.toStringAsFixed(2)}',
+                                  style: const TextStyle(
+                                    fontSize: AppDimensions.fontSizeL,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),

@@ -153,10 +153,30 @@ class _DeliveryManagerDashboardScreenState
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: Text(AppLocalizations.of(context).deliveryManager),
+        title: Text(
+          AppLocalizations.of(context).deliveryManager,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+            letterSpacing: 0.5,
+          ),
+        ),
         backgroundColor: theme.colorScheme.primary,
         foregroundColor: theme.colorScheme.onPrimary,
         elevation: 0,
+        shadowColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                theme.colorScheme.primary,
+                theme.colorScheme.primary.withValues(alpha: 204),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
         actions: [
           // Notifications with Badge
           Consumer<DeliveryNotificationsProvider>(
@@ -175,29 +195,45 @@ class _DeliveryManagerDashboardScreenState
                   badgeColor: Colors.red,
                   padding: EdgeInsets.all(4),
                 ),
-                child: IconButton(
-                  icon: const Icon(Icons.notifications_outlined),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const NotificationsScreen(),
-                      ),
-                    );
-                  },
+                child: Container(
+                  margin: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: IconButton(
+                    icon: const Icon(Icons.notifications_outlined),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const NotificationsScreen(),
+                        ),
+                      );
+                    },
+                  ),
                 ),
               );
             },
           ),
           // Settings
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const SettingsScreen()),
-              );
-            },
+          Container(
+            margin: const EdgeInsets.only(right: 8, top: 8, bottom: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              shape: BoxShape.circle,
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.settings_outlined),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const SettingsScreen(),
+                  ),
+                );
+              },
+            ),
           ),
         ],
       ),
@@ -233,15 +269,15 @@ class _DeliveryManagerDashboardScreenState
             children: [
               // Welcome Section
               _buildWelcomeSection(),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
 
               // Availability Toggle
               _buildAvailabilitySection(),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
 
               // Quick Actions
               _buildQuickActions(),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
 
               // Urgent Tasks
               _buildUrgentTasks(),
@@ -257,17 +293,26 @@ class _DeliveryManagerDashboardScreenState
       builder: (context, provider, child) {
         final theme = Theme.of(context);
         return Container(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [
                 theme.colorScheme.primary,
                 theme.colorScheme.primary.withValues(alpha: 204),
+                theme.colorScheme.primary.withValues(alpha: 179),
               ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: theme.colorScheme.primary.withValues(alpha: 77),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
+                spreadRadius: 0,
+              ),
+            ],
           ),
           child: Row(
             children: [
@@ -279,17 +324,36 @@ class _DeliveryManagerDashboardScreenState
                       AppLocalizations.of(context).welcome,
                       style: TextStyle(
                         color: theme.colorScheme.onPrimary,
-                        fontSize: 24,
+                        fontSize: 28,
                         fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Manage your deliveries efficiently',
+                      style: TextStyle(
+                        color: theme.colorScheme.onPrimary.withValues(
+                          alpha: 204,
+                        ),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ],
                 ),
               ),
-              Icon(
-                Icons.local_shipping_outlined,
-                color: theme.colorScheme.onPrimary,
-                size: 48,
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.local_shipping_outlined,
+                  color: theme.colorScheme.onPrimary,
+                  size: 40,
+                ),
               ),
             ],
           ),
@@ -302,21 +366,57 @@ class _DeliveryManagerDashboardScreenState
     return Consumer<DeliveryStatusProvider>(
       builder: (context, provider, child) {
         final theme = Theme.of(context);
-        return Card(
+        return Container(
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.08),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+                spreadRadius: 0,
+              ),
+              BoxShadow(
+                color: AppColors.primary.withValues(alpha: 0.05),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+                spreadRadius: 0,
+              ),
+            ],
+          ),
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  AppTranslations.t(context, 'availability'),
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: theme.colorScheme.onSurface,
-                  ),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        Icons.person_outline,
+                        color: AppColors.primary,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      AppTranslations.t(context, 'availability'),
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.onSurface,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 AvailabilityToggle(
                   currentStatus: provider.currentStatus,
                   canChangeManually: provider.canChangeManually,
@@ -341,6 +441,10 @@ class _DeliveryManagerDashboardScreenState
                           ),
                           backgroundColor: Colors.green,
                           duration: const Duration(seconds: 2),
+                          behavior: SnackBarBehavior.floating,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                         ),
                       );
                     } else if (provider.errorMessage != null) {
@@ -349,6 +453,10 @@ class _DeliveryManagerDashboardScreenState
                           content: Text(provider.errorMessage!),
                           backgroundColor: Colors.red,
                           duration: const Duration(seconds: 4),
+                          behavior: SnackBarBehavior.floating,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                         ),
                       );
                     }
@@ -367,13 +475,31 @@ class _DeliveryManagerDashboardScreenState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          AppTranslations.t(context, 'quick_actions'),
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: theme.colorScheme.onSurface,
-          ),
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                Icons.flash_on_outlined,
+                color: AppColors.primary,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              AppTranslations.t(context, 'quick_actions'),
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: theme.colorScheme.onSurface,
+                letterSpacing: 0.3,
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 16),
         Row(
@@ -464,18 +590,36 @@ class _DeliveryManagerDashboardScreenState
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              AppTranslations.t(context, 'urgent_tasks'),
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: theme.colorScheme.error,
-              ),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.error.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    Icons.priority_high,
+                    color: AppColors.error,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  AppTranslations.t(context, 'urgent_tasks'),
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.error,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 16),
             ...urgentTasks.take(3).map((task) {
                   return Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.only(bottom: 12),
                     child: TaskListTile(
                       task: task,
                       isUrgent: true,

@@ -240,13 +240,21 @@ class BooksProvider with ChangeNotifier {
     }
   }
 
-  Future<List<Book>> getMostBorrowedBooks({int limit = 10}) async {
+  Future<List<Book>> getMostBorrowedBooks({
+    int limit = 10,
+    bool forceRefresh = false,
+  }) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
 
     try {
-      debugPrint('BooksProvider: Loading most borrowed books...');
+      debugPrint(
+        'BooksProvider: Loading most borrowed books... (forceRefresh: $forceRefresh)',
+      );
+      if (forceRefresh) {
+        debugPrint('BooksProvider: Force refresh - bypassing any cache');
+      }
       final books = await _booksService.getMostBorrowedBooks(limit: limit);
       debugPrint(
         'BooksProvider: Most borrowed books loaded: ${books.length} books',
@@ -264,13 +272,21 @@ class BooksProvider with ChangeNotifier {
     }
   }
 
-  Future<List<Book>> getMostPopularBooks({int limit = 10}) async {
+  Future<List<Book>> getMostPopularBooks({
+    int limit = 10,
+    bool forceRefresh = false,
+  }) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
 
     try {
-      debugPrint('BooksProvider: Loading most popular books...');
+      debugPrint(
+        'BooksProvider: Loading most popular books... (forceRefresh: $forceRefresh)',
+      );
+      if (forceRefresh) {
+        debugPrint('BooksProvider: Force refresh - bypassing any cache');
+      }
       final books = await _booksService.getMostPopularBooks(limit: limit);
       debugPrint(
         'BooksProvider: Most popular books loaded: ${books.length} books',

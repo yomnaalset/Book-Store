@@ -280,8 +280,19 @@ class _OrdersPageState extends State<OrdersPage> with TickerProviderStateMixin {
     );
   }
 
+  /// Get the effective status for display, checking delivery assignment if available
+  String _getEffectiveStatus(Order order) {
+    // If delivery assignment status is 'in_delivery', show that instead of order status
+    if (order.deliveryAssignment != null &&
+        order.deliveryAssignment!.status.toLowerCase() == 'in_delivery') {
+      return 'in_delivery';
+    }
+    return order.status;
+  }
+
   Widget _buildOrderCard(Order order) {
     final localizations = AppLocalizations.of(context);
+    final effectiveStatus = _getEffectiveStatus(order);
     return Card(
       margin: const EdgeInsets.only(bottom: 12.0),
       elevation: 2,
@@ -299,7 +310,9 @@ class _OrdersPageState extends State<OrdersPage> with TickerProviderStateMixin {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    '#ORD-${order.id.toString().padLeft(4, '0')}',
+                    order.orderNumber.isNotEmpty
+                        ? '#${order.orderNumber}'
+                        : '#ORD-${order.id.toString().padLeft(4, '0')}',
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -333,8 +346,8 @@ class _OrdersPageState extends State<OrdersPage> with TickerProviderStateMixin {
                             ],
                           ),
                         ),
-                        if (order.status.toLowerCase() != 'cancelled' &&
-                            order.status.toLowerCase() != 'delivered')
+                        if (effectiveStatus.toLowerCase() != 'cancelled' &&
+                            effectiveStatus.toLowerCase() != 'delivered')
                           PopupMenuItem(
                             value: 'cancel',
                             child: Row(
@@ -352,8 +365,8 @@ class _OrdersPageState extends State<OrdersPage> with TickerProviderStateMixin {
                               ],
                             ),
                           ),
-                        if (order.status.toLowerCase() == 'in_delivery' ||
-                            order.status.toLowerCase() == 'delivering')
+                        if (effectiveStatus.toLowerCase() == 'in_delivery' ||
+                            effectiveStatus.toLowerCase() == 'delivering')
                           PopupMenuItem(
                             value: 'track',
                             child: Row(
@@ -392,7 +405,7 @@ class _OrdersPageState extends State<OrdersPage> with TickerProviderStateMixin {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  StatusChip(status: order.status),
+                  StatusChip(status: effectiveStatus),
                 ],
               ),
               const SizedBox(height: 12),

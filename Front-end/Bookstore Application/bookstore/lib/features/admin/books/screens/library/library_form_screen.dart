@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'dart:typed_data';
 import '../../../providers/library_manager/library_provider.dart';
 import '../../../../../../features/admin/models/library.dart';
 import '../../../../../../core/localization/app_localizations.dart';
+import '../../../../../../core/services/api_config.dart';
 
 class LibraryFormScreen extends StatefulWidget {
   final Library? library;
@@ -23,14 +26,23 @@ class _LibraryFormScreenState extends State<LibraryFormScreen> {
 
   bool _isLoading = false;
   bool _isActive = true;
-  File? _selectedImage;
+  File? _selectedImage; // For mobile/desktop
+  Uint8List? _selectedImageBytes; // For web
+  bool _logoRemoved = false; // Track if user explicitly removed the logo
   final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
     super.initState();
+    debugPrint(
+      'LibraryFormScreen: initState - library: ${widget.library?.name ?? "null"}',
+    );
     if (widget.library != null) {
       _populateForm();
+    } else {
+      debugPrint(
+        'LibraryFormScreen: No library provided - this is a create form',
+      );
     }
   }
 
@@ -40,6 +52,11 @@ class _LibraryFormScreenState extends State<LibraryFormScreen> {
     _descriptionController.text = library.details;
     _imageUrlController.text = library.logoUrl ?? '';
     _isActive = library.isActive;
+    debugPrint(
+      'LibraryFormScreen: Populated form with library: ${library.name}',
+    );
+    debugPrint('LibraryFormScreen: Logo URL: ${library.logoUrl}');
+    debugPrint('LibraryFormScreen: Has logo: ${library.hasLogo}');
   }
 
   @override
@@ -52,6 +69,7 @@ class _LibraryFormScreenState extends State<LibraryFormScreen> {
 
   Future<void> _pickImage() async {
     try {
+      debugPrint('LibraryFormScreen: Opening image picker...');
       final XFile? image = await _picker.pickImage(
         source: ImageSource.gallery,
         maxWidth: 1024,
@@ -59,17 +77,37 @@ class _LibraryFormScreenState extends State<LibraryFormScreen> {
         imageQuality: 80,
       );
 
+      debugPrint('LibraryFormScreen: Image picker returned: ${image?.path}');
+
       if (image != null) {
         setState(() {
-          _selectedImage = File(image.path);
+          if (kIsWeb) {
+            // For web, read bytes instead of using File
+            image.readAsBytes().then((bytes) {
+              if (mounted) {
+                setState(() {
+                  _selectedImageBytes = bytes;
+                  _logoRemoved = false;
+                });
+              }
+            });
+          } else {
+            _selectedImage = File(image.path);
+            _logoRemoved = false; // Reset removal flag when selecting new image
+          }
         });
+        debugPrint('LibraryFormScreen: Image selected: ${image.path}');
+      } else {
+        debugPrint('LibraryFormScreen: No image selected');
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('LibraryFormScreen: Error picking image: $e');
+      debugPrint('LibraryFormScreen: Stack trace: $stackTrace');
       if (mounted) {
-        final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(localizations.errorPickingImage(e.toString())),
+            content: Text('Error: ${e.toString()}'),
+            duration: const Duration(seconds: 5),
           ),
         );
       }
@@ -87,7 +125,20 @@ class _LibraryFormScreenState extends State<LibraryFormScreen> {
 
       if (image != null) {
         setState(() {
-          _selectedImage = File(image.path);
+          if (kIsWeb) {
+            // For web, read bytes instead of using File
+            image.readAsBytes().then((bytes) {
+              if (mounted) {
+                setState(() {
+                  _selectedImageBytes = bytes;
+                  _logoRemoved = false;
+                });
+              }
+            });
+          } else {
+            _selectedImage = File(image.path);
+            _logoRemoved = false; // Reset removal flag when taking new picture
+          }
         });
       }
     } catch (e) {
@@ -105,6 +156,10 @@ class _LibraryFormScreenState extends State<LibraryFormScreen> {
   void _removeImage() {
     setState(() {
       _selectedImage = null;
+      _selectedImageBytes = null;
+      _logoRemoved = true; // Mark that user wants to remove the logo
+      // Clear the logo URL from the controller when removing
+      _imageUrlController.clear();
     });
   }
 
@@ -132,6 +187,7 @@ class _LibraryFormScreenState extends State<LibraryFormScreen> {
         final success = await provider.createLibrary(
           libraryData,
           logoFile: _selectedImage,
+          logoBytes: _selectedImageBytes,
         );
         if (mounted) {
           final localizations = AppLocalizations.of(context);
@@ -146,9 +202,12 @@ class _LibraryFormScreenState extends State<LibraryFormScreen> {
           }
         }
       } else {
+        // If logo was removed, pass null explicitly; otherwise pass selected image or null to keep existing
         final success = await provider.updateLibrary(
           libraryData,
-          logoFile: _selectedImage,
+          logoFile: _logoRemoved ? null : _selectedImage,
+          logoBytes: _logoRemoved ? null : _selectedImageBytes,
+          removeLogo: _logoRemoved,
         );
         if (mounted) {
           final localizations = AppLocalizations.of(context);
@@ -279,6 +338,15 @@ class _LibraryFormScreenState extends State<LibraryFormScreen> {
   }
 
   Widget _buildImagePickerSection() {
+    final logoUrl = widget.library?.logoUrl;
+    final fullLogoUrl = logoUrl != null && logoUrl.isNotEmpty
+        ? ApiConfig.buildImageUrl(logoUrl) ?? logoUrl
+        : null;
+    final hasImage =
+        _selectedImage != null ||
+        _selectedImageBytes != null ||
+        (fullLogoUrl != null && fullLogoUrl.isNotEmpty);
+
     return Container(
       decoration: BoxDecoration(
         border: Border.all(color: Colors.grey.shade300),
@@ -286,8 +354,8 @@ class _LibraryFormScreenState extends State<LibraryFormScreen> {
       ),
       child: Column(
         children: [
-          if (_selectedImage != null) ...[
-            // Show selected image
+          if (hasImage) ...[
+            // Show selected image or existing logo
             Container(
               height: 200,
               width: double.infinity,
@@ -296,10 +364,57 @@ class _LibraryFormScreenState extends State<LibraryFormScreen> {
                   topLeft: Radius.circular(8),
                   topRight: Radius.circular(8),
                 ),
-                image: DecorationImage(
-                  image: FileImage(_selectedImage!),
-                  fit: BoxFit.cover,
+                color: Colors.grey.shade200,
+              ),
+              child: ClipRRect(
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(8),
+                  topRight: Radius.circular(8),
                 ),
+                child: _selectedImageBytes != null
+                    ? Image.memory(
+                        _selectedImageBytes!,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        height: 200,
+                      )
+                    : _selectedImage != null
+                    ? Image.file(
+                        _selectedImage!,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        height: 200,
+                      )
+                    : fullLogoUrl != null
+                    ? Image.network(
+                        fullLogoUrl,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        height: 200,
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return Center(
+                            child: CircularProgressIndicator(
+                              value: loadingProgress.expectedTotalBytes != null
+                                  ? loadingProgress.cumulativeBytesLoaded /
+                                        loadingProgress.expectedTotalBytes!
+                                  : null,
+                            ),
+                          );
+                        },
+                        errorBuilder: (context, error, stackTrace) {
+                          return const Center(
+                            child: Icon(
+                              Icons.broken_image,
+                              size: 48,
+                              color: Colors.grey,
+                            ),
+                          );
+                        },
+                      )
+                    : const Center(
+                        child: Icon(Icons.image, size: 48, color: Colors.grey),
+                      ),
               ),
             ),
             // Remove image button
@@ -327,7 +442,12 @@ class _LibraryFormScreenState extends State<LibraryFormScreen> {
                     builder: (context) {
                       final localizations = AppLocalizations.of(context);
                       return ElevatedButton.icon(
-                        onPressed: _pickImage,
+                        onPressed: () {
+                          debugPrint(
+                            'LibraryFormScreen: Change button pressed',
+                          );
+                          _pickImage();
+                        },
                         icon: const Icon(Icons.edit, size: 18),
                         label: Text(localizations.change),
                         style: ElevatedButton.styleFrom(

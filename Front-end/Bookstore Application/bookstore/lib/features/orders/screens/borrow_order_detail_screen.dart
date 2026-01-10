@@ -422,13 +422,35 @@ class _BorrowOrderDetailScreenState extends State<BorrowOrderDetailScreen>
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final localizations = AppLocalizations.of(context);
     if (_isLoading) {
       return Scaffold(
         appBar: AppBar(
-          title: Text(localizations.borrowOrderDetails),
-          backgroundColor: AppColors.primary,
-          foregroundColor: AppColors.white,
+          title: Text(
+            localizations.borrowOrderDetails,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 20,
+              letterSpacing: 0.5,
+            ),
+          ),
+          backgroundColor: theme.colorScheme.primary,
+          foregroundColor: theme.colorScheme.onPrimary,
+          elevation: 0,
+          shadowColor: Colors.transparent,
+          flexibleSpace: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  theme.colorScheme.primary,
+                  theme.colorScheme.primary.withValues(alpha: 204),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+          ),
         ),
         body: const Center(child: LoadingIndicator()),
       );
@@ -437,9 +459,30 @@ class _BorrowOrderDetailScreenState extends State<BorrowOrderDetailScreen>
     if (_errorMessage != null) {
       return Scaffold(
         appBar: AppBar(
-          title: Text(localizations.borrowOrderDetails),
-          backgroundColor: AppColors.primary,
-          foregroundColor: AppColors.white,
+          title: Text(
+            localizations.borrowOrderDetails,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 20,
+              letterSpacing: 0.5,
+            ),
+          ),
+          backgroundColor: theme.colorScheme.primary,
+          foregroundColor: theme.colorScheme.onPrimary,
+          elevation: 0,
+          shadowColor: Colors.transparent,
+          flexibleSpace: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  theme.colorScheme.primary,
+                  theme.colorScheme.primary.withValues(alpha: 204),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+          ),
         ),
         body: Center(
           child: Column(
@@ -469,9 +512,30 @@ class _BorrowOrderDetailScreenState extends State<BorrowOrderDetailScreen>
     if (_order == null) {
       return Scaffold(
         appBar: AppBar(
-          title: Text(localizations.borrowOrderDetails),
-          backgroundColor: AppColors.primary,
-          foregroundColor: AppColors.white,
+          title: Text(
+            localizations.borrowOrderDetails,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 20,
+              letterSpacing: 0.5,
+            ),
+          ),
+          backgroundColor: theme.colorScheme.primary,
+          foregroundColor: theme.colorScheme.onPrimary,
+          elevation: 0,
+          shadowColor: Colors.transparent,
+          flexibleSpace: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  theme.colorScheme.primary,
+                  theme.colorScheme.primary.withValues(alpha: 204),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+          ),
         ),
         body: Center(
           child: Text(
@@ -489,25 +553,51 @@ class _BorrowOrderDetailScreenState extends State<BorrowOrderDetailScreen>
             final localizations = AppLocalizations.of(context);
             return Text(
               '${localizations.orderNumberLabel.split(':')[0]} #${_order!.orderNumber}',
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 20,
+                letterSpacing: 0.5,
+              ),
             );
           },
         ),
-        backgroundColor: AppColors.primary,
-        foregroundColor: AppColors.white,
+        backgroundColor: theme.colorScheme.primary,
+        foregroundColor: theme.colorScheme.onPrimary,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                theme.colorScheme.primary,
+                theme.colorScheme.primary.withValues(alpha: 204),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
         actions: [
-          Builder(
-            builder: (context) {
-              final localizations = AppLocalizations.of(context);
-              return IconButton(
-                onPressed: () async {
-                  // Refresh both order details and borrow request
-                  await _loadOrderDetails();
-                  await _loadBorrowRequest();
-                },
-                icon: const Icon(Icons.refresh),
-                tooltip: localizations.refresh,
-              );
-            },
+          Container(
+            margin: const EdgeInsets.only(right: 8, top: 8, bottom: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              shape: BoxShape.circle,
+            ),
+            child: Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return IconButton(
+                  onPressed: () async {
+                    // Refresh both order details and borrow request
+                    await _loadOrderDetails();
+                    await _loadBorrowRequest();
+                  },
+                  icon: const Icon(Icons.refresh),
+                  tooltip: localizations.refresh,
+                );
+              },
+            ),
           ),
         ],
       ),
@@ -1018,9 +1108,6 @@ class _BorrowOrderDetailScreenState extends State<BorrowOrderDetailScreen>
                   // This appears when status is "in_delivery" or "out_for_delivery" (delivery in progress)
                   // Hide buttons if order status is 'delivered' (delivery completed)
                   final localizations = AppLocalizations.of(context);
-                  final statusLabel =
-                      _deliveryManagerStatus?.toUpperCase() ??
-                      localizations.busy.toUpperCase();
                   return Column(
                     children: [
                       SizedBox(
@@ -1075,39 +1162,7 @@ class _BorrowOrderDetailScreenState extends State<BorrowOrderDetailScreen>
                         ),
                       ),
                       const SizedBox(height: AppDimensions.spacingM),
-                      // Show status banner based on actual delivery manager status from current_status endpoint
-                      if (_deliveryManagerStatus == 'busy')
-                        Container(
-                          padding: const EdgeInsets.all(AppDimensions.paddingM),
-                          decoration: BoxDecoration(
-                            color: AppColors.warning.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(
-                              AppDimensions.radiusS,
-                            ),
-                            border: Border.all(color: AppColors.warning),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.info_outline,
-                                size: 16,
-                                color: AppColors.warning,
-                              ),
-                              const SizedBox(width: AppDimensions.spacingS),
-                              Expanded(
-                                child: Text(
-                                  localizations.deliveryInProgressStatus(
-                                    statusLabel,
-                                  ),
-                                  style: const TextStyle(
-                                    fontSize: AppDimensions.fontSizeS,
-                                    color: AppColors.warning,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                      // Note: 'busy' status has been removed - managers stay 'online' or 'offline'
                     ],
                   );
                 } else if (canStartDelivery) {
@@ -1316,7 +1371,7 @@ class _BorrowOrderDetailScreenState extends State<BorrowOrderDetailScreen>
             final localizations = AppLocalizations.of(context);
             final statusLabel =
                 _deliveryManagerStatus?.toUpperCase() ??
-                localizations.busy.toUpperCase();
+                localizations.online.toUpperCase();
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(localizations.requestAcceptedStatus(statusLabel)),

@@ -202,7 +202,16 @@ class DeliveryRequest(models.Model):
             raise ValidationError("ReturnRequest must be set for return pickups.")
     
     def save(self, *args, **kwargs):
-        """Override save to validate entity consistency."""
+        """Override save to validate entity consistency and enforce status rules."""
+        # CRITICAL: Enforce status rule - if delivery_manager is assigned, status cannot be 'pending'
+        # This prevents invalid states from being saved
+        if self.delivery_manager and self.status == 'pending':
+            self.status = 'assigned'
+            # Set assigned_at if not already set
+            if not self.assigned_at:
+                from django.utils import timezone
+                self.assigned_at = timezone.now()
+        
         self.full_clean()
         super().save(*args, **kwargs)
     

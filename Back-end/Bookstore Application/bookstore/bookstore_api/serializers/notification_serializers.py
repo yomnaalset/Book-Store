@@ -6,12 +6,14 @@ class NotificationSerializer(serializers.ModelSerializer):
     order_id = serializers.SerializerMethodField()
     is_read = serializers.SerializerMethodField()
     notification_type = serializers.SerializerMethodField()
+    type = serializers.SerializerMethodField()  # Alias for frontend compatibility
+    priority = serializers.CharField(read_only=True)  # Include priority field
     
     class Meta:
         model = Notification
-        fields = ['id', 'title', 'message', 'notification_type', 'is_read', 
-                  'created_at', 'order_id']
-        read_only_fields = ['id', 'created_at']
+        fields = ['id', 'title', 'message', 'notification_type', 'type', 'priority', 
+                  'is_read', 'created_at', 'order_id']
+        read_only_fields = ['id', 'created_at', 'type', 'priority']
     
     def get_order_id(self, obj):
         # Check if this notification is related to an order
@@ -23,6 +25,10 @@ class NotificationSerializer(serializers.ModelSerializer):
         return obj.status == 'read'
     
     def get_notification_type(self, obj):
+        return obj.notification_type.name if obj.notification_type else None
+    
+    def get_type(self, obj):
+        # Return notification_type name as 'type' for frontend compatibility
         return obj.notification_type.name if obj.notification_type else None
 
 

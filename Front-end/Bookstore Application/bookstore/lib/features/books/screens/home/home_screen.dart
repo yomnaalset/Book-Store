@@ -213,11 +213,11 @@ class _HomeScreenState extends State<HomeScreen> {
         background: Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              begin: AlignmentDirectional.topStart,
-              end: AlignmentDirectional.bottomEnd,
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
               colors: [
                 Theme.of(context).colorScheme.primary,
-                Theme.of(context).colorScheme.primary,
+                Theme.of(context).colorScheme.primary.withValues(alpha: 204),
               ],
             ),
           ),
@@ -307,26 +307,41 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
       actions: [
-        IconButton(
-          icon: Icon(
-            Icons.notifications_outlined,
-            color: Theme.of(context).colorScheme.onPrimary,
+        // Notifications
+        Container(
+          margin: const EdgeInsets.only(right: 8, top: 8, bottom: 8),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.2),
+            shape: BoxShape.circle,
           ),
-          onPressed: () => Navigator.pushNamed(context, '/notifications'),
+          child: IconButton(
+            icon: const Icon(Icons.notifications_outlined),
+            onPressed: () => Navigator.pushNamed(context, '/notifications'),
+          ),
         ),
-        IconButton(
-          icon: Icon(
-            Icons.shopping_cart_outlined,
-            color: Theme.of(context).colorScheme.onPrimary,
+        // Shopping Cart
+        Container(
+          margin: const EdgeInsets.only(right: 8, top: 8, bottom: 8),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.2),
+            shape: BoxShape.circle,
           ),
-          onPressed: () => Navigator.pushNamed(context, '/cart'),
+          child: IconButton(
+            icon: const Icon(Icons.shopping_cart_outlined),
+            onPressed: () => Navigator.pushNamed(context, '/cart'),
+          ),
         ),
-        IconButton(
-          icon: Icon(
-            Icons.settings_outlined,
-            color: Theme.of(context).colorScheme.onPrimary,
+        // Settings
+        Container(
+          margin: const EdgeInsets.only(right: 8, top: 8, bottom: 8),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.2),
+            shape: BoxShape.circle,
           ),
-          onPressed: () => Navigator.pushNamed(context, '/settings'),
+          child: IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: () => Navigator.pushNamed(context, '/settings'),
+          ),
         ),
       ],
     );

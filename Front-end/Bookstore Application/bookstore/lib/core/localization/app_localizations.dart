@@ -332,6 +332,11 @@ class AppLocalizations {
   String get requestBorrow => get('request_borrow');
   String get borrowRequestSubmitted => get('borrow_request_submitted');
   String get borrowNow => get('borrow_now');
+  String get cannotBorrowBook => get('cannot_borrow_book');
+  String get youAlreadyHavePendingBorrowRequest => get('you_already_have_pending_borrow_request');
+  String get youHaveUnreturnedBooks => get('you_have_unreturned_books');
+  String get viewBorrowings => get('view_borrowings');
+  String get failedToCheckBorrowingStatus => get('failed_to_check_borrowing_status');
 
   // Password
   String get changePasswordTitle => get('change_password_title');
@@ -2046,7 +2051,7 @@ class AppLocalizations {
   String get science => get('science');
   String get technology => get('technology');
   String get browseCategories => get('browse_categories');
-  String get browseWriters => get('browse_writers');
+  String get browseAuthors => get('browse_authors');
   String get noDiscountedBooksAvailable => get('no_discounted_books_available');
   String get checkBackLaterForSpecialOffers =>
       get('check_back_later_for_special_offers');
@@ -2074,8 +2079,8 @@ class AppLocalizations {
       get('books_count').replaceAll('{count}', count.toString());
   String get noCategoriesAvailable => get('no_categories_available');
   String get addCategoriesInAdminPanel => get('add_categories_in_admin_panel');
-  String get noWritersAvailable => get('no_writers_available');
-  String get addWritersInAdminPanel => get('add_writers_in_admin_panel');
+  String get noAuthorsAvailable => get('no_authors_available');
+  String get addAuthorsInAdminPanel => get('add_authors_in_admin_panel');
   String get discountCodeExpired => get('discount_code_expired');
   String get discountCodeInactive => get('discount_code_inactive');
   String get discountCodeAlreadyApplied => get('discount_code_already_applied');

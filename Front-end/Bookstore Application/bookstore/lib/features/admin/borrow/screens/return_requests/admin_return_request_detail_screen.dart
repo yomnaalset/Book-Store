@@ -644,6 +644,10 @@ class _AdminReturnRequestDetailScreenState
 
     final returnRequest = _returnRequest!;
     final borrowRequest = returnRequest.borrowRequest;
+
+    // GOLDEN RULE: After assignment, status comes from DeliveryRequest.status (via delivery_request_status)
+    // The model's fromJson already uses delivery_request_status as primary if available
+    // So returnRequest.status should already have the DeliveryRequest status after assignment
     final status = returnRequest.status.toLowerCase();
 
     final localizations = AppLocalizations.of(context);
@@ -736,7 +740,7 @@ class _AdminReturnRequestDetailScreenState
               ),
             _buildInfoRow(
               localizations.requestStatus,
-              _getStatusDisplay(returnRequest.status),
+              _getStatusDisplayForAdmin(returnRequest),
             ),
           ],
         ),
@@ -1300,18 +1304,45 @@ class _AdminReturnRequestDetailScreenState
             const SizedBox(height: 16),
             Row(
               children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.book_outlined,
-                    color: Colors.grey,
-                    size: 24,
-                  ),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child:
+                      borrowRequest.book?.coverImageUrl != null &&
+                          borrowRequest.book!.coverImageUrl!.isNotEmpty
+                      ? Image.network(
+                          borrowRequest.book!.coverImageUrl!,
+                          width: 60,
+                          height: 80,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              width: 60,
+                              height: 80,
+                              decoration: BoxDecoration(
+                                color: Colors.grey[300],
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(
+                                Icons.book_outlined,
+                                color: Colors.grey,
+                                size: 30,
+                              ),
+                            );
+                          },
+                        )
+                      : Container(
+                          width: 60,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[300],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(
+                            Icons.book_outlined,
+                            color: Colors.grey,
+                            size: 30,
+                          ),
+                        ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -1328,7 +1359,7 @@ class _AdminReturnRequestDetailScreenState
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${localizations.duration}: ${borrowRequest.durationDays > 0 ? borrowRequest.durationDays : localizations.notAvailable} ${borrowRequest.durationDays > 0 ? ' ${localizations.days}' : ''}',
+                        '${localizations.duration}: ${borrowRequest.durationDays > 0 ? '${borrowRequest.durationDays} ${localizations.days}' : localizations.notAvailable}',
                         style: const TextStyle(
                           fontSize: 14,
                           color: Color(0xFF6C757D),
@@ -1440,21 +1471,26 @@ class _AdminReturnRequestDetailScreenState
   }
 
   /// Check if return is currently active (in progress)
-  /// Button should appear ONLY when status is "IN_PROGRESS" and delivery manager is assigned
+  /// Button should appear ONLY when delivery_request_status is "in_delivery"
+  /// According to unified delivery status: use deliveryRequestStatus as source of truth
   bool _isReturnActive(ReturnRequest returnRequest) {
-    if (returnRequest.deliveryManagerId == null) {
+    // CRITICAL: Use deliveryRequestStatus (from API) as single source of truth
+    // Do NOT use deliveryRequest.status (nested object) - it's outdated
+    final deliveryStatus =
+        (returnRequest.deliveryRequestStatus ?? returnRequest.status)
+            .toLowerCase();
+
+    // Button only shows when delivery is actively in progress (in_delivery)
+    // Hide when completed or any other status
+    if (deliveryStatus != 'in_delivery') {
       return false;
     }
 
-    // Normalize the status: lowercase, trim, replace spaces and hyphens with underscores
-    final normalizedStatus = returnRequest.status
-        .toLowerCase()
-        .trim()
-        .replaceAll(' ', '_')
-        .replaceAll('-', '_');
-
-    // Button should be visible when status is IN_PROGRESS (return is in progress)
-    return normalizedStatus == 'in_progress';
+    // Also check if location data is available (still use deliveryRequest for location)
+    if (returnRequest.deliveryRequest != null) {
+      return returnRequest.deliveryRequest!.canTrackLocation;
+    }
+    return false;
   }
 
   Future<void> _openDeliveryManagerLocation(ReturnRequest returnRequest) async {
@@ -1473,17 +1509,17 @@ class _AdminReturnRequestDetailScreenState
       return;
     }
 
-    // Verify that status is still IN_PROGRESS
-    final status = returnRequest.status.toLowerCase().trim().replaceAll(
-      ' ',
-      '_',
-    );
-    if (status != 'in_progress') {
+    // CRITICAL: Use deliveryRequestStatus (from API) as single source of truth
+    // Do NOT use deliveryRequest.status (nested object) - it's outdated
+    final deliveryStatus =
+        (returnRequest.deliveryRequestStatus ?? returnRequest.status)
+            .toLowerCase();
+    if (deliveryStatus != 'in_delivery') {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'Location tracking is only available during active return.',
+              'Location tracking is only available during active delivery.',
             ),
             backgroundColor: Colors.orange,
           ),
@@ -1541,11 +1577,11 @@ class _AdminReturnRequestDetailScreenState
       }
 
       // Fallback: Try to get location from delivery manager's profile
-      // Pattern: /api/delivery/location/<delivery_manager_id>/
+      // Pattern: /api/delivery-profiles/<delivery_manager_id>/
       try {
         final response = await http.get(
           Uri.parse(
-            '${ApiService.baseUrl}/delivery/location/${returnRequest.deliveryManagerId}/',
+            '${ApiService.baseUrl}/delivery-profiles/${returnRequest.deliveryManagerId}/',
           ),
           headers: {
             'Content-Type': 'application/json',
@@ -1658,8 +1694,76 @@ class _AdminReturnRequestDetailScreenState
 
   Widget _buildActionsCard(ReturnRequest returnRequest, String status) {
     final localizations = AppLocalizations.of(context);
-    // Case 1: Status = PENDING - Show "Accept Request" button
-    if (status == 'pending' || status.toUpperCase() == 'PENDING') {
+    final normalizedStatus = status.toLowerCase();
+
+    // ========================================
+    // DEBUG: Log all relevant values to diagnose the issue
+    // ========================================
+    debugPrint('=== AdminReturnRequestDetail: _buildActionsCard DEBUG ===');
+    debugPrint('  returnRequest.id: ${returnRequest.id}');
+    debugPrint('  returnRequest.status: ${returnRequest.status}');
+    debugPrint('  status parameter: $status');
+    debugPrint('  normalizedStatus: $normalizedStatus');
+    debugPrint('  deliveryManagerId: ${returnRequest.deliveryManagerId}');
+    debugPrint('  deliveryManagerName: ${returnRequest.deliveryManagerName}');
+    debugPrint(
+      '  deliveryRequestStatus: ${returnRequest.deliveryRequestStatus}',
+    );
+    debugPrint('  deliveryRequest: ${returnRequest.deliveryRequest}');
+    if (returnRequest.deliveryRequest != null) {
+      debugPrint(
+        '  deliveryRequest.status (LEGACY - DO NOT USE): ${returnRequest.deliveryRequest!.status}',
+      );
+    }
+    debugPrint('=== END DEBUG ===');
+
+    // ========================================
+    // GOLDEN RULE: Admin's role ends when DeliveryRequest is created with a delivery manager
+    // The single source of truth after assignment is DeliveryRequest.status
+    // ========================================
+
+    // Check 1: If a delivery manager has been assigned, admin actions are done
+    // This is the most robust check - regardless of status string
+    if (returnRequest.deliveryManagerId != null &&
+        returnRequest.deliveryManagerId!.isNotEmpty) {
+      debugPrint(
+        'AdminReturnRequestDetail: Delivery manager assigned (${returnRequest.deliveryManagerId}), hiding actions',
+      );
+      return const SizedBox.shrink();
+    }
+
+    // Check 2: If DeliveryRequest exists with any processing status, hide actions
+    if (returnRequest.deliveryRequest != null) {
+      final deliveryStatus = returnRequest.deliveryRequest!.status
+          .toLowerCase();
+      if (deliveryStatus == 'assigned' ||
+          deliveryStatus == 'accepted' ||
+          deliveryStatus == 'in_progress' ||
+          deliveryStatus == 'in_delivery' ||
+          deliveryStatus == 'completed' ||
+          deliveryStatus == 'delivered') {
+        debugPrint(
+          'AdminReturnRequestDetail: DeliveryRequest status is $deliveryStatus, hiding actions',
+        );
+        return const SizedBox.shrink();
+      }
+    }
+
+    // Check 3: Status-based check (fallback for when delivery_request_status is used)
+    if (normalizedStatus == 'assigned' ||
+        normalizedStatus == 'accepted' ||
+        normalizedStatus == 'in_progress' ||
+        normalizedStatus == 'completed' ||
+        normalizedStatus == 'in_delivery' ||
+        normalizedStatus == 'delivered') {
+      debugPrint(
+        'AdminReturnRequestDetail: Status is $normalizedStatus, hiding actions',
+      );
+      return const SizedBox.shrink();
+    }
+
+    // Case 1: Status = PENDING (no delivery manager yet) - Show "Accept Request" button
+    if (normalizedStatus == 'pending') {
       return Card(
         elevation: 2,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1707,7 +1811,7 @@ class _AdminReturnRequestDetailScreenState
     }
 
     // Case 2: Status = APPROVED - Show "Assign Delivery Manager" button
-    if (status == 'approved' || status.toUpperCase() == 'APPROVED') {
+    if (normalizedStatus == 'approved') {
       return Card(
         elevation: 2,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1794,8 +1898,43 @@ class _AdminReturnRequestDetailScreenState
     return '${date.day}/${date.month}/${date.year}';
   }
 
-  String _getStatusDisplay(String status) {
+  /// Get status display for admin - uses DeliveryRequest.status if available
+  /// This is the correct way: Admin should see DeliveryRequest status, not ReturnRequest.status
+  String _getStatusDisplayForAdmin(ReturnRequest returnRequest) {
     final localizations = AppLocalizations.of(context);
-    return localizations.getReturnRequestStatusLabel(status);
+
+    // CRITICAL: Use deliveryRequestStatus (from API) as single source of truth
+    // Do NOT use deliveryRequest.status (nested object) or returnRequest.status - they're outdated
+    final deliveryRequestStatus = returnRequest.deliveryRequestStatus;
+
+    // If deliveryRequestStatus exists, use it (this is the correct source after assignment)
+    if (deliveryRequestStatus != null && deliveryRequestStatus.isNotEmpty) {
+      // Use deliveryRequestStatus directly from API
+      final deliveryStatus = deliveryRequestStatus.toLowerCase();
+
+      // Map DeliveryRequest statuses to user-friendly messages
+      switch (deliveryStatus) {
+        case 'assigned':
+          return 'Delivery Manager Assigned'; // or localizations.deliveryManagerAssigned if available
+        case 'accepted':
+          return 'Awaiting Delivery'; // Delivery manager accepted, waiting for pickup
+        case 'in_delivery':
+        case 'in_progress':
+          return 'In Delivery'; // Currently being delivered/returned
+        case 'completed':
+          return 'Completed'; // Delivery/return completed
+        case 'pending':
+          // This shouldn't happen after assignment, but handle it
+          return 'Awaiting Delivery Manager Acceptance';
+        default:
+          // Fallback to localized status
+          return localizations.getReturnRequestStatusLabel(
+            deliveryRequestStatus,
+          );
+      }
+    }
+
+    // No deliveryRequestStatus - fallback to ReturnRequest status
+    return localizations.getReturnRequestStatusLabel(returnRequest.status);
   }
 }

@@ -8,6 +8,7 @@ import '../../../core/widgets/common/loading_indicator.dart';
 import '../models/book.dart';
 import '../providers/books_provider.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../borrow/providers/borrow_provider.dart';
 
 class AllBorrowedBooksScreen extends StatefulWidget {
   const AllBorrowedBooksScreen({super.key});
@@ -27,7 +28,10 @@ class _AllBorrowedBooksScreenState extends State<AllBorrowedBooksScreen> {
   @override
   void initState() {
     super.initState();
-    _loadAllBorrowedBooks();
+    // Defer loading until after the build phase completes
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadAllBorrowedBooks();
+    });
   }
 
   @override
@@ -91,16 +95,44 @@ class _AllBorrowedBooksScreenState extends State<AllBorrowedBooksScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('All Borrowed Books'),
-        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
-        foregroundColor: Theme.of(context).appBarTheme.foregroundColor,
+        title: const Text(
+          'All Borrowed Books',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+            letterSpacing: 0.5,
+          ),
+        ),
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Theme.of(context).colorScheme.onPrimary,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Theme.of(context).colorScheme.primary,
+                Theme.of(context).colorScheme.primary.withValues(alpha: 204),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
         actions: [
-          IconButton(
-            onPressed: () {
-              _loadAllBorrowedBooks();
-            },
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh',
+          Container(
+            margin: const EdgeInsets.only(right: 8, top: 8, bottom: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              shape: BoxShape.circle,
+            ),
+            child: IconButton(
+              onPressed: () {
+                _loadAllBorrowedBooks();
+              },
+              icon: const Icon(Icons.refresh),
+              tooltip: 'Refresh',
+            ),
           ),
         ],
       ),
@@ -453,7 +485,95 @@ class _AllBorrowedBooksScreenState extends State<AllBorrowedBooksScreen> {
     );
   }
 
-  void _requestBorrow(Book book) {
-    Navigator.pushNamed(context, '/borrow-request', arguments: {'book': book});
+  Future<void> _requestBorrow(Book book) async {
+    final localizations = AppLocalizations.of(context);
+    final borrowProvider = Provider.of<BorrowProvider>(context, listen: false);
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    
+    // Ensure provider has the current token
+    if (authProvider.token != null) {
+      borrowProvider.setToken(authProvider.token);
+    }
+    
+    // Show loading indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+    
+    try {
+      // Check for active or pending borrowings
+      await borrowProvider.loadBorrowHistory();
+      
+      final activeBorrowings = borrowProvider.borrowRequests.where((request) {
+        final status = request.status.toLowerCase();
+        return status == 'payment_pending' ||
+               status == 'pending' ||
+               status == 'approved' ||
+               status == 'delivered' ||
+               status == 'borrowed' ||
+               status == 'overdue' ||
+               status == 'return_requested';
+      }).toList();
+      
+      // Close loading dialog
+      if (mounted) Navigator.of(context).pop();
+      
+      if (activeBorrowings.isNotEmpty) {
+        // Show error dialog
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: Text(localizations.cannotBorrowBook),
+              content: Text(
+                activeBorrowings.any((r) => 
+                  r.status.toLowerCase() == 'payment_pending' ||
+                  r.status.toLowerCase() == 'pending' ||
+                  r.status.toLowerCase() == 'approved'
+                )
+                  ? localizations.youAlreadyHavePendingBorrowRequest
+                  : localizations.youHaveUnreturnedBooks,
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: Text(localizations.ok),
+                ),
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    Navigator.pushNamed(context, '/borrow-status');
+                  },
+                  child: Text(localizations.viewBorrowings),
+                ),
+              ],
+            ),
+          );
+        }
+        return;
+      }
+      
+      // No active borrowings, proceed to borrow request screen
+      if (mounted) {
+        Navigator.pushNamed(context, '/borrow-request', arguments: {'book': book});
+      }
+    } catch (e) {
+      // Close loading dialog if still open
+      if (mounted) Navigator.of(context).pop();
+      
+      // Show error message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(localizations.failedToCheckBorrowingStatus),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'borrow_request.dart';
 import 'user.dart';
+import 'delivery_request.dart';
 
 class ReturnRequest {
   final String id;
@@ -10,6 +11,10 @@ class ReturnRequest {
   final String? deliveryManagerName;
   final String? deliveryManagerEmail;
   final String? deliveryManagerPhone;
+  final BorrowDeliveryRequest?
+  deliveryRequest; // Delivery status for return requests (legacy - do not use for status)
+  final String?
+  deliveryRequestStatus; // CRITICAL: Primary status source from API (delivery_request_status)
   final double fineAmount;
   final String? fineInvoiceId;
   final int? fineId; // Return fine ID
@@ -39,6 +44,8 @@ class ReturnRequest {
     this.deliveryManagerName,
     this.deliveryManagerEmail,
     this.deliveryManagerPhone,
+    this.deliveryRequest,
+    this.deliveryRequestStatus, // CRITICAL: Primary status source
     required this.fineAmount,
     this.fineInvoiceId,
     this.fineId,
@@ -83,10 +90,6 @@ class ReturnRequest {
         // New format: borrowing is a nested object or ID
         if (json['borrowing'] is Map) {
           borrowReq = BorrowRequest.fromJson(json['borrowing']);
-          // Debug: Check if customer phone is in nested borrowing
-          debugPrint(
-            'ReturnRequest.fromJson: Nested borrowing customer phone: ${json['borrowing']?['customer']?['phone']}',
-          );
         } else {
           // If borrowing is just an ID, create a BorrowRequest with data from serializer fields
           final borrowingId = json['borrowing_id'] ?? json['borrowing'] ?? 0;
@@ -189,30 +192,14 @@ class ReturnRequest {
       }
       // Update customer phone from ReturnRequest serializer field if available
       // This ensures we use the phone number from the database even if it's not in the nested borrowing object
-      debugPrint(
-        'ReturnRequest.fromJson: borrowing_customer_phone from serializer: ${json['borrowing_customer_phone']}',
-      );
-      debugPrint(
-        'ReturnRequest.fromJson: Current customer phone from nested borrowing: ${borrowReq.customer?.phone}',
-      );
-      debugPrint(
-        'ReturnRequest.fromJson: Nested borrowing customer phone: ${json['borrowing']?['customer']?['phone']}',
-      );
-
       // Determine the phone number to use - prioritize top-level field, then nested customer phone
       String? phoneToUse;
       if (json['borrowing_customer_phone'] != null &&
           json['borrowing_customer_phone'].toString().trim().isNotEmpty) {
         phoneToUse = json['borrowing_customer_phone'].toString().trim();
-        debugPrint(
-          'ReturnRequest.fromJson: Using phone from borrowing_customer_phone: $phoneToUse',
-        );
       } else if (borrowReq.customer?.phone != null &&
           borrowReq.customer!.phone!.trim().isNotEmpty) {
         phoneToUse = borrowReq.customer!.phone!.trim();
-        debugPrint(
-          'ReturnRequest.fromJson: Using phone from nested customer: $phoneToUse',
-        );
       }
 
       // Update customer with phone number if we found one
@@ -233,9 +220,6 @@ class ReturnRequest {
             role: borrowReq.customer!.role,
           );
           borrowReq = borrowReq.copyWith(customer: updatedCustomer);
-          debugPrint(
-            'ReturnRequest.fromJson: Customer phone updated successfully to: $phoneToUse',
-          );
         } else if (json['borrowing_customer_email'] != null) {
           // Create customer object if phone is available but customer doesn't exist
           final customerName =
@@ -256,14 +240,7 @@ class ReturnRequest {
             phone: phoneToUse,
           );
           borrowReq = borrowReq.copyWith(customer: customer);
-          debugPrint(
-            'ReturnRequest.fromJson: Created customer with phone: $phoneToUse',
-          );
         }
-      } else {
-        debugPrint(
-          'ReturnRequest.fromJson: No phone number available from any source',
-        );
       }
     }
 
@@ -286,13 +263,47 @@ class ReturnRequest {
     }
 
     // Parse penalty and payment information
+    // Priority: fine object > borrowing.fine_amount > top-level fine_amount > penalty_amount
     double? penaltyAmount;
-    if (json['penalty_amount'] != null) {
-      penaltyAmount = json['penalty_amount'] is double
-          ? json['penalty_amount']
-          : json['penalty_amount'] is int
-          ? json['penalty_amount'].toDouble()
-          : double.tryParse(json['penalty_amount'].toString());
+
+    // 1. Check inside 'fine' object first (most accurate source)
+    if (json['fine'] != null && json['fine'] is Map) {
+      final fineData = json['fine'] as Map<String, dynamic>;
+      final fineAmount = fineData['fine_amount'];
+      if (fineAmount != null) {
+        penaltyAmount = fineAmount is double
+            ? fineAmount
+            : fineAmount is int
+            ? fineAmount.toDouble()
+            : double.tryParse(fineAmount.toString());
+      }
+    }
+
+    // 2. Check inside 'borrowing' object (backend returns fine_amount here)
+    if (penaltyAmount == null &&
+        json['borrowing'] != null &&
+        json['borrowing'] is Map) {
+      final borrowingData = json['borrowing'] as Map<String, dynamic>;
+      final fineAmount = borrowingData['fine_amount'];
+      if (fineAmount != null) {
+        penaltyAmount = fineAmount is double
+            ? fineAmount
+            : fineAmount is int
+            ? fineAmount.toDouble()
+            : double.tryParse(fineAmount.toString());
+      }
+    }
+
+    // 3. Check top-level fields
+    if (penaltyAmount == null) {
+      final penaltyValue = json['penalty_amount'] ?? json['fine_amount'];
+      if (penaltyValue != null) {
+        penaltyAmount = penaltyValue is double
+            ? penaltyValue
+            : penaltyValue is int
+            ? penaltyValue.toDouble()
+            : double.tryParse(penaltyValue.toString());
+      }
     }
 
     int? overdueDays;
@@ -309,8 +320,11 @@ class ReturnRequest {
           : json['has_penalty'].toString().toLowerCase() == 'true';
     }
 
-    String? paymentMethod = json['payment_method']?.toString();
-    String? paymentStatus = json['payment_status']?.toString();
+    // Use fine payment method/status if available, otherwise use top-level
+    String? paymentMethod =
+        finePaymentMethod ?? json['payment_method']?.toString();
+    String? paymentStatus =
+        finePaymentStatus ?? json['payment_status']?.toString();
 
     DateTime? dueDate;
     if (json['due_date'] != null) {
@@ -328,14 +342,57 @@ class ReturnRequest {
           : json['is_finalized'].toString().toLowerCase() == 'true';
     }
 
+    // Parse delivery_request if available (for unified delivery status)
+    BorrowDeliveryRequest? deliveryRequest;
+    if (json['delivery_request'] != null && json['delivery_request'] is Map) {
+      try {
+        deliveryRequest = BorrowDeliveryRequest.fromJson(
+          json['delivery_request'] as Map<String, dynamic>,
+        );
+      } catch (e) {
+        debugPrint('Error parsing delivery_request for ReturnRequest: $e');
+      }
+    }
+
+    // UNIFIED DELIVERY STATUS: Use delivery_request_status if available
+    final deliveryRequestStatusField = json['delivery_request_status'];
+    String finalStatus;
+
+    // DEBUG: Log all status-related fields
+    debugPrint('=== ReturnRequest.fromJson DEBUG ===');
+    debugPrint('  json[id]: ${json['id']}');
+    debugPrint('  json[status]: ${json['status']}');
+    debugPrint('  json[delivery_request_status]: $deliveryRequestStatusField');
+    debugPrint('  json[delivery_manager]: ${json['delivery_manager']}');
+    debugPrint(
+      '  json[delivery_manager_name]: ${json['delivery_manager_name']}',
+    );
+    debugPrint('=== END ReturnRequest DEBUG ===');
+
+    if (deliveryRequestStatusField != null) {
+      // Use delivery_request_status as primary (unified delivery status approach)
+      // Both finalStatus and any other status field should use the same unified value
+      finalStatus = deliveryRequestStatusField;
+      debugPrint(
+        'ReturnRequest: Using delivery_request_status as primary: $finalStatus',
+      );
+    } else {
+      // Fallback to original status only when delivery_request_status is not available
+      finalStatus = json['status'] ?? 'PENDING';
+      debugPrint('ReturnRequest: Using fallback status: $finalStatus');
+    }
+
     return ReturnRequest(
       id: json['id']?.toString() ?? '',
       borrowRequest: borrowReq,
-      status: json['status'] ?? 'PENDING',
+      status: finalStatus, // Use delivery_request_status if available
       deliveryManagerId: json['delivery_manager']?.toString(),
       deliveryManagerName: json['delivery_manager_name'],
       deliveryManagerEmail: json['delivery_manager_email'],
       deliveryManagerPhone: json['delivery_manager_phone'],
+      deliveryRequest: deliveryRequest,
+      deliveryRequestStatus: deliveryRequestStatusField
+          ?.toString(), // CRITICAL: Store as separate field
       fineAmount: _parseFineAmount(json['fine_amount'] ?? 0),
       fineInvoiceId: json['fine_invoice_id'],
       fineId: fineId,

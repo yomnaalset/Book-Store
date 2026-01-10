@@ -68,7 +68,18 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
     );
   }
 
+  /// Get the effective status for display, checking delivery assignment if available
+  String _getEffectiveStatus(Order order) {
+    // If delivery assignment status is 'in_delivery', show that instead of order status
+    if (order.deliveryAssignment != null &&
+        order.deliveryAssignment!.status.toLowerCase() == 'in_delivery') {
+      return 'in_delivery';
+    }
+    return order.status;
+  }
+
   Widget _buildOrderCard(Order order) {
+    final effectiveStatus = _getEffectiveStatus(order);
     return Card(
       margin: const EdgeInsets.only(bottom: AppDimensions.spacingM),
       child: InkWell(
@@ -94,7 +105,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  _buildStatusChip(order.status),
+                  _buildStatusChip(effectiveStatus),
                 ],
               ),
 

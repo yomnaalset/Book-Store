@@ -30,7 +30,7 @@ class Author {
       id: json['id']?.toString() ?? '',
       name: json['name'] ?? '',
       biography: json['biography'] ?? json['bio'],
-      photo: json['photo'],
+      photo: json['photo_url'] ?? json['photo'], // Backend returns 'photo_url' in list serializer
       country:
           json['country'] ?? json['nationality'], // Handle both field names
       birthDate: json['birthDate'] ?? json['birth_date'],

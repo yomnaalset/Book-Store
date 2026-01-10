@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/constants/app_dimensions.dart';
 import '../../../../core/extensions/theme_extensions.dart';
 import '../../admin/ads/models/ad.dart';
 import '../../admin/ads/services/ads_service.dart';
@@ -34,7 +35,7 @@ class _AllAdsScreenState extends State<AllAdsScreen>
   @override
   void initState() {
     super.initState();
-    _adsService = AdsService(baseUrl: ApiConfig.getAndroidEmulatorUrl());
+    _adsService = AdsService(baseUrl: ApiConfig.getBaseUrl());
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 800),
       vsync: this,
@@ -104,18 +105,39 @@ class _AllAdsScreenState extends State<AllAdsScreen>
       appBar: AppBar(
         title: const Text(
           'All Ads',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+            letterSpacing: 0.5,
+          ),
         ),
         backgroundColor: AppColors.uranianBlue,
+        foregroundColor: Colors.white,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
+        shadowColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                AppColors.uranianBlue,
+                AppColors.uranianBlue.withValues(alpha: 204),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.white),
-            onPressed: _loadAdvertisements,
+          Container(
+            margin: const EdgeInsets.only(right: 8, top: 8, bottom: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              shape: BoxShape.circle,
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _loadAdvertisements,
+            ),
           ),
         ],
       ),
@@ -123,7 +145,7 @@ class _AllAdsScreenState extends State<AllAdsScreen>
         children: [
           // Filter Bar
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(AppDimensions.paddingM),
             color: context.surfaceColor,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -163,7 +185,9 @@ class _AllAdsScreenState extends State<AllAdsScreen>
                                 ? FontWeight.bold
                                 : FontWeight.normal,
                           ),
-                          backgroundColor: Theme.of(context).colorScheme.surface,
+                          backgroundColor: Theme.of(
+                            context,
+                          ).colorScheme.surface,
                           side: BorderSide(
                             color: isSelected
                                 ? AppColors.uranianBlue
@@ -178,7 +202,10 @@ class _AllAdsScreenState extends State<AllAdsScreen>
                 const SizedBox(height: 8),
                 Text(
                   '${_filteredAds.length} advertisement${_filteredAds.length != 1 ? 's' : ''} found',
-                  style: TextStyle(color: context.secondaryTextColor, fontSize: 14),
+                  style: TextStyle(
+                    color: context.secondaryTextColor,
+                    fontSize: 14,
+                  ),
                 ),
               ],
             ),
@@ -202,7 +229,9 @@ class _AllAdsScreenState extends State<AllAdsScreen>
                         Icon(
                           Icons.campaign_outlined,
                           size: 64,
-                          color: context.secondaryTextColor.withValues(alpha: 0.5),
+                          color: context.secondaryTextColor.withValues(
+                            alpha: 0.5,
+                          ),
                         ),
                         const SizedBox(height: 16),
                         Text(

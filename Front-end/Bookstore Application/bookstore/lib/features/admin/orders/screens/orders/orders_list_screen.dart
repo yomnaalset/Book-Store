@@ -230,20 +230,35 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
     );
   }
 
+  /// Get the effective status for display, checking delivery assignment if available
+  String _getEffectiveStatus(Order order) {
+    // If delivery assignment status is 'in_delivery', show that instead of order status
+    if (order.deliveryAssignment != null &&
+        order.deliveryAssignment!.status.toLowerCase() == 'in_delivery') {
+      return 'in_delivery';
+    }
+    return order.status;
+  }
+
   Widget _buildOrderCard(Order order) {
     final localizations = AppLocalizations.of(context);
+    final effectiveStatus = _getEffectiveStatus(order);
     return Card(
       margin: const EdgeInsets.only(bottom: 12.0),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: _getStatusColor(order.status).withValues(alpha: 0.1),
+          backgroundColor: _getStatusColor(
+            effectiveStatus,
+          ).withValues(alpha: 0.1),
           child: Icon(
             Icons.shopping_cart,
-            color: _getStatusColor(order.status),
+            color: _getStatusColor(effectiveStatus),
           ),
         ),
         title: Text(
-          '${localizations.orders} #${order.id}',
+          order.orderNumber.isNotEmpty
+              ? '${localizations.orders} #${order.orderNumber}'
+              : '${localizations.orders} #${order.id}',
           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
         subtitle: Column(
@@ -280,7 +295,7 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                StatusChip(status: order.status),
+                StatusChip(status: effectiveStatus),
               ],
             ),
             const SizedBox(height: 8),
@@ -931,13 +946,15 @@ class _OrdersListScreenState extends State<OrdersListScreen> {
   }
 
   Color _getDeliveryManagerStatusColor(String status) {
-    switch (status) {
+    // Handle legacy 'busy' status by treating it as 'online' (green)
+    final normalizedStatus = status.toLowerCase() == 'busy'
+        ? 'online'
+        : status.toLowerCase();
+
+    switch (normalizedStatus) {
       case 'online':
-        return Colors.green;
       case 'available':
         return Colors.green;
-      case 'busy':
-        return Colors.orange;
       case 'offline':
         return Colors.red;
       default:

@@ -24,31 +24,109 @@ class FavoritesService {
         },
       );
 
+      debugPrint('FavoritesService: Response status: ${response.statusCode}');
+      debugPrint('FavoritesService: Response body: ${response.body}');
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        final List<dynamic> booksJson = data['data'] ?? [];
+        debugPrint('FavoritesService: Parsed data keys: ${data.keys.toList()}');
+
+        // Handle different response formats
+        List<dynamic> favoritesJson = [];
+        if (data['data'] != null) {
+          favoritesJson = data['data'] is List ? data['data'] as List : [];
+        } else if (data['results'] != null) {
+          favoritesJson = data['results'] is List
+              ? data['results'] as List
+              : [];
+        } else if (data is List) {
+          favoritesJson = data;
+        }
+
+        debugPrint('FavoritesService: Found ${favoritesJson.length} favorites');
 
         // Convert favorite items to book objects
-        return booksJson.map((favoriteJson) {
-          // The backend returns favorite objects with book data nested
-          return Book.fromJson({
-            'id': favoriteJson['book_id'],
-            'title': favoriteJson['book_name'],
-            'price': favoriteJson['book_price'],
-            'is_available': favoriteJson['book_is_available'],
-            'is_new': favoriteJson['book_is_new'],
-            'author': {
-              'id': null, // Not provided in simplified serializer
-              'name': favoriteJson['author_name'],
-            },
-            'category': {
-              'id': null, // Not provided in simplified serializer
-              'name': favoriteJson['category_name'],
-            },
-            'primary_image_url': favoriteJson['book_primary_image_url'],
-            'average_rating': favoriteJson['book_average_rating'],
-          });
-        }).toList();
+        final books = <Book>[];
+        for (var favoriteJson in favoritesJson) {
+          try {
+            debugPrint(
+              'FavoritesService: Processing favorite: ${favoriteJson.keys.toList()}',
+            );
+            debugPrint('FavoritesService: Favorite data: $favoriteJson');
+
+            // The backend returns favorite objects with book data nested
+            // Ensure all required fields are present
+            final bookId =
+                favoriteJson['book_id']?.toString() ??
+                favoriteJson['id']?.toString();
+            if (bookId == null || bookId.isEmpty) {
+              debugPrint(
+                'FavoritesService: Skipping favorite - missing book_id',
+              );
+              continue;
+            }
+
+            final bookName =
+                favoriteJson['book_name'] ?? favoriteJson['name'] ?? '';
+            if (bookName.isEmpty) {
+              debugPrint(
+                'FavoritesService: Warning - book name is empty for ID: $bookId',
+              );
+            }
+
+            final bookData = <String, dynamic>{
+              'id': bookId,
+              'name': bookName,
+              'title': bookName,
+              'price':
+                  favoriteJson['book_price']?.toString() ??
+                  favoriteJson['price']?.toString(),
+              'is_available':
+                  favoriteJson['book_is_available'] ??
+                  favoriteJson['is_available'] ??
+                  true,
+              'is_available_for_borrow':
+                  favoriteJson['book_is_available_for_borrow'] ??
+                  favoriteJson['is_available_for_borrow'] ??
+                  true,
+              'is_new':
+                  favoriteJson['book_is_new'] ??
+                  favoriteJson['is_new'] ??
+                  false,
+              'author_id': favoriteJson['author_id'],
+              'author_name': favoriteJson['author_name'] ?? '',
+              'category_id': favoriteJson['category_id'],
+              'category_name': favoriteJson['category_name'] ?? '',
+              'primary_image_url':
+                  favoriteJson['book_primary_image_url'] ??
+                  favoriteJson['primary_image_url'],
+              'average_rating':
+                  favoriteJson['book_average_rating']?.toDouble() ??
+                  favoriteJson['average_rating']?.toDouble() ??
+                  0.0,
+            };
+
+            debugPrint(
+              'FavoritesService: Created book data for ID: ${bookData['id']}, Title: ${bookData['title']}',
+            );
+            final book = Book.fromJson(bookData);
+            books.add(book);
+            debugPrint(
+              'FavoritesService: Successfully created book: ${book.title}',
+            );
+          } catch (e, stackTrace) {
+            debugPrint('FavoritesService: Error parsing favorite item: $e');
+            debugPrint('FavoritesService: Stack trace: $stackTrace');
+            debugPrint('FavoritesService: Favorite JSON: $favoriteJson');
+            // Continue processing other favorites instead of failing completely
+            continue;
+          }
+        }
+
+        debugPrint(
+          'FavoritesService: Successfully parsed ${books.length} books',
+        );
+        return books;
       } else {
         final data = json.decode(response.body);
         _setError(data['message'] ?? 'Failed to load favorites');
@@ -83,7 +161,20 @@ class FavoritesService {
         return true;
       } else {
         final data = json.decode(response.body);
-        _setError(data['message'] ?? 'Failed to add to favorites');
+        final errorMessage =
+            data['message'] ??
+            (data['error'] is String ? data['error'] : null) ??
+            'Failed to add to favorites';
+
+        // If book is already in favorites (400 error), don't treat it as an error
+        if (response.statusCode == 400 &&
+            (errorMessage.toLowerCase().contains('already') ||
+                errorMessage.toLowerCase().contains('favorites'))) {
+          debugPrint('FavoritesService: Book is already in favorites');
+          return true; // Return true since the book is already favorited
+        }
+
+        _setError(errorMessage);
         return false;
       }
     } catch (e) {

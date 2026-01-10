@@ -496,11 +496,10 @@ class DeliveryService {
 
     try {
       // Convert availability status to delivery manager status
+      // Only 'available' (online) or 'offline' are valid
       String managerStatus;
       if (status == 'available') {
         managerStatus = 'online';
-      } else if (status == 'busy') {
-        managerStatus = 'busy';
       } else {
         managerStatus = 'offline';
       }
@@ -625,7 +624,9 @@ class DeliveryService {
 
   // Accept a delivery assignment
   // POST /api/delivery/assignments/{id}/accept
-  Future<Map<String, dynamic>> acceptDeliveryAssignment(int assignmentId) async {
+  Future<Map<String, dynamic>> acceptDeliveryAssignment(
+    int assignmentId,
+  ) async {
     _clearError();
 
     try {
@@ -635,10 +636,7 @@ class DeliveryService {
       debugPrint('🚀 DeliveryService: Accepting assignment $assignmentId');
       debugPrint('🚀 DeliveryService: URL: $url');
 
-      final response = await http.post(
-        Uri.parse(url),
-        headers: headers,
-      );
+      final response = await http.post(Uri.parse(url), headers: headers);
 
       debugPrint(
         '🚀 DeliveryService: Accept assignment response: ${response.statusCode}',
@@ -662,7 +660,9 @@ class DeliveryService {
           'error_code': 'ACCEPT_FAILED',
         };
       } else if (response.statusCode == 403) {
-        _setError('Permission denied: Only assigned delivery manager can accept');
+        _setError(
+          'Permission denied: Only assigned delivery manager can accept',
+        );
         return {
           'success': false,
           'message': 'Permission denied',
@@ -861,20 +861,42 @@ class DeliveryService {
         '$baseUrl/delivery/notifications/',
       ).replace(queryParameters: queryParams.isNotEmpty ? queryParams : null);
 
+      debugPrint('DeliveryService: Fetching notifications from $uri');
       final response = await http.get(uri, headers: _getHeaders());
+
+      debugPrint('DeliveryService: Response status: ${response.statusCode}');
+      debugPrint('DeliveryService: Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success'] == true && data['notifications'] != null) {
+          final notifications = List<Map<String, dynamic>>.from(
+            data['notifications'],
+          );
+          debugPrint(
+            'DeliveryService: Successfully parsed ${notifications.length} notifications',
+          );
+          if (notifications.isNotEmpty) {
+            debugPrint(
+              'DeliveryService: First notification: ${notifications.first}',
+            );
+          }
           // The response now includes unread_count, but we'll still use the
           // dedicated endpoint for consistency
-          return List<Map<String, dynamic>>.from(data['notifications']);
+          return notifications;
         }
+        debugPrint(
+          'DeliveryService: No notifications in response or success=false',
+        );
         return [];
       } else {
+        debugPrint(
+          'DeliveryService: Error response: ${response.statusCode} - ${response.body}',
+        );
         throw Exception('HTTP ${response.statusCode}: ${response.body}');
       }
     } catch (e) {
+      debugPrint('DeliveryService: Exception fetching notifications: $e');
       throw Exception('Error fetching notifications: $e');
     }
   }
@@ -1193,7 +1215,11 @@ class DeliveryService {
   }
 
   // Edit notes for an order
-  Future<bool> editOrderNotes(String orderId, String notes, {int? noteId}) async {
+  Future<bool> editOrderNotes(
+    String orderId,
+    String notes, {
+    int? noteId,
+  }) async {
     _clearError();
 
     try {

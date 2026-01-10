@@ -5,6 +5,7 @@ import '../../../providers/library_manager/library_provider.dart'
     as library_provider;
 import '../../../../../../routes/app_routes.dart';
 import '../../../../../../core/localization/app_localizations.dart';
+import '../../../../../../core/services/api_config.dart';
 
 class LibraryManagementScreen extends StatefulWidget {
   const LibraryManagementScreen({super.key});
@@ -251,12 +252,19 @@ class _LibraryManagementScreenState extends State<LibraryManagementScreen> {
                                   ? ClipRRect(
                                       borderRadius: BorderRadius.circular(8),
                                       child: Image.network(
-                                        library.logoUrl!,
+                                        ApiConfig.buildImageUrl(library.logoUrl!) ?? library.logoUrl!,
                                         width: 80,
                                         height: 80,
                                         fit: BoxFit.cover,
+                                        loadingBuilder: (context, child, loadingProgress) {
+                                          if (loadingProgress == null) return child;
+                                          return const Center(
+                                            child: CircularProgressIndicator(),
+                                          );
+                                        },
                                         errorBuilder:
                                             (context, error, stackTrace) {
+                                              debugPrint('LibraryManagementScreen: Error loading logo: $error');
                                               return const Icon(
                                                 Icons.library_books,
                                                 size: 40,

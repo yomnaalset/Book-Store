@@ -1,6 +1,7 @@
 from rest_framework import generics, status, permissions, serializers
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.exceptions import ValidationError as DRFValidationError, NotFound
 from django.shortcuts import get_object_or_404
 from django.core.exceptions import PermissionDenied
 from django.db import IntegrityError
@@ -667,7 +668,7 @@ class BookListView(generics.ListAPIView):
     Available to all authenticated users.
     """
     serializer_class = BookListSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]  # Temporary: Allow public access
     
     def get_queryset(self):
         """Get books filtered by current library and search parameters."""
@@ -1079,8 +1080,19 @@ class NewBooksView(generics.ListAPIView):
         except (ValueError, TypeError):
             days = 30
         
-        # Use the Book model method
-        queryset = Book.get_new_books()
+        # Get all books from library first, then filter by new status
+        # This ensures we show ALL books that are marked as new, regardless of availability
+        queryset = Book.objects.filter(library=library)
+        
+        # Filter by new books: either marked as new OR created within specified days
+        from django.utils import timezone
+        from datetime import timedelta
+        from django.db.models import Q
+        cutoff_date = timezone.now() - timedelta(days=days)
+        
+        queryset = queryset.filter(
+            Q(is_new=True) | Q(created_at__gte=cutoff_date)
+        )
         
         # Apply additional filters if provided
         is_available = self.request.query_params.get('is_available', None)
@@ -1613,10 +1625,10 @@ class TopRatedBooksView(generics.ListAPIView):
                 limit = 10
             
             # Query books with rating criteria
+            # Show ALL books regardless of availability status
             from django.db.models import Avg, Count, Case, When, FloatField
             queryset = Book.objects.filter(
-                library=library,
-                is_available=True
+                library=library
             ).select_related(
                 'author', 'category', 'library'
             ).prefetch_related('images', 'evaluations').annotate(
@@ -2876,6 +2888,22 @@ class FavoriteAddView(generics.CreateAPIView):
                     'error_code': result.get('error_code')
                 }, status=status.HTTP_400_BAD_REQUEST)
                 
+        except (DRFValidationError, serializers.ValidationError) as e:
+            # Handle serializer validation errors (e.g., book already in favorites)
+            logger.warning(f"Validation error adding book to favorites: {str(e)}")
+            error_detail = e.detail if hasattr(e, 'detail') else str(e)
+            if isinstance(error_detail, dict):
+                error_message = list(error_detail.values())[0] if error_detail else 'Validation error'
+                if isinstance(error_message, list):
+                    error_message = error_message[0] if error_message else 'Validation error'
+            else:
+                error_message = str(error_detail)
+            
+            return Response({
+                'success': False,
+                'message': error_message,
+                'error': error_detail if isinstance(error_detail, dict) else {'error': [error_message]}
+            }, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             logger.error(f"Error adding book to favorites: {str(e)}")
             return Response({

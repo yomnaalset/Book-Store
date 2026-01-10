@@ -14,14 +14,14 @@ class FinePaymentMethodScreen extends StatefulWidget {
   final int?
   borrowRequestId; // Borrow request ID (old way, for backward compatibility)
   final double fineAmount;
-  final int daysOverdue;
+  final int hoursOverdue;
 
   const FinePaymentMethodScreen({
     super.key,
     this.fineId,
     this.borrowRequestId,
     required this.fineAmount,
-    required this.daysOverdue,
+    required this.hoursOverdue,
   });
 
   @override
@@ -246,9 +246,30 @@ class _FinePaymentMethodScreenState extends State<FinePaymentMethodScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(localizations.paymentMethod),
-        backgroundColor: AppColors.primary,
-        foregroundColor: AppColors.white,
+        title: Text(
+          localizations.paymentMethod,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+            letterSpacing: 0.5,
+          ),
+        ),
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Theme.of(context).colorScheme.onPrimary,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Theme.of(context).colorScheme.primary,
+                Theme.of(context).colorScheme.primary.withValues(alpha: 204),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(AppDimensions.paddingL),
@@ -271,10 +292,7 @@ class _FinePaymentMethodScreenState extends State<FinePaymentMethodScreen> {
                       ),
                     ),
                     const SizedBox(height: AppDimensions.spacingM),
-                    _buildInfoRow(
-                      localizations.daysOverdue,
-                      '${widget.daysOverdue}',
-                    ),
+                    _buildInfoRow('Hours Overdue', '${widget.hoursOverdue}'),
                     const SizedBox(height: AppDimensions.spacingS),
                     _buildInfoRow(
                       localizations.fineAmount,

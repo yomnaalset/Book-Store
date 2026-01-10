@@ -4,6 +4,7 @@ import '../../../../../../core/constants/app_colors.dart';
 import '../../../../../../core/localization/app_localizations.dart';
 import '../../../models/book.dart';
 import '../../../providers/books_provider.dart';
+import '../../../widgets/book_price_display.dart';
 import '../../../../auth/providers/auth_provider.dart';
 
 class BorrowedBooksSection extends StatefulWidget {
@@ -20,7 +21,10 @@ class _BorrowedBooksSectionState extends State<BorrowedBooksSection> {
   @override
   void initState() {
     super.initState();
-    _loadBorrowedBooks();
+    // Defer loading until after the build phase to avoid setState during build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadBorrowedBooks();
+    });
   }
 
   Future<void> _loadBorrowedBooks() async {
@@ -32,19 +36,90 @@ class _BorrowedBooksSectionState extends State<BorrowedBooksSection> {
       final booksProvider = Provider.of<BooksProvider>(context, listen: false);
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
+      // Set token if available, but still try to load books even without auth
       if (authProvider.token != null) {
         booksProvider.setToken(authProvider.token);
-        final books = await booksProvider.getMostBorrowedBooks(limit: 10);
+        debugPrint('BorrowedBooksSection: Token set for API call');
+      } else {
+        debugPrint(
+          'BorrowedBooksSection: No token available, proceeding without auth',
+        );
+      }
 
-        if (mounted) {
-          setState(() {
-            // Show only books available for borrowing
-            _books = books
-                .where((book) => book.isAvailableForBorrow == true)
-                .toList();
-            _isLoading = false;
-          });
-        }
+      debugPrint('BorrowedBooksSection: Calling getMostBorrowedBooks...');
+      final books = await booksProvider.getMostBorrowedBooks(
+        limit: 10,
+        forceRefresh: true,
+      );
+
+      debugPrint(
+        'BorrowedBooksSection: Received ${books.length} books from API',
+      );
+
+      if (books.isEmpty) {
+        debugPrint(
+          'BorrowedBooksSection: WARNING - No books returned from API!',
+        );
+      }
+
+      for (var book in books) {
+        debugPrint(
+          'BorrowedBooksSection: Book "${book.title}" (id: ${book.id}) - isAvailableForBorrow: ${book.isAvailableForBorrow}, borrowPrice: ${book.borrowPrice}, isAvailable: ${book.isAvailable}',
+        );
+      }
+
+      if (mounted) {
+        setState(() {
+          // Show books available for borrowing
+          // Filter: show if is_available_for_borrow is true OR has borrow price > 0
+          _books = books.where((book) {
+            // Check if book has a borrow price > 0
+            final hasBorrowPrice =
+                book.borrowPrice != null &&
+                book.borrowPrice!.isNotEmpty &&
+                book.borrowPrice != '0.00' &&
+                book.borrowPrice != '0';
+
+            // Check if explicitly marked as available for borrow
+            final isAvailableForBorrow = book.isAvailableForBorrow == true;
+
+            // Show if available for borrow OR has borrow price
+            final shouldShow = isAvailableForBorrow || hasBorrowPrice;
+
+            debugPrint(
+              'BorrowedBooksSection: Book "${book.title}" (id: ${book.id}) - isAvailableForBorrow: $isAvailableForBorrow, borrowPrice: ${book.borrowPrice}, hasBorrowPrice: $hasBorrowPrice, shouldShow: $shouldShow',
+            );
+
+            return shouldShow;
+          }).toList();
+
+          debugPrint(
+            'BorrowedBooksSection: Filtered ${_books.length} books from ${books.length} total',
+          );
+
+          // Fallback: If filter removed all books but API returned books, show all
+          // This handles cases where API filtering might not work perfectly
+          if (_books.isEmpty && books.isNotEmpty) {
+            debugPrint(
+              'BorrowedBooksSection: Filter removed all books, showing all ${books.length} books as fallback',
+            );
+            _books = books;
+          }
+
+          debugPrint(
+            'BorrowedBooksSection: Final count - Displaying ${_books.length} books',
+          );
+
+          if (_books.isEmpty) {
+            debugPrint('BorrowedBooksSection: ERROR - No books to display!');
+          }
+
+          _isLoading = false;
+        });
+      } else {
+        debugPrint(
+          'BorrowedBooksSection: Widget not mounted, skipping setState',
+        );
       }
     } catch (e) {
       debugPrint('Error loading borrowed books: $e');
@@ -260,57 +335,93 @@ class _BorrowedBooksSectionState extends State<BorrowedBooksSection> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Book Cover
-            Expanded(
-              flex: 3,
-              child: Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: AppColors.success.withValues(alpha: 0.1),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(12),
-                    topRight: Radius.circular(12),
+            // Book Cover with Discount Badge
+            SizedBox(
+              height: 100,
+              width: double.infinity,
+              child: Stack(
+                children: [
+                  Container(
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: AppColors.success.withValues(alpha: 0.1),
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(12),
+                        topRight: Radius.circular(12),
+                      ),
+                    ),
+                    child: book.primaryImageUrl != null
+                        ? ClipRRect(
+                            borderRadius: const BorderRadius.only(
+                              topLeft: Radius.circular(12),
+                              topRight: Radius.circular(12),
+                            ),
+                            child: Image.network(
+                              book.primaryImageUrl!,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return const Center(
+                                  child: Icon(
+                                    Icons.book,
+                                    size: 40,
+                                    color: AppColors.success,
+                                  ),
+                                );
+                              },
+                            ),
+                          )
+                        : const Center(
+                            child: Icon(
+                              Icons.book,
+                              size: 40,
+                              color: AppColors.success,
+                            ),
+                          ),
                   ),
-                ),
-                child: book.primaryImageUrl != null
-                    ? ClipRRect(
-                        borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(12),
-                          topRight: Radius.circular(12),
+                  // Discount Badge
+                  if (book.hasDiscount)
+                    Positioned(
+                      top: 4,
+                      right: 4,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 2,
                         ),
-                        child: Image.network(
-                          book.primaryImageUrl!,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return const Center(
-                              child: Icon(
-                                Icons.library_books,
-                                size: 40,
-                                color: AppColors.success,
+                        decoration: BoxDecoration(
+                          color: AppColors.error,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Builder(
+                          builder: (context) {
+                            final localizations = AppLocalizations.of(context);
+                            return Text(
+                              localizations.discountOff(
+                                book.savingsPercentage.toInt(),
+                              ),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 8,
+                                fontWeight: FontWeight.bold,
                               ),
                             );
                           },
                         ),
-                      )
-                    : const Center(
-                        child: Icon(
-                          Icons.library_books,
-                          size: 40,
-                          color: AppColors.success,
-                        ),
                       ),
+                    ),
+                ],
               ),
             ),
 
             // Book Details
             Expanded(
-              flex: 2,
               child: Padding(
                 padding: const EdgeInsets.all(8),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // Title
                     Text(
                       book.title,
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
@@ -320,6 +431,7 @@ class _BorrowedBooksSectionState extends State<BorrowedBooksSection> {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
+                    // Author
                     Text(
                       book.author?.name ?? 'Unknown Author',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -329,46 +441,13 @@ class _BorrowedBooksSectionState extends State<BorrowedBooksSection> {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        if (book.borrowPrice != null)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.success.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              AppLocalizations.of(
-                                context,
-                              ).borrowLabel('\$${book.borrowPrice}'),
-                              style: const TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.success,
-                              ),
-                            ),
-                          ),
-                        GestureDetector(
-                          onTap: () => _requestBorrow(book),
-                          child: Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: BoxDecoration(
-                              color: AppColors.success.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: const Icon(
-                              Icons.library_add,
-                              size: 16,
-                              color: AppColors.success,
-                            ),
-                          ),
-                        ),
-                      ],
+                    // Price display
+                    BookPriceDisplay(
+                      book: book,
+                      showBorrowPrice: true,
+                      isCompact: true,
+                      fontSize: 8,
+                      smallFontSize: 7,
                     ),
                   ],
                 ),
@@ -378,10 +457,5 @@ class _BorrowedBooksSectionState extends State<BorrowedBooksSection> {
         ),
       ),
     );
-  }
-
-  void _requestBorrow(Book book) {
-    // Navigate to borrow request page or show borrow dialog
-    Navigator.pushNamed(context, '/borrow-request', arguments: {'book': book});
   }
 }

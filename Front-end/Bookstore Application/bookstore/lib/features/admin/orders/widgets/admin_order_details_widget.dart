@@ -110,6 +110,23 @@ class _AdminOrderDetailsWidgetState extends State<AdminOrderDetailsWidget> {
   @override
   Widget build(BuildContext context) {
     final localizations = AppLocalizations.of(context);
+    // Debug: Print discount information
+    debugPrint(
+      'AdminOrderDetailsWidget: discountCode=${widget.order.discountCode}, '
+      'discountAmount=${widget.order.discountAmount}, '
+      'subtotal=${widget.order.subtotal}, '
+      'totalAmount=${widget.order.totalAmount}',
+    );
+    // Debug: Print delivery status information
+    debugPrint(
+      'AdminOrderDetailsWidget: order.status=${widget.order.status}, '
+      'order.isInDelivery=${widget.order.isInDelivery}, '
+      'deliveryAssignment!=null=${widget.order.deliveryAssignment != null}, '
+      'deliveryAssignment.status=${widget.order.deliveryAssignment?.status}, '
+      'deliveryAssignment.status.toLowerCase()=${widget.order.deliveryAssignment?.status.toLowerCase()}, '
+      'hasDeliveryAssignment=${widget.order.hasDeliveryAssignment}, '
+      'isCancelled=${widget.order.isCancelled}',
+    );
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16.0),
@@ -122,18 +139,30 @@ class _AdminOrderDetailsWidgetState extends State<AdminOrderDetailsWidget> {
             title: localizations.orderDetails,
             icon: Icons.shopping_cart,
             children: [
-              widget.shared.buildInfoRow(
-                localizations.orderNumber,
-                '#ORD-${widget.order.id.toString().padLeft(4, '0')}',
-              ),
+              widget.shared.buildInfoRow(localizations.orderNumber, () {
+                final orderNumber = widget.order.orderNumber.isNotEmpty
+                    ? widget.order.orderNumber
+                    : 'ORD-${widget.order.id.toString().padLeft(4, '0')}';
+                // Remove any existing # from start or end to avoid double #
+                final cleanOrderNumber = orderNumber.replaceFirst(
+                  RegExp(r'^#+|#+$'),
+                  '',
+                );
+                return '#$cleanOrderNumber';
+              }()),
               widget.shared.buildInfoRow(
                 localizations.creationDate,
                 widget.shared.formatDate(widget.order.createdAt),
               ),
-              widget.shared.buildInfoRow(
-                localizations.currentStatus,
-                localizations.getOrderStatusLabel(widget.order.status),
-              ),
+              widget.shared.buildInfoRow(localizations.currentStatus, () {
+                // If delivery assignment status is 'in_delivery', show that instead of order status
+                if (widget.order.deliveryAssignment != null &&
+                    widget.order.deliveryAssignment!.status.toLowerCase() ==
+                        'in_delivery') {
+                  return localizations.getOrderStatusLabel('in_delivery');
+                }
+                return localizations.getOrderStatusLabel(widget.order.status);
+              }()),
               widget.shared.buildInfoRow(
                 localizations.numberOfBooks,
                 '${widget.order.items.fold(0, (sum, item) => sum + item.quantity)}',
@@ -142,10 +171,33 @@ class _AdminOrderDetailsWidgetState extends State<AdminOrderDetailsWidget> {
                 localizations.subtotal,
                 '\$${widget.order.subtotal.toStringAsFixed(2)}',
               ),
-              if (widget.shared.hasEffectiveDiscount(widget.order)) ...[
+              // Always show discount section if there's a discount code or discount amount
+              if ((widget.order.discountCode != null &&
+                      widget.order.discountCode!.isNotEmpty) ||
+                  (widget.order.discountAmount != null &&
+                      widget.order.discountAmount! > 0) ||
+                  widget.shared.hasEffectiveDiscount(widget.order)) ...[
+                // Show discount code if available
+                if (widget.order.discountCode != null &&
+                    widget.order.discountCode!.isNotEmpty) ...[
+                  widget.shared.buildInfoRow(
+                    localizations.discountCode,
+                    widget.order.discountCode!,
+                    isHighlighted: true,
+                    textColor: Colors.blue,
+                  ),
+                ],
                 widget.shared.buildInfoRow(
                   localizations.discount,
-                  '-\$${(widget.order.subtotal - widget.order.totalAmount).toStringAsFixed(2)}',
+                  widget.order.discountAmount != null &&
+                          widget.order.discountAmount! > 0
+                      ? '-\$${widget.order.discountAmount!.toStringAsFixed(2)}'
+                      : (widget.order.subtotal +
+                                widget.order.deliveryCost +
+                                widget.order.taxAmount) >
+                            widget.order.totalAmount
+                      ? '-\$${((widget.order.subtotal + widget.order.deliveryCost + widget.order.taxAmount) - widget.order.totalAmount).toStringAsFixed(2)}'
+                      : '\$0.00',
                   isHighlighted: true,
                   textColor: Colors.red,
                 ),
@@ -310,8 +362,44 @@ class _AdminOrderDetailsWidgetState extends State<AdminOrderDetailsWidget> {
           if (_shouldShowApproveRejectButtons()) _buildAdminActions(),
 
           // View Delivery Location Button (when status is "in_delivery")
-          if (widget.order.isInDelivery && !widget.order.isCancelled)
-            _buildViewDeliveryLocationButton(),
+          // Check both order status and delivery assignment status
+          Builder(
+            builder: (context) {
+              // More robust status checking - handle various formats
+              String? deliveryStatus;
+              if (widget.order.deliveryAssignment?.status != null) {
+                deliveryStatus = widget.order.deliveryAssignment!.status
+                    .toLowerCase()
+                    .trim();
+              }
+              final isDeliveryActive =
+                  deliveryStatus == 'in_delivery' ||
+                  deliveryStatus == 'in-delivery' ||
+                  deliveryStatus == 'in delivery';
+
+              final shouldShowButton =
+                  (widget.order.isInDelivery || isDeliveryActive) &&
+                  !widget.order.isCancelled;
+
+              // Debug: Print button visibility condition
+              debugPrint(
+                'AdminOrderDetailsWidget: Button visibility check - '
+                'order.status=${widget.order.status}, '
+                'order.isInDelivery=${widget.order.isInDelivery}, '
+                'deliveryAssignment!=null=${widget.order.deliveryAssignment != null}, '
+                'deliveryAssignment.status=${widget.order.deliveryAssignment?.status}, '
+                'deliveryStatus(normalized)=$deliveryStatus, '
+                'isDeliveryActive=$isDeliveryActive, '
+                'isCancelled=${widget.order.isCancelled}, '
+                'shouldShowButton=$shouldShowButton',
+              );
+
+              if (shouldShowButton) {
+                return _buildViewDeliveryLocationButton();
+              }
+              return const SizedBox.shrink();
+            },
+          ),
         ],
       ),
     );
@@ -447,6 +535,10 @@ class _AdminOrderDetailsWidgetState extends State<AdminOrderDetailsWidget> {
             child: Container(
               width: MediaQuery.of(context).size.width * 0.9,
               padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(16),
+              ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -456,12 +548,14 @@ class _AdminOrderDetailsWidgetState extends State<AdminOrderDetailsWidget> {
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF28A745).withValues(alpha: 0.1),
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.primary.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.check_circle,
-                          color: Color(0xFF28A745),
+                          color: Theme.of(context).colorScheme.primary,
                           size: 24,
                         ),
                       ),
@@ -469,10 +563,10 @@ class _AdminOrderDetailsWidgetState extends State<AdminOrderDetailsWidget> {
                       Expanded(
                         child: Text(
                           localizations.selectDeliveryManager,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
-                            color: Color(0xFF2C3E50),
+                            color: Theme.of(context).colorScheme.onSurface,
                           ),
                         ),
                       ),
@@ -484,10 +578,10 @@ class _AdminOrderDetailsWidgetState extends State<AdminOrderDetailsWidget> {
                   // Delivery Manager Selection
                   Text(
                     localizations.selectADeliveryManagerForThisRequest,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFF495057),
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -528,19 +622,23 @@ class _AdminOrderDetailsWidgetState extends State<AdminOrderDetailsWidget> {
                                 padding: const EdgeInsets.all(16),
                                 decoration: BoxDecoration(
                                   color: isSelected
-                                      ? const Color(
-                                          0xFF28A745,
-                                        ).withValues(alpha: 0.1)
+                                      ? Theme.of(
+                                          context,
+                                        ).colorScheme.primaryContainer
                                       : isAvailable
-                                      ? Colors.white
-                                      : Colors.grey.shade100,
+                                      ? Theme.of(context).cardColor
+                                      : Theme.of(
+                                          context,
+                                        ).colorScheme.surfaceContainerHighest,
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(
                                     color: isSelected
-                                        ? const Color(0xFF28A745)
+                                        ? Theme.of(context).colorScheme.primary
                                         : isAvailable
-                                        ? const Color(0xFFE9ECEF)
-                                        : Colors.grey.shade300,
+                                        ? Theme.of(context).colorScheme.outline
+                                              .withValues(alpha: 0.2)
+                                        : Theme.of(context).colorScheme.outline
+                                              .withValues(alpha: 0.1),
                                     width: isSelected ? 2 : 1,
                                   ),
                                 ),
@@ -569,8 +667,12 @@ class _AdminOrderDetailsWidgetState extends State<AdminOrderDetailsWidget> {
                                               fontSize: 16,
                                               fontWeight: FontWeight.w600,
                                               color: isAvailable
-                                                  ? Colors.black
-                                                  : Colors.grey,
+                                                  ? Theme.of(
+                                                      context,
+                                                    ).colorScheme.onSurface
+                                                  : Theme.of(context)
+                                                        .colorScheme
+                                                        .onSurfaceVariant,
                                             ),
                                           ),
                                           const SizedBox(height: 4),
@@ -598,15 +700,19 @@ class _AdminOrderDetailsWidgetState extends State<AdminOrderDetailsWidget> {
 
                                     // Selection Indicator
                                     if (isSelected)
-                                      const Icon(
+                                      Icon(
                                         Icons.check_circle,
-                                        color: Color(0xFF28A745),
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.primary,
                                         size: 20,
                                       )
                                     else if (!isAvailable)
-                                      const Icon(
+                                      Icon(
                                         Icons.block,
-                                        color: Colors.grey,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.onSurfaceVariant,
                                         size: 20,
                                       ),
                                   ],
@@ -646,8 +752,18 @@ class _AdminOrderDetailsWidgetState extends State<AdminOrderDetailsWidget> {
                                 }
                               : null,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF28A745),
-                            foregroundColor: Colors.white,
+                            backgroundColor: Theme.of(
+                              context,
+                            ).colorScheme.primary,
+                            foregroundColor: Theme.of(
+                              context,
+                            ).colorScheme.onPrimary,
+                            disabledBackgroundColor: Theme.of(
+                              context,
+                            ).colorScheme.surfaceContainerHighest,
+                            disabledForegroundColor: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(8),
@@ -671,11 +787,14 @@ class _AdminOrderDetailsWidgetState extends State<AdminOrderDetailsWidget> {
     String statusText,
     AppLocalizations localizations,
   ) {
-    switch (statusText.toLowerCase()) {
+    // Handle legacy 'busy' status by treating it as 'online'
+    final normalizedStatus = statusText.toLowerCase() == 'busy'
+        ? 'online'
+        : statusText.toLowerCase();
+
+    switch (normalizedStatus) {
       case 'online':
         return localizations.online;
-      case 'busy':
-        return localizations.busy;
       case 'offline':
         return localizations.offline;
       default:
@@ -684,11 +803,14 @@ class _AdminOrderDetailsWidgetState extends State<AdminOrderDetailsWidget> {
   }
 
   IconData _getStatusIcon(String statusText) {
-    switch (statusText.toLowerCase()) {
+    // Handle legacy 'busy' status by treating it as 'online'
+    final normalizedStatus = statusText.toLowerCase() == 'busy'
+        ? 'online'
+        : statusText.toLowerCase();
+
+    switch (normalizedStatus) {
       case 'online':
         return Icons.wifi;
-      case 'busy':
-        return Icons.local_shipping;
       case 'offline':
         return Icons.wifi_off;
       default:
@@ -926,7 +1048,11 @@ class _AdminOrderDetailsWidgetState extends State<AdminOrderDetailsWidget> {
 
       if (mounted) {
         if (locationData != null) {
-          final location = locationData['location'] as Map<String, dynamic>?;
+          // Handle response format: data.location or direct location
+          final data = locationData['data'] as Map<String, dynamic>?;
+          final location =
+              (data?['location'] ?? locationData['location'])
+                  as Map<String, dynamic>?;
           final latitude = location?['latitude'] as double?;
           final longitude = location?['longitude'] as double?;
 
@@ -944,11 +1070,17 @@ class _AdminOrderDetailsWidgetState extends State<AdminOrderDetailsWidget> {
           }
         } else {
           final localizations = AppLocalizations.of(context);
+          final errorMessage =
+              provider.error ?? localizations.failedToGetDeliveryLocation;
+          // Check if error is about FormatException (HTML response instead of JSON)
+          final cleanErrorMessage =
+              errorMessage.contains('FormatException') ||
+                  errorMessage.contains('<!DOCTYPE')
+              ? 'Delivery location service is temporarily unavailable. Please try again later.'
+              : errorMessage;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(
-                provider.error ?? localizations.failedToGetDeliveryLocation,
-              ),
+              content: Text(cleanErrorMessage),
               backgroundColor: Colors.red,
             ),
           );
@@ -1133,9 +1265,13 @@ class _AdminOrderDetailsWidgetState extends State<AdminOrderDetailsWidget> {
           margin: const EdgeInsets.only(bottom: AppDimensions.spacingM),
           padding: const EdgeInsets.all(AppDimensions.paddingM),
           decoration: BoxDecoration(
-            color: AppColors.surface,
+            color: Theme.of(context).cardColor,
             borderRadius: BorderRadius.circular(AppDimensions.radiusM),
-            border: Border.all(color: AppColors.border),
+            border: Border.all(
+              color: Theme.of(
+                context,
+              ).colorScheme.outline.withValues(alpha: 0.2),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1143,7 +1279,10 @@ class _AdminOrderDetailsWidgetState extends State<AdminOrderDetailsWidget> {
               // Note content
               Text(
                 note.content,
-                style: const TextStyle(fontSize: AppDimensions.fontSizeM),
+                style: TextStyle(
+                  fontSize: AppDimensions.fontSizeM,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
                 overflow: TextOverflow.visible,
                 softWrap: true,
               ),
@@ -1155,18 +1294,20 @@ class _AdminOrderDetailsWidgetState extends State<AdminOrderDetailsWidget> {
                   // Author info
                   Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.person_outline,
                         size: 14,
-                        color: AppColors.textSecondary,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
                           '${note.authorDisplayName} ($localizedAuthorType)',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: AppDimensions.fontSizeS,
-                            color: AppColors.textSecondary,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
                             fontWeight: FontWeight.w500,
                           ),
                           overflow: TextOverflow.visible,
@@ -1179,17 +1320,17 @@ class _AdminOrderDetailsWidgetState extends State<AdminOrderDetailsWidget> {
                   // Timestamp info
                   Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.access_time,
                         size: 14,
-                        color: AppColors.textSecondary,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                       const SizedBox(width: 4),
                       Text(
                         dateFormat,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: AppDimensions.fontSizeS,
-                          color: AppColors.textSecondary,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ],

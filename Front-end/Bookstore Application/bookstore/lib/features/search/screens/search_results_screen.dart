@@ -84,15 +84,42 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
     final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text(localizations.searchResultsTitle),
+        title: Text(
+          localizations.searchResultsTitle,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+            letterSpacing: 0.5,
+          ),
+        ),
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Theme.of(context).colorScheme.onPrimary,
         elevation: 0,
+        shadowColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Theme.of(context).colorScheme.primary,
+                Theme.of(context).colorScheme.primary.withValues(alpha: 204),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
         actions: [
-          IconButton(
-            onPressed: _performSearch,
-            icon: const Icon(Icons.refresh),
-            tooltip: localizations.refresh,
+          Container(
+            margin: const EdgeInsets.only(right: 8, top: 8, bottom: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              shape: BoxShape.circle,
+            ),
+            child: IconButton(
+              onPressed: _performSearch,
+              icon: const Icon(Icons.refresh),
+              tooltip: localizations.refresh,
+            ),
           ),
         ],
       ),
@@ -311,7 +338,9 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                             localizations.byAuthorPrefix(book.author!.name),
                             style: TextStyle(
                               fontSize: AppDimensions.fontSizeM,
-                              color: Theme.of(context).textTheme.bodyMedium?.color,
+                              color: Theme.of(
+                                context,
+                              ).textTheme.bodyMedium?.color,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -341,7 +370,9 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                           builder: (context) {
                             final localizations = AppLocalizations.of(context);
                             return Text(
-                              localizations.priceLabelPrefix('\$${book.priceAsDouble.toStringAsFixed(2)}'),
+                              localizations.priceLabelPrefix(
+                                '\$${book.priceAsDouble.toStringAsFixed(2)}',
+                              ),
                               style: const TextStyle(
                                 fontSize: AppDimensions.fontSizeS,
                                 fontWeight: FontWeight.w600,

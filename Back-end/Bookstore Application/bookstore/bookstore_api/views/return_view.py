@@ -106,7 +106,8 @@ class ReturnRequestListView(generics.ListAPIView):
     def list(self, request, *args, **kwargs):
         try:
             queryset = self.get_queryset()
-            serializer = self.get_serializer(queryset, many=True)
+            # Pass request context to serializer so it can determine user role for delivery_request serialization
+            serializer = self.get_serializer(queryset, many=True, context={'request': request})
             
             return Response({
                 'success': True,
@@ -167,7 +168,8 @@ class ReturnRequestDetailView(generics.RetrieveAPIView):
             # Note: Borrowing never generates fines. Only return requests can have fines.
             # All fines are stored in ReturnFine linked to return_request.
             
-            serializer = self.get_serializer(instance)
+            # Pass request context to serializer so it can determine user role for delivery_request serialization
+            serializer = self.get_serializer(instance, context={'request': request})
             data = serializer.data
             
             # Calculate if delay exists based on expected return date
@@ -285,9 +287,73 @@ class AssignDeliveryManagerView(APIView):
             serializer.is_valid(raise_exception=True)
             
             delivery_manager_id = serializer.validated_data['delivery_manager_id']
+            
+            # Call the service method (which is wrapped in @transaction.atomic)
+            # This will commit the transaction at the end
             ReturnService.assign_delivery_manager(return_request, delivery_manager_id)
             
-            response_serializer = ReturnRequestSerializer(return_request)
+            # IMPORTANT: The transaction has now committed, so we can safely query fresh data
+            # Refresh from database to ensure we have the latest data
+            return_request.refresh_from_db()
+            
+            # Debug: Log the state after assignment
+            logger.info(f"=== AssignDeliveryManagerView DEBUG ===")
+            logger.info(f"  return_request.id: {return_request.id}")
+            logger.info(f"  return_request.status: {return_request.status}")
+            logger.info(f"  return_request.delivery_manager: {return_request.delivery_manager}")
+            logger.info(f"  return_request.delivery_manager_id: {return_request.delivery_manager_id if hasattr(return_request, 'delivery_manager_id') else 'N/A'}")
+            
+            # Check DeliveryRequest status - query FRESH from DB after transaction commit
+            from ..models.delivery_model import DeliveryRequest
+            from django.db import connection
+            # Force a fresh database query (bypass any connection-level caching)
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT id, status, delivery_manager_id FROM delivery_request "
+                    "WHERE return_request_id = %s AND delivery_type = 'return'",
+                    [return_request.id]
+                )
+                row = cursor.fetchone()
+                if row:
+                    delivery_req_id, delivery_req_status, delivery_mgr_id = row
+                    logger.info(f"  DeliveryRequest.id: {delivery_req_id}")
+                    logger.info(f"  DeliveryRequest.status (from raw SQL): '{delivery_req_status}'")
+                    logger.info(f"  DeliveryRequest.delivery_manager_id: {delivery_mgr_id}")
+                else:
+                    logger.info(f"  DeliveryRequest: NOT FOUND (raw SQL)")
+            
+            # Also check via ORM for comparison
+            delivery_req = DeliveryRequest.objects.filter(
+                return_request=return_request,
+                delivery_type='return'
+            ).first()
+            if delivery_req:
+                logger.info(f"  DeliveryRequest.id (ORM): {delivery_req.id}")
+                logger.info(f"  DeliveryRequest.status (ORM): '{delivery_req.status}'")
+                logger.info(f"  DeliveryRequest.delivery_manager (ORM): {delivery_req.delivery_manager}")
+            else:
+                logger.info(f"  DeliveryRequest: NOT FOUND (ORM)")
+            logger.info(f"=== END DEBUG ===")
+            
+            # Force a completely fresh query to ensure we have the latest DeliveryRequest
+            # This ensures the serializer's get_delivery_request_status gets fresh data
+            return_request = ReturnRequest.objects.select_related(
+                'borrowing',
+                'borrowing__customer',
+                'borrowing__customer__profile',
+                'borrowing__book',
+                'delivery_manager',
+                'delivery_manager__profile'
+            ).prefetch_related().get(id=return_request.id)
+            
+            response_serializer = ReturnRequestSerializer(return_request, context={'request': request})
+            
+            # Log what status is being returned
+            delivery_status_in_response = response_serializer.data.get('delivery_request_status')
+            logger.info(
+                f"AssignDeliveryManagerView: Serialized data includes "
+                f"delivery_request_status='{delivery_status_in_response}'"
+            )
             
             return Response({
                 'success': True,
@@ -853,18 +919,39 @@ class GetReturnDeliveryLocationView(APIView):
                     'errors': {'permission': ['You do not have permission to view this location']}
                 }, status=status.HTTP_403_FORBIDDEN)
             
-            # Location button is VISIBLE only during IN_PROGRESS status
-            if return_request.status != ReturnStatus.IN_PROGRESS:
+            # UNIFIED DELIVERY STATUS: Location button is VISIBLE only when DeliveryRequest.status = 'in_delivery'
+            # Check delivery request status (source of truth) instead of return request status
+            from ..models.delivery_model import DeliveryRequest
+            delivery_request = DeliveryRequest.objects.filter(
+                return_request=return_request,
+                delivery_type='return'
+            ).select_related(
+                'delivery_manager',
+                'delivery_manager__delivery_profile'
+            ).first()
+            
+            if not delivery_request:
                 return Response({
                     'success': False,
-                    'message': 'Location tracking is not available for this request',
-                    'errors': {'status': ['Location tracking is only available when return is in progress']},
+                    'message': 'No delivery request found for this return',
+                    'errors': {'delivery': ['Delivery request not created yet']},
                     'current_status': return_request.status,
                     'tracking_available': False
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # Get delivery manager
-            delivery_manager = return_request.delivery_manager
+            # Check delivery request status (unified approach)
+            if delivery_request.status != 'in_delivery':
+                return Response({
+                    'success': False,
+                    'message': 'Location tracking is not available for this request',
+                    'errors': {'status': ['Location tracking is only available when delivery is in progress']},
+                    'current_delivery_status': delivery_request.status,
+                    'current_return_status': return_request.status,
+                    'tracking_available': False
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Get delivery manager from delivery request (unified approach)
+            delivery_manager = delivery_request.delivery_manager
             if not delivery_manager:
                 return Response({
                     'success': False,
@@ -950,11 +1037,35 @@ class SelectReturnFinePaymentMethodView(APIView):
         Select payment method (cash or card) for a return fine
         """
         try:
-            fine = get_object_or_404(ReturnFine, id=fine_id)
-            return_request = fine.return_request
+            # Use raw SQL to avoid column issues with late_return, damaged, lost
+            from django.db import connection
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT rf.id, rf.return_request_id, rf.is_paid, rf.payment_method,
+                           rr.id as return_request_id, br.customer_id
+                    FROM return_fine rf
+                    JOIN return_request rr ON rf.return_request_id = rr.id
+                    JOIN borrow_request br ON rr.borrowing_id = br.id
+                    WHERE rf.id = %s
+                """, [fine_id])
+                row = cursor.fetchone()
+            
+            if not row:
+                return Response({
+                    'success': False,
+                    'message': 'Fine not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            fine_data = {
+                'id': row[0],
+                'return_request_id': row[1],
+                'is_paid': bool(row[2]),
+                'payment_method': row[3],
+                'customer_id': row[5]
+            }
             
             # Check if user owns this return request
-            if return_request.borrowing.customer != request.user:
+            if fine_data['customer_id'] != request.user.id:
                 return Response({
                     'success': False,
                     'message': 'You can only select payment method for your own return fines'
@@ -969,17 +1080,36 @@ class SelectReturnFinePaymentMethodView(APIView):
                     'message': 'Invalid payment method. Must be "cash" or "card"'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # Update fine with payment method
-            fine.payment_method = payment_method
-            fine.save()
+            # Update fine with payment method and finalize it (lock the amount)
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    UPDATE return_fine SET payment_method = %s, is_finalized = %s WHERE id = %s
+                """, [payment_method, True, fine_id])
+                
+                # Get the fine amount to sync to borrow request
+                cursor.execute("""
+                    SELECT rf.fine_amount, rr.borrowing_id
+                    FROM return_fine rf
+                    JOIN return_request rr ON rf.return_request_id = rr.id
+                    WHERE rf.id = %s
+                """, [fine_id])
+                fine_row = cursor.fetchone()
+                
+                if fine_row:
+                    fine_amount = fine_row[0]
+                    borrowing_id = fine_row[1]
+                    # Update the borrow request with the finalized fine amount
+                    cursor.execute("""
+                        UPDATE borrow_request SET fine_amount = %s WHERE id = %s
+                    """, [fine_amount, borrowing_id])
             
             return Response({
                 'success': True,
                 'message': f'Payment method selected: {payment_method}',
                 'data': {
-                    'fine_id': fine.id,
-                    'payment_method': fine.payment_method,
-                    'payment_status': 'paid' if fine.is_paid else 'pending'
+                    'fine_id': fine_id,
+                    'payment_method': payment_method,
+                    'payment_status': 'paid' if fine_data['is_paid'] else 'pending'
                 }
             }, status=status.HTTP_200_OK)
             
@@ -988,6 +1118,114 @@ class SelectReturnFinePaymentMethodView(APIView):
             return Response({
                 'success': False,
                 'message': 'Failed to select payment method',
+                'errors': format_error_message(str(e))
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class CustomerConfirmReturnPickupView(APIView):
+    """
+    API view for customers to confirm they are ready for return pickup
+    POST /api/returns/requests/{return_request_id}/confirm-pickup/
+    """
+    permission_classes = [permissions.IsAuthenticated, IsCustomer]
+    
+    def post(self, request, pk):
+        """
+        Confirm that customer is ready for the delivery manager to pick up the book
+        """
+        try:
+            from django.db import connection
+            
+            # Get return request and verify ownership
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT rr.id, rr.status, br.customer_id, br.id as borrowing_id,
+                           rf.id as fine_id, rf.payment_method, rf.is_finalized
+                    FROM return_request rr
+                    JOIN borrow_request br ON rr.borrowing_id = br.id
+                    LEFT JOIN return_fine rf ON rf.return_request_id = rr.id
+                    WHERE rr.id = %s
+                """, [pk])
+                row = cursor.fetchone()
+            
+            if not row:
+                return Response({
+                    'success': False,
+                    'message': 'Return request not found'
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            return_request_id = row[0]
+            current_status = row[1]
+            customer_id = row[2]
+            borrowing_id = row[3]
+            fine_id = row[4]
+            payment_method = row[5]
+            is_finalized = bool(row[6]) if row[6] is not None else False
+            
+            # Check ownership
+            if customer_id != request.user.id:
+                return Response({
+                    'success': False,
+                    'message': 'You can only confirm pickup for your own return requests'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Check if payment method is selected (required before confirming pickup)
+            if not payment_method:
+                return Response({
+                    'success': False,
+                    'message': 'Please select a payment method before confirming pickup'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Update return request status to indicate customer is ready for pickup
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    UPDATE return_request 
+                    SET status = 'PENDING', updated_at = NOW()
+                    WHERE id = %s
+                """, [return_request_id])
+                
+                # Also update borrow request status
+                cursor.execute("""
+                    UPDATE borrow_request 
+                    SET status = 'pending_return', updated_at = NOW()
+                    WHERE id = %s
+                """, [borrowing_id])
+            
+            # Create notification for library admin
+            try:
+                from ..services.notification_services import NotificationService
+                from ..models.user_model import CustomUser
+                
+                # Get customer name
+                customer = CustomUser.objects.get(id=customer_id)
+                
+                # Notify all library admins
+                admins = CustomUser.objects.filter(user_type='admin')
+                for admin in admins:
+                    NotificationService.create_notification(
+                        user_id=admin.id,
+                        title="Return Pickup Requested",
+                        message=f"Customer {customer.get_full_name()} has confirmed they are ready for book return pickup. Payment method: {payment_method}.",
+                        notification_type="return_pickup_requested"
+                    )
+            except Exception as notif_error:
+                logger.warning(f"Could not send notification: {str(notif_error)}")
+            
+            return Response({
+                'success': True,
+                'message': 'Return pickup confirmed. The delivery manager will contact you soon.',
+                'data': {
+                    'return_request_id': return_request_id,
+                    'status': 'PENDING',
+                    'payment_method': payment_method
+                }
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error confirming return pickup: {str(e)}")
+            return Response({
+                'success': False,
+                'message': 'Failed to confirm return pickup',
                 'errors': format_error_message(str(e))
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -1074,8 +1312,16 @@ class ConfirmReturnFineView(APIView):
         Makes the fine permanent and non-modifiable
         """
         try:
+            from django.db import connection
+            
             return_request = get_object_or_404(ReturnRequest, id=pk)
             return_fine = ReturnService.get_or_create_return_fine(return_request)
+            
+            if not return_fine:
+                return Response({
+                    'success': False,
+                    'message': 'No fine found for this return request'
+                }, status=status.HTTP_404_NOT_FOUND)
             
             # Check if fine is already finalized
             if return_fine.is_finalized:
@@ -1084,12 +1330,21 @@ class ConfirmReturnFineView(APIView):
                     'message': 'Fine has already been confirmed'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # Finalize the fine
-            return_fine.is_finalized = True
-            return_fine.finalized_at = timezone.now()
-            return_fine.finalized_by = request.user
-            return_fine.is_paid = False  # Ensure it's marked as unpaid when finalized
-            return_fine.save(update_fields=['is_finalized', 'finalized_at', 'finalized_by', 'is_paid'])
+            # Finalize the fine using raw SQL (since return_fine may be a minimal object)
+            finalized_at = timezone.now()
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    UPDATE return_fine 
+                    SET is_finalized = %s, finalized_at = %s, finalized_by_id = %s, is_paid = %s
+                    WHERE id = %s
+                """, [True, finalized_at, request.user.id, False, return_fine.id])
+                
+                # Also update borrow request fine_amount
+                cursor.execute("""
+                    UPDATE borrow_request 
+                    SET fine_amount = %s 
+                    WHERE id = %s
+                """, [str(return_fine.fine_amount), return_request.borrowing.id])
             
             # Send notification to customer
             borrow_request = return_request.borrowing
@@ -1109,7 +1364,7 @@ class ConfirmReturnFineView(APIView):
                     'return_request': serializer.data,
                     'fine_id': return_fine.id,
                     'fine_amount': float(return_fine.fine_amount),
-                    'is_finalized': return_fine.is_finalized
+                    'is_finalized': True
                 }
             }, status=status.HTTP_200_OK)
             
@@ -1165,17 +1420,27 @@ class IncreaseReturnFineView(APIView):
                     'message': 'Invalid additional_amount value'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # Increase the fine amount
+            # Increase the fine amount using raw SQL
             from decimal import Decimal
+            from django.db import connection
+            
             current_amount = Decimal(str(return_fine.fine_amount))
             additional = Decimal(str(additional_amount))
-            return_fine.fine_amount = current_amount + additional
-            return_fine.is_paid = False  # Ensure it's marked as unpaid when increased
-            return_fine.save(update_fields=['fine_amount', 'is_paid'])
+            new_amount = current_amount + additional
             
-            # Refresh from database to ensure we have the latest data
-            return_fine.refresh_from_db()
-            return_request.refresh_from_db()
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    UPDATE return_fine 
+                    SET fine_amount = %s, is_paid = %s 
+                    WHERE id = %s
+                """, [str(new_amount), False, return_fine.id])
+                
+                # Also update borrow request fine_amount
+                cursor.execute("""
+                    UPDATE borrow_request 
+                    SET fine_amount = %s 
+                    WHERE id = %s
+                """, [str(new_amount), return_request.borrowing.id])
             
             # Send notification to customer
             borrow_request = return_request.borrowing
@@ -1186,17 +1451,15 @@ class IncreaseReturnFineView(APIView):
                 notification_type="fine_added"
             )
             
-            serializer = ReturnRequestSerializer(return_request)
-            
             return Response({
                 'success': True,
                 'message': f'Fine increased by ${additional_amount:.2f}',
                 'data': {
-                    'return_request': serializer.data,
+                    'return_request_id': return_request.id,
                     'fine_id': return_fine.id,
                     'previous_amount': float(current_amount),
                     'additional_amount': float(additional),
-                    'new_fine_amount': float(return_fine.fine_amount)
+                    'new_fine_amount': float(new_amount)
                 }
             }, status=status.HTTP_200_OK)
             

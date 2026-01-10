@@ -165,15 +165,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
           'ProfileScreen: Consumer builder called - AuthProvider user: ${authProvider.user?.firstName} ${authProvider.user?.lastName}',
         );
 
+        final theme = Theme.of(context);
         final localizations = AppLocalizations.of(context);
         return Scaffold(
           appBar: AppBar(
-            title: Text(localizations.profile),
+            title: Text(
+              localizations.profile,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 20,
+                letterSpacing: 0.5,
+              ),
+            ),
+            backgroundColor: theme.colorScheme.primary,
+            foregroundColor: theme.colorScheme.onPrimary,
+            elevation: 0,
+            shadowColor: Colors.transparent,
+            flexibleSpace: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    theme.colorScheme.primary,
+                    theme.colorScheme.primary.withValues(alpha: 204),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+            ),
             actions: [
               if (!_isEditing)
-                IconButton(
-                  icon: const Icon(Icons.edit),
-                  onPressed: () => setState(() => _isEditing = true),
+                Container(
+                  margin: const EdgeInsets.only(right: 8, top: 8, bottom: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: IconButton(
+                    icon: const Icon(Icons.edit),
+                    onPressed: () => setState(() => _isEditing = true),
+                  ),
                 ),
             ],
           ),
@@ -323,115 +354,131 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildPersonalInfoSection() {
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(AppDimensions.paddingM),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Builder(
-              builder: (context) {
-                final localizations = AppLocalizations.of(context);
-                return Text(
-                  localizations.personalInformation,
-                  style: TextStyle(
-                    fontSize: AppDimensions.fontSizeL,
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.onSurface,
-                  ),
-                );
-              },
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
             ),
-            const SizedBox(height: AppDimensions.spacingM),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(AppDimensions.paddingM),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Builder(
+                builder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return Text(
+                    localizations.personalInformation,
+                    style: TextStyle(
+                      fontSize: AppDimensions.fontSizeL,
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: AppDimensions.spacingM),
 
-            Row(
-              children: [
-                Builder(
-                  builder: (context) {
-                    final localizations = AppLocalizations.of(context);
-                    return Expanded(
-                      child: CustomTextField(
-                        label: localizations.firstNameLabel,
-                        controller: _firstNameController,
-                        enabled: _isEditing,
-                        validator: Validators.name,
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(width: AppDimensions.spacingM),
-                Builder(
-                  builder: (context) {
-                    final localizations = AppLocalizations.of(context);
-                    return Expanded(
-                      child: CustomTextField(
-                        label: localizations.lastNameLabel,
-                        controller: _lastNameController,
-                        enabled: _isEditing,
-                        validator: Validators.name,
-                      ),
-                    );
-                  },
+              Row(
+                children: [
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Expanded(
+                        child: CustomTextField(
+                          label: localizations.firstNameLabel,
+                          controller: _firstNameController,
+                          enabled: _isEditing,
+                          validator: Validators.name,
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(width: AppDimensions.spacingM),
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return Expanded(
+                        child: CustomTextField(
+                          label: localizations.lastNameLabel,
+                          controller: _lastNameController,
+                          enabled: _isEditing,
+                          validator: Validators.name,
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: AppDimensions.spacingM),
+
+              // Date of Birth Field
+              Builder(
+                builder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return CustomTextField(
+                    label: localizations.dateOfBirthLabel,
+                    controller: _dateOfBirthController,
+                    enabled: _isEditing,
+                    keyboardType: TextInputType.datetime,
+                    prefixIcon: const Icon(Icons.calendar_today_outlined),
+                    hint: localizations.dateFormatHint,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return null; // Date of birth is optional
+                      }
+                      // Basic date format validation
+                      // ignore: deprecated_member_use
+                      final dateRegex = RegExp(r'^\d{4}-\d{2}-\d{2}$');
+                      if (!dateRegex.hasMatch(value)) {
+                        return localizations.pleaseEnterDateFormat;
+                      }
+                      return null;
+                    },
+                  );
+                },
+              ),
+
+              // Calendar button for date selection
+              if (_isEditing) ...[
+                const SizedBox(height: AppDimensions.spacingS),
+                Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return ElevatedButton.icon(
+                        onPressed: _selectDateOfBirth,
+                        icon: const Icon(Icons.calendar_today, size: 16),
+                        label: Text(localizations.selectDate),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Theme.of(
+                            context,
+                          ).colorScheme.primary,
+                          foregroundColor: Theme.of(
+                            context,
+                          ).colorScheme.onPrimary,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                 ),
               ],
-            ),
-
-            const SizedBox(height: AppDimensions.spacingM),
-
-            // Date of Birth Field
-            Builder(
-              builder: (context) {
-                final localizations = AppLocalizations.of(context);
-                return CustomTextField(
-                  label: localizations.dateOfBirthLabel,
-                  controller: _dateOfBirthController,
-                  enabled: _isEditing,
-                  keyboardType: TextInputType.datetime,
-                  prefixIcon: const Icon(Icons.calendar_today_outlined),
-                  hint: localizations.dateFormatHint,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return null; // Date of birth is optional
-                    }
-                    // Basic date format validation
-                    // ignore: deprecated_member_use
-                    final dateRegex = RegExp(r'^\d{4}-\d{2}-\d{2}$');
-                    if (!dateRegex.hasMatch(value)) {
-                      return localizations.pleaseEnterDateFormat;
-                    }
-                    return null;
-                  },
-                );
-              },
-            ),
-
-            // Calendar button for date selection
-            if (_isEditing) ...[
-              const SizedBox(height: AppDimensions.spacingS),
-              Align(
-                alignment: AlignmentDirectional.centerEnd,
-                child: Builder(
-                  builder: (context) {
-                    final localizations = AppLocalizations.of(context);
-                    return ElevatedButton.icon(
-                      onPressed: _selectDateOfBirth,
-                      icon: const Icon(Icons.calendar_today, size: 16),
-                      label: Text(localizations.selectDate),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Theme.of(context).colorScheme.primary,
-                        foregroundColor: Theme.of(
-                          context,
-                        ).colorScheme.onPrimary,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -439,128 +486,253 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildContactInfoSection() {
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(AppDimensions.paddingM),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Builder(
-              builder: (context) {
-                final localizations = AppLocalizations.of(context);
-                return Row(
-                  children: [
-                    Text(
-                      localizations.contactInformation,
-                      style: TextStyle(
-                        fontSize: AppDimensions.fontSizeL,
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
-                    ),
-                    const Spacer(),
-                    if (_isEditing && !_isChangingEmail)
-                      TextButton.icon(
-                        onPressed: _handleStartEmailChange,
-                        icon: const Icon(Icons.edit, size: 16),
-                        label: Text(localizations.changeEmail),
-                      ),
-                  ],
-                );
-              },
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
             ),
-            const SizedBox(height: AppDimensions.spacingM),
-
-            // Current email display
-            if (!_isChangingEmail)
-              CustomTextField(
-                label: 'Email',
-                controller: _emailController,
-                enabled: false,
-                keyboardType: TextInputType.emailAddress,
-                prefixIcon: const Icon(Icons.email_outlined),
-                suffixIcon: _isEditing
-                    ? IconButton(
-                        icon: const Icon(Icons.edit),
-                        onPressed: _handleStartEmailChange,
-                      )
-                    : null,
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(AppDimensions.paddingM),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Builder(
+                builder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return Row(
+                    children: [
+                      Text(
+                        localizations.contactInformation,
+                        style: TextStyle(
+                          fontSize: AppDimensions.fontSizeL,
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                      ),
+                      const Spacer(),
+                      if (_isEditing && !_isChangingEmail)
+                        TextButton.icon(
+                          onPressed: _handleStartEmailChange,
+                          icon: const Icon(Icons.edit, size: 16),
+                          label: Text(localizations.changeEmail),
+                        ),
+                    ],
+                  );
+                },
               ),
+              const SizedBox(height: AppDimensions.spacingM),
 
-            // Email change form
-            if (_isChangingEmail) ...[
+              // Current email display
+              if (!_isChangingEmail)
+                CustomTextField(
+                  label: 'Email',
+                  controller: _emailController,
+                  enabled: false,
+                  keyboardType: TextInputType.emailAddress,
+                  prefixIcon: const Icon(Icons.email_outlined),
+                  suffixIcon: _isEditing
+                      ? IconButton(
+                          icon: const Icon(Icons.edit),
+                          onPressed: _handleStartEmailChange,
+                        )
+                      : null,
+                ),
+
+              // Email change form
+              if (_isChangingEmail) ...[
+                Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return Column(
+                      children: [
+                        CustomTextField(
+                          label: localizations.newEmailLabel,
+                          controller: _newEmailController,
+                          enabled: true,
+                          keyboardType: TextInputType.emailAddress,
+                          validator: Validators.email,
+                          prefixIcon: const Icon(Icons.email_outlined),
+                        ),
+                        const SizedBox(height: AppDimensions.spacingM),
+                        CustomTextField(
+                          label: localizations.confirmNewEmailLabel,
+                          controller: _confirmEmailController,
+                          enabled: true,
+                          keyboardType: TextInputType.emailAddress,
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return localizations.pleaseConfirmNewEmail;
+                            }
+                            if (value != _newEmailController.text) {
+                              return localizations.emailAddressesDoNotMatch;
+                            }
+                            return null;
+                          },
+                          prefixIcon: const Icon(Icons.email_outlined),
+                        ),
+                        const SizedBox(height: AppDimensions.spacingM),
+                        CustomTextField(
+                          label: localizations.currentPasswordLabel,
+                          controller: _currentPasswordController,
+                          enabled: true,
+                          obscureText: _obscureCurrentPassword,
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return localizations.currentPasswordRequired;
+                            }
+                            return null;
+                          },
+                          prefixIcon: const Icon(Icons.lock_outline),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscureCurrentPassword
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _obscureCurrentPassword =
+                                    !_obscureCurrentPassword;
+                              });
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: AppDimensions.spacingM),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: CustomButton(
+                                text: localizations.cancel,
+                                onPressed: _handleCancelEmailChange,
+                                type: ButtonType.secondary,
+                              ),
+                            ),
+                            const SizedBox(width: AppDimensions.spacingM),
+                            Expanded(
+                              child: CustomButton(
+                                text: localizations.changeEmail,
+                                onPressed: _handleChangeEmail,
+                                type: ButtonType.primary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ],
+
+              const SizedBox(height: AppDimensions.spacingM),
+
+              Builder(
+                builder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return CustomTextField(
+                    label: localizations.phoneLabel,
+                    controller: _phoneController,
+                    enabled: _isEditing,
+                    keyboardType: TextInputType.phone,
+                    validator: (value) {
+                      // Phone is optional but if provided, should be valid format
+                      if (value != null && value.trim().isNotEmpty) {
+                        // ignore: deprecated_member_use
+                        final phoneRegex = RegExp(r'^\+?[\d\s\-\(\)]{7,20}$');
+                        if (!phoneRegex.hasMatch(value.trim())) {
+                          return localizations.pleaseEnterValidPhone;
+                        }
+                      }
+                      return null;
+                    },
+                    prefixIcon: const Icon(Icons.phone_outlined),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAddressSection() {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(AppDimensions.paddingM),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Builder(
+                builder: (context) {
+                  final localizations = AppLocalizations.of(context);
+                  return Text(
+                    localizations.addressInformation,
+                    style: TextStyle(
+                      fontSize: AppDimensions.fontSizeL,
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: AppDimensions.spacingM),
+
               Builder(
                 builder: (context) {
                   final localizations = AppLocalizations.of(context);
                   return Column(
                     children: [
                       CustomTextField(
-                        label: localizations.newEmailLabel,
-                        controller: _newEmailController,
-                        enabled: true,
-                        keyboardType: TextInputType.emailAddress,
-                        validator: Validators.email,
-                        prefixIcon: const Icon(Icons.email_outlined),
+                        label: localizations.addressLabel,
+                        controller: _addressController,
+                        enabled: _isEditing,
+                        maxLines: 2,
+                        prefixIcon: const Icon(Icons.location_on_outlined),
                       ),
                       const SizedBox(height: AppDimensions.spacingM),
                       CustomTextField(
-                        label: localizations.confirmNewEmailLabel,
-                        controller: _confirmEmailController,
-                        enabled: true,
-                        keyboardType: TextInputType.emailAddress,
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return localizations.pleaseConfirmNewEmail;
-                          }
-                          if (value != _newEmailController.text) {
-                            return localizations.emailAddressesDoNotMatch;
-                          }
-                          return null;
-                        },
-                        prefixIcon: const Icon(Icons.email_outlined),
-                      ),
-                      const SizedBox(height: AppDimensions.spacingM),
-                      CustomTextField(
-                        label: localizations.currentPasswordLabel,
-                        controller: _currentPasswordController,
-                        enabled: true,
-                        obscureText: _obscureCurrentPassword,
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return localizations.currentPasswordRequired;
-                          }
-                          return null;
-                        },
-                        prefixIcon: const Icon(Icons.lock_outline),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscureCurrentPassword
-                                ? Icons.visibility_outlined
-                                : Icons.visibility_off_outlined,
-                          ),
-                          onPressed: () {
-                            setState(() {
-                              _obscureCurrentPassword =
-                                  !_obscureCurrentPassword;
-                            });
-                          },
-                        ),
+                        label: localizations.cityLabel,
+                        controller: _cityController,
+                        enabled: _isEditing,
                       ),
                       const SizedBox(height: AppDimensions.spacingM),
                       Row(
                         children: [
                           Expanded(
-                            child: CustomButton(
-                              text: localizations.cancel,
-                              onPressed: _handleCancelEmailChange,
-                              type: ButtonType.secondary,
+                            child: CustomTextField(
+                              label: localizations.zipCodeLabel,
+                              controller: _zipCodeController,
+                              enabled: _isEditing,
+                              keyboardType: TextInputType.number,
                             ),
                           ),
                           const SizedBox(width: AppDimensions.spacingM),
                           Expanded(
-                            child: CustomButton(
-                              text: localizations.changeEmail,
-                              onPressed: _handleChangeEmail,
-                              type: ButtonType.primary,
+                            child: CustomTextField(
+                              label: localizations.countryLabel,
+                              controller: _countryController,
+                              enabled: _isEditing,
                             ),
                           ),
                         ],
@@ -570,104 +742,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 },
               ),
             ],
-
-            const SizedBox(height: AppDimensions.spacingM),
-
-            Builder(
-              builder: (context) {
-                final localizations = AppLocalizations.of(context);
-                return CustomTextField(
-                  label: localizations.phoneLabel,
-                  controller: _phoneController,
-                  enabled: _isEditing,
-                  keyboardType: TextInputType.phone,
-                  validator: (value) {
-                    // Phone is optional but if provided, should be valid format
-                    if (value != null && value.trim().isNotEmpty) {
-                      // ignore: deprecated_member_use
-                      final phoneRegex = RegExp(r'^\+?[\d\s\-\(\)]{7,20}$');
-                      if (!phoneRegex.hasMatch(value.trim())) {
-                        return localizations.pleaseEnterValidPhone;
-                      }
-                    }
-                    return null;
-                  },
-                  prefixIcon: const Icon(Icons.phone_outlined),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAddressSection() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(AppDimensions.paddingM),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Builder(
-              builder: (context) {
-                final localizations = AppLocalizations.of(context);
-                return Text(
-                  localizations.addressInformation,
-                  style: TextStyle(
-                    fontSize: AppDimensions.fontSizeL,
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.onSurface,
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: AppDimensions.spacingM),
-
-            Builder(
-              builder: (context) {
-                final localizations = AppLocalizations.of(context);
-                return Column(
-                  children: [
-                    CustomTextField(
-                      label: localizations.addressLabel,
-                      controller: _addressController,
-                      enabled: _isEditing,
-                      maxLines: 2,
-                      prefixIcon: const Icon(Icons.location_on_outlined),
-                    ),
-                    const SizedBox(height: AppDimensions.spacingM),
-                    CustomTextField(
-                      label: localizations.cityLabel,
-                      controller: _cityController,
-                      enabled: _isEditing,
-                    ),
-                    const SizedBox(height: AppDimensions.spacingM),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: CustomTextField(
-                            label: localizations.zipCodeLabel,
-                            controller: _zipCodeController,
-                            enabled: _isEditing,
-                            keyboardType: TextInputType.number,
-                          ),
-                        ),
-                        const SizedBox(width: AppDimensions.spacingM),
-                        Expanded(
-                          child: CustomTextField(
-                            label: localizations.countryLabel,
-                            controller: _countryController,
-                            enabled: _isEditing,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                );
-              },
-            ),
-          ],
+          ),
         ),
       ),
     );

@@ -28,7 +28,9 @@ class OrdersService {
     try {
       // Build query parameters
       final queryParams = <String, String>{'order_type': orderType};
-      if (status != null && status.isNotEmpty && status.toLowerCase() != 'all') {
+      if (status != null &&
+          status.isNotEmpty &&
+          status.toLowerCase() != 'all') {
         queryParams['status'] = status;
       }
       if (search != null && search.isNotEmpty) {
@@ -37,14 +39,14 @@ class OrdersService {
 
       // Build URL with query parameters
       final queryString = queryParams.entries
-          .map((e) => '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}')
+          .map(
+            (e) =>
+                '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}',
+          )
           .join('&');
       final url = '/delivery/orders/?$queryString';
 
-      final response = await ApiClient.get(
-        url,
-        token: _authToken,
-      );
+      final response = await ApiClient.get(url, token: _authToken);
 
       if (ApiClient.isSuccess(response)) {
         final responseData = ApiClient.handleResponse(response);
@@ -61,8 +63,30 @@ class OrdersService {
         try {
           // Try to access as map first
           if (responseData is Map<String, dynamic>) {
-            ordersData =
-                responseData['results'] ?? responseData['orders'] ?? [];
+            // Check for paginated response or standard response format
+            final results = responseData['results'];
+            final orders = responseData['orders'];
+            final data = responseData['data'];
+
+            // Handle different response formats
+            if (results != null) {
+              if (results is List) {
+                ordersData = results;
+              } else if (results is Map<String, dynamic> &&
+                  results['results'] is List) {
+                // Nested paginated response
+                ordersData = results['results'] as List;
+              } else {
+                ordersData = [];
+              }
+            } else if (orders != null && orders is List) {
+              ordersData = orders;
+            } else if (data != null && data is List) {
+              ordersData = data;
+            } else {
+              ordersData = [];
+            }
+
             if (kDebugMode) {
               debugPrint(
                 'OrdersService: Parsing as map, ${ordersData.length} items',
@@ -145,10 +169,14 @@ class OrdersService {
     try {
       // Build query parameters
       final queryParams = <String, String>{};
-      if (status != null && status.isNotEmpty && status.toLowerCase() != 'all') {
+      if (status != null &&
+          status.isNotEmpty &&
+          status.toLowerCase() != 'all') {
         queryParams['status'] = status;
       }
-      if (orderType != null && orderType.isNotEmpty && orderType.toLowerCase() != 'all') {
+      if (orderType != null &&
+          orderType.isNotEmpty &&
+          orderType.toLowerCase() != 'all') {
         queryParams['order_type'] = orderType;
       }
       if (search != null && search.isNotEmpty) {
@@ -159,15 +187,15 @@ class OrdersService {
       String url = '/delivery/orders/';
       if (queryParams.isNotEmpty) {
         final queryString = queryParams.entries
-            .map((e) => '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}')
+            .map(
+              (e) =>
+                  '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}',
+            )
             .join('&');
         url = '$url?$queryString';
       }
 
-      final response = await ApiClient.get(
-        url,
-        token: _authToken,
-      );
+      final response = await ApiClient.get(url, token: _authToken);
 
       if (ApiClient.isSuccess(response)) {
         final responseData = ApiClient.handleResponse(response);
@@ -184,7 +212,30 @@ class OrdersService {
         try {
           // Try to access as map first
           if (responseData is Map<String, dynamic>) {
-            ordersData = responseData['orders'] ?? [];
+            // Check for paginated response or standard response format
+            final results = responseData['results'];
+            final orders = responseData['orders'];
+            final data = responseData['data'];
+
+            // Handle different response formats
+            if (results != null) {
+              if (results is List) {
+                ordersData = results;
+              } else if (results is Map<String, dynamic> &&
+                  results['results'] is List) {
+                // Nested paginated response
+                ordersData = results['results'] as List;
+              } else {
+                ordersData = [];
+              }
+            } else if (orders != null && orders is List) {
+              ordersData = orders;
+            } else if (data != null && data is List) {
+              ordersData = data;
+            } else {
+              ordersData = [];
+            }
+
             if (kDebugMode) {
               debugPrint(
                 'OrdersService: Parsing as map, ${ordersData.length} items',
@@ -407,7 +458,9 @@ class OrdersService {
   // Update delivery assignment status (for delivery managers)
   // Accept delivery assignment using the new dedicated endpoint
   // POST /api/delivery/assignments/{id}/accept
-  Future<Map<String, dynamic>> acceptDeliveryAssignment(int assignmentId) async {
+  Future<Map<String, dynamic>> acceptDeliveryAssignment(
+    int assignmentId,
+  ) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/delivery/assignments/$assignmentId/accept/'),
@@ -428,7 +481,8 @@ class OrdersService {
       } else {
         return {
           'success': false,
-          'message': data['error'] ?? data['message'] ?? 'Failed to accept assignment',
+          'message':
+              data['error'] ?? data['message'] ?? 'Failed to accept assignment',
           'error_code': data['error_code'] ?? 'ACCEPT_FAILED',
         };
       }
@@ -556,7 +610,11 @@ class OrdersService {
   }
 
   // Edit notes for an order
-  Future<void> editOrderNotes(String orderId, String notes, {int? noteId}) async {
+  Future<void> editOrderNotes(
+    String orderId,
+    String notes, {
+    int? noteId,
+  }) async {
     try {
       final body = <String, dynamic>{
         'order_id': orderId,
@@ -566,7 +624,7 @@ class OrdersService {
       if (noteId != null) {
         body['note_id'] = noteId;
       }
-      
+
       final response = await ApiClient.post(
         '/delivery/activities/log/note/',
         body: body,
@@ -593,14 +651,11 @@ class OrdersService {
   // Delete notes for an order
   Future<void> deleteOrderNotes(String orderId, {int? noteId}) async {
     try {
-      final body = <String, dynamic>{
-        'order_id': orderId,
-        'action': 'delete',
-      };
+      final body = <String, dynamic>{'order_id': orderId, 'action': 'delete'};
       if (noteId != null) {
         body['note_id'] = noteId;
       }
-      
+
       final response = await ApiClient.post(
         '/delivery/activities/log/note/',
         body: body,
@@ -663,7 +718,7 @@ class OrdersService {
 
       if (ApiClient.isSuccess(response)) {
         final responseData = ApiClient.handleResponse(response);
-        
+
         if (responseData is Map<String, dynamic>) {
           final activities = responseData['activities'] as List<dynamic>? ?? [];
           return activities.cast<Map<String, dynamic>>();

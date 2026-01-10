@@ -154,8 +154,8 @@ class LibraryUpdateSerializer(serializers.ModelSerializer):
         if logo == 'not_provided' or logo == 'KEEP_EXISTING':
             # Logo field was not included in the request or user wants to keep existing
             validated_data.pop('logo', None)  # Remove logo from update data
-        elif logo is None:
-            # User wants to delete the current logo
+        elif logo is None or logo == '' or (isinstance(logo, str) and logo.strip() == ''):
+            # User wants to delete the current logo (None, empty string, or whitespace)
             if instance.logo:
                 instance.logo.delete(save=False)
             validated_data['logo'] = None

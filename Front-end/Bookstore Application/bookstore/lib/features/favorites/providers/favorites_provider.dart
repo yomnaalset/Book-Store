@@ -49,10 +49,12 @@ class FavoritesProvider extends ChangeNotifier {
         );
 
         if (success) {
-          // Then add to local storage
-          _favorites.add(book);
-          await _saveFavoritesToLocal();
-          notifyListeners();
+          // Then add to local storage (even if already on server)
+          if (!isFavorite(book.id.toString())) {
+            _favorites.add(book);
+            await _saveFavoritesToLocal();
+            notifyListeners();
+          }
         } else {
           _setError('Failed to add to favorites on server');
         }
@@ -119,12 +121,22 @@ class FavoritesProvider extends ChangeNotifier {
     _clearError();
 
     try {
+      debugPrint('FavoritesProvider: Loading favorites from server...');
       final serverFavorites = await _favoritesService.getFavorites(token);
+      debugPrint(
+        'FavoritesProvider: Received ${serverFavorites.length} favorites from server',
+      );
+
       _favorites = serverFavorites;
       await _saveFavoritesToLocal();
+      debugPrint(
+        'FavoritesProvider: Saved ${_favorites.length} favorites to local storage',
+      );
       notifyListeners();
       _setLoading(false);
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('FavoritesProvider: Error loading favorites: $e');
+      debugPrint('FavoritesProvider: Stack trace: $stackTrace');
       _setError('Failed to load favorites: ${e.toString()}');
       _setLoading(false);
     }

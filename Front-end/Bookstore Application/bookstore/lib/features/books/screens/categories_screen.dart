@@ -117,9 +117,16 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
     }
 
     try {
-      // Always load all books first, then filter by category if needed
-      debugPrint('CategoriesScreen: Loading all books from API');
-      await booksProvider.getBooks();
+      // Load books filtered by category if a category is selected
+      if (_selectedCategoryId != null) {
+        debugPrint(
+          'CategoriesScreen: Loading books for category $_selectedCategoryId',
+        );
+        await booksProvider.getBooks(categoryId: _selectedCategoryId);
+      } else {
+        debugPrint('CategoriesScreen: Loading all books from API');
+        await booksProvider.getBooks();
+      }
 
       debugPrint(
         'CategoriesScreen: Books loaded successfully, count: ${booksProvider.books.length}',
@@ -140,17 +147,49 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
       builder: (context, authProvider, child) {
         return Scaffold(
           appBar: AppBar(
-            title: Text(_getAppBarTitle()),
+            title: Text(
+              _getAppBarTitle(),
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 20,
+                letterSpacing: 0.5,
+              ),
+            ),
+            backgroundColor: Theme.of(context).colorScheme.primary,
+            foregroundColor: Theme.of(context).colorScheme.onPrimary,
+            elevation: 0,
+            shadowColor: Colors.transparent,
+            flexibleSpace: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Theme.of(context).colorScheme.primary,
+                    Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 204),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+            ),
             actions: [
-              Builder(
-                builder: (context) {
-                  final localizations = AppLocalizations.of(context);
-                  return IconButton(
-                    onPressed: _loadBooks,
-                    icon: const Icon(Icons.refresh),
-                    tooltip: localizations.refresh,
-                  );
-                },
+              Container(
+                margin: const EdgeInsets.only(right: 8, top: 8, bottom: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return IconButton(
+                      onPressed: _loadBooks,
+                      icon: const Icon(Icons.refresh),
+                      tooltip: localizations.refresh,
+                    );
+                  },
+                ),
               ),
             ],
           ),

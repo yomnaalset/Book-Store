@@ -57,20 +57,52 @@ class _CartScreenState extends State<CartScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text(localizations.shoppingCart),
+        title: Text(
+          localizations.shoppingCart,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+            letterSpacing: 0.5,
+          ),
+        ),
+        backgroundColor: theme.colorScheme.primary,
+        foregroundColor: theme.colorScheme.onPrimary,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                theme.colorScheme.primary,
+                theme.colorScheme.primary.withValues(alpha: 204),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
         actions: [
           Consumer<CartProvider>(
             builder: (context, cartProvider, child) {
               if (cartProvider.items.isNotEmpty) {
-                return TextButton(
-                  onPressed: () => _showClearCartDialog(),
-                  child: Text(
-                    localizations.clearAll,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onPrimary,
+                return Container(
+                  margin: const EdgeInsets.only(right: 8, top: 8, bottom: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: TextButton(
+                    onPressed: () => _showClearCartDialog(),
+                    child: Text(
+                      localizations.clearAll,
+                      style: TextStyle(
+                        color: theme.colorScheme.onPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 );
@@ -144,11 +176,21 @@ class _CartScreenState extends State<CartScreen> {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: AppDimensions.spacingXL),
-            CustomButton(
-              text: localizations.continueShopping,
+            ElevatedButton(
               onPressed: () => Navigator.pop(context),
-              type: ButtonType.primary,
-              size: ButtonSize.large,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 16,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 2,
+              ),
+              child: Text(localizations.continueShopping),
             ),
           ],
         ),
@@ -159,162 +201,178 @@ class _CartScreenState extends State<CartScreen> {
   Widget _buildCartItem(CartItem item, CartProvider cartProvider) {
     return Card(
       margin: const EdgeInsets.only(bottom: AppDimensions.spacingM),
-      child: Padding(
-        padding: const EdgeInsets.all(AppDimensions.paddingM),
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Book Image
-              Container(
-                width: 80,
-                height: 100,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(AppDimensions.radiusS),
-                  color: Theme.of(context).colorScheme.surface,
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(AppDimensions.radiusS),
-                  child: item.book.primaryImageUrl != null
-                      ? Image.network(
-                          item.book.primaryImageUrl!,
-                          fit: BoxFit.cover,
-                          loadingBuilder: (context, child, loadingProgress) {
-                            if (loadingProgress == null) return child;
-                            return Container(
-                              color: Theme.of(context).colorScheme.surface,
-                              child: Center(
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    Theme.of(context).colorScheme.primary,
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(AppDimensions.paddingM),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Book Image
+                Container(
+                  width: 80,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(AppDimensions.radiusS),
+                    color: Theme.of(context).colorScheme.surface,
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(AppDimensions.radiusS),
+                    child: item.book.primaryImageUrl != null
+                        ? Image.network(
+                            item.book.primaryImageUrl!,
+                            fit: BoxFit.cover,
+                            loadingBuilder: (context, child, loadingProgress) {
+                              if (loadingProgress == null) return child;
+                              return Container(
+                                color: Theme.of(context).colorScheme.surface,
+                                child: Center(
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Theme.of(context).colorScheme.primary,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            );
-                          },
-                          errorBuilder: (context, error, stackTrace) =>
-                              _buildDefaultBookCover(),
-                        )
-                      : _buildDefaultBookCover(),
+                              );
+                            },
+                            errorBuilder: (context, error, stackTrace) =>
+                                _buildDefaultBookCover(),
+                          )
+                        : _buildDefaultBookCover(),
+                  ),
                 ),
-              ),
-              const SizedBox(width: AppDimensions.spacingM),
+                const SizedBox(width: AppDimensions.spacingM),
 
-              // Book Details
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.book.title,
-                      style: TextStyle(
-                        fontSize: AppDimensions.fontSizeM,
-                        fontWeight: FontWeight.w600,
-                        color: Theme.of(context).colorScheme.onSurface,
+                // Book Details
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.book.title,
+                        style: TextStyle(
+                          fontSize: AppDimensions.fontSizeM,
+                          fontWeight: FontWeight.w600,
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: AppDimensions.spacingS),
-                    Builder(
-                      builder: (context) {
-                        final localizations = AppLocalizations.of(context);
-                        return Text(
-                          localizations.byAuthorCart(
-                            item.book.author?.name ??
-                                localizations.unknownAuthor,
-                          ),
-                          style: TextStyle(
-                            fontSize: AppDimensions.fontSizeS,
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurfaceVariant,
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: AppDimensions.spacingS),
-
-                    // Price
-                    Row(
-                      children: [
-                        if (item.hasDiscount) ...[
-                          Text(
-                            '\$${item.price.toStringAsFixed(2)}',
+                      const SizedBox(height: AppDimensions.spacingS),
+                      Builder(
+                        builder: (context) {
+                          final localizations = AppLocalizations.of(context);
+                          return Text(
+                            localizations.byAuthorCart(
+                              item.book.author?.name ??
+                                  localizations.unknownAuthor,
+                            ),
                             style: TextStyle(
                               fontSize: AppDimensions.fontSizeS,
                               color: Theme.of(
                                 context,
                               ).colorScheme.onSurfaceVariant,
-                              decoration: TextDecoration.lineThrough,
                             ),
-                          ),
-                          const SizedBox(width: AppDimensions.spacingS),
-                        ],
-                        Text(
-                          '\$${(item.discountPrice ?? item.price).toStringAsFixed(2)}',
-                          style: TextStyle(
-                            fontSize: AppDimensions.fontSizeM,
-                            fontWeight: FontWeight.w600,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: AppDimensions.spacingM),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: AppDimensions.spacingS),
 
-                    // Quantity Controls and Remove Button
-                    Row(
-                      children: [
-                        _buildQuantityControls(item, cartProvider),
-                        const Spacer(),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
+                      // Price
+                      Row(
+                        children: [
+                          if (item.hasDiscount) ...[
                             Text(
-                              '\$${item.totalPrice.toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                fontSize: AppDimensions.fontSizeM,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.success,
+                              '\$${item.price.toStringAsFixed(2)}',
+                              style: TextStyle(
+                                fontSize: AppDimensions.fontSizeS,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                                decoration: TextDecoration.lineThrough,
                               ),
                             ),
-                            const SizedBox(height: AppDimensions.spacingS),
-                            Container(
-                              decoration: BoxDecoration(
-                                color: AppColors.error.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(
-                                  AppDimensions.radiusS,
-                                ),
-                                border: Border.all(
-                                  color: AppColors.error.withValues(alpha: 0.3),
-                                  width: 1,
-                                ),
-                              ),
-                              child: IconButton(
-                                onPressed: () =>
-                                    _removeItem(item, cartProvider),
-                                icon: const Icon(
-                                  Icons.delete_outline,
-                                  color: AppColors.error,
-                                  size: 20,
-                                ),
-                                constraints: const BoxConstraints(
-                                  minWidth: 40,
-                                  minHeight: 40,
-                                ),
-                                tooltip: 'Remove item from cart',
-                              ),
-                            ),
+                            const SizedBox(width: AppDimensions.spacingS),
                           ],
-                        ),
-                      ],
-                    ),
-                  ],
+                          Text(
+                            '\$${(item.discountPrice ?? item.price).toStringAsFixed(2)}',
+                            style: TextStyle(
+                              fontSize: AppDimensions.fontSizeM,
+                              fontWeight: FontWeight.w600,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppDimensions.spacingM),
+
+                      // Quantity Controls and Remove Button
+                      Row(
+                        children: [
+                          _buildQuantityControls(item, cartProvider),
+                          const Spacer(),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                '\$${item.totalPrice.toStringAsFixed(2)}',
+                                style: const TextStyle(
+                                  fontSize: AppDimensions.fontSizeM,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.success,
+                                ),
+                              ),
+                              const SizedBox(height: AppDimensions.spacingS),
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: AppColors.error.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(
+                                    AppDimensions.radiusS,
+                                  ),
+                                  border: Border.all(
+                                    color: AppColors.error.withValues(
+                                      alpha: 0.3,
+                                    ),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: IconButton(
+                                  onPressed: () =>
+                                      _removeItem(item, cartProvider),
+                                  icon: const Icon(
+                                    Icons.delete_outline,
+                                    color: AppColors.error,
+                                    size: 20,
+                                  ),
+                                  constraints: const BoxConstraints(
+                                    minWidth: 40,
+                                    minHeight: 40,
+                                  ),
+                                  tooltip: 'Remove item from cart',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

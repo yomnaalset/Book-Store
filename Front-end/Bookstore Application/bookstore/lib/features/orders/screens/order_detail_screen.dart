@@ -6,6 +6,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 import '../../../core/widgets/common/loading_indicator.dart';
 import '../../../core/services/location_management_service.dart';
+import '../../../core/services/api_config.dart';
 import '../../../core/localization/app_localizations.dart';
 import '../models/order.dart';
 import '../models/order_note.dart';
@@ -383,6 +384,50 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       default:
         return authorType ?? localizations.unknown;
     }
+  }
+
+  Widget _buildBookImage(OrderItem item) {
+    final imageUrl = item.bookImage;
+    final fullImageUrl = imageUrl != null && imageUrl.isNotEmpty
+        ? ApiConfig.buildImageUrl(imageUrl) ?? imageUrl
+        : null;
+
+    return Container(
+      width: 60,
+      height: 80,
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppDimensions.radiusS),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: fullImageUrl != null && fullImageUrl.isNotEmpty
+          ? ClipRRect(
+              borderRadius: BorderRadius.circular(AppDimensions.radiusS),
+              child: Image.network(
+                fullImageUrl,
+                width: 60,
+                height: 80,
+                fit: BoxFit.cover,
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) return child;
+                  return const Center(
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  );
+                },
+                errorBuilder: (context, error, stackTrace) {
+                  debugPrint(
+                    'OrderDetailScreen: Error loading book image: $error',
+                  );
+                  return const Icon(
+                    Icons.book,
+                    color: AppColors.textSecondary,
+                    size: 30,
+                  );
+                },
+              ),
+            )
+          : const Icon(Icons.book, color: AppColors.textSecondary, size: 30),
+    );
   }
 
   Widget _buildNoteCard(OrderNote note) {
@@ -977,6 +1022,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     if (_isLoading) {
       return Scaffold(
         appBar: AppBar(
@@ -991,9 +1037,30 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     if (_errorMessage != null) {
       return Scaffold(
         appBar: AppBar(
-          title: Text(AppLocalizations.of(context).orderDetails),
-          backgroundColor: AppColors.primary,
-          foregroundColor: AppColors.white,
+          title: Text(
+            AppLocalizations.of(context).orderDetails,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 20,
+              letterSpacing: 0.5,
+            ),
+          ),
+          backgroundColor: theme.colorScheme.primary,
+          foregroundColor: theme.colorScheme.onPrimary,
+          elevation: 0,
+          shadowColor: Colors.transparent,
+          flexibleSpace: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  theme.colorScheme.primary,
+                  theme.colorScheme.primary.withValues(alpha: 204),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+          ),
         ),
         body: Center(
           child: Column(
@@ -1023,9 +1090,30 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     if (_order == null) {
       return Scaffold(
         appBar: AppBar(
-          title: Text(AppLocalizations.of(context).orderDetails),
-          backgroundColor: AppColors.primary,
-          foregroundColor: AppColors.white,
+          title: Text(
+            AppLocalizations.of(context).orderDetails,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 20,
+              letterSpacing: 0.5,
+            ),
+          ),
+          backgroundColor: theme.colorScheme.primary,
+          foregroundColor: theme.colorScheme.onPrimary,
+          elevation: 0,
+          shadowColor: Colors.transparent,
+          flexibleSpace: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  theme.colorScheme.primary,
+                  theme.colorScheme.primary.withValues(alpha: 204),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+          ),
         ),
         body: const Center(
           child: Text(
@@ -1046,413 +1134,423 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         title: Builder(
           builder: (context) {
             final localizations = AppLocalizations.of(context);
-            return Text(localizations.orderNumberPrefix(_order!.orderNumber));
+            return Text(
+              localizations.orderNumberPrefix(_order!.orderNumber),
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 20,
+                letterSpacing: 0.5,
+              ),
+            );
           },
         ),
-        backgroundColor: AppColors.primary,
-        foregroundColor: AppColors.white,
+        backgroundColor: theme.colorScheme.primary,
+        foregroundColor: theme.colorScheme.onPrimary,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                theme.colorScheme.primary,
+                theme.colorScheme.primary.withValues(alpha: 204),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
         actions: [
-          IconButton(
-            onPressed: _loadOrderDetails,
-            icon: const Icon(Icons.refresh),
-            tooltip: AppLocalizations.of(context).refresh,
+          Container(
+            margin: const EdgeInsets.only(right: 8, top: 8, bottom: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              shape: BoxShape.circle,
+            ),
+            child: IconButton(
+              onPressed: _loadOrderDetails,
+              icon: const Icon(Icons.refresh),
+              tooltip: AppLocalizations.of(context).refresh,
+            ),
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _loadOrderDetails,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(AppDimensions.paddingM),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Order Status Section
-              Builder(
-                builder: (context) {
-                  final localizations = AppLocalizations.of(context);
-                  return _buildSectionCard(
-                    title: localizations.orderStatusLabel,
-                    icon: Icons.info_outline,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            localizations.currentStatus,
-                            style: const TextStyle(
-                              fontSize: AppDimensions.fontSizeM,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          _buildStatusChip(_order!.status, context),
-                        ],
-                      ),
-                      const SizedBox(height: AppDimensions.spacingM),
-                      _buildInfoRow(
-                        localizations.orderNumberLabel,
-                        _order!.orderNumber,
-                      ),
-                      _buildInfoRow(
-                        localizations.orderDateLabel,
-                        _formatDate(_order!.createdAt),
-                      ),
-                      _buildInfoRow(
-                        localizations.lastUpdated,
-                        _formatDate(_order!.updatedAt),
-                      ),
-                      // Show cancellation reason if order is cancelled
-                      if (_order!.status.toLowerCase() == 'cancelled') ...[
-                        const SizedBox(height: AppDimensions.spacingM),
-                        const Divider(),
-                        const SizedBox(height: AppDimensions.spacingS),
-                        Text(
-                          localizations.cancellationReason,
-                          style: const TextStyle(
-                            fontSize: AppDimensions.fontSizeM,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.error,
-                          ),
-                        ),
-                        const SizedBox(height: AppDimensions.spacingS),
-                        Container(
-                          padding: const EdgeInsets.all(AppDimensions.paddingM),
-                          decoration: BoxDecoration(
-                            color: AppColors.error.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(
-                              AppDimensions.radiusM,
-                            ),
-                            border: Border.all(
-                              color: AppColors.error.withValues(alpha: 0.3),
-                            ),
-                          ),
-                          child: Text(
-                            _order!.cancellationReason != null &&
-                                    _order!.cancellationReason!.isNotEmpty
-                                ? _order!.cancellationReason!
-                                : localizations.noCancellationReasonProvided,
-                            style: TextStyle(
-                              fontSize: AppDimensions.fontSizeM,
-                              color:
-                                  _order!.cancellationReason != null &&
-                                      _order!.cancellationReason!.isNotEmpty
-                                  ? AppColors.error
-                                  : AppColors.textSecondary,
-                              fontStyle:
-                                  _order!.cancellationReason == null ||
-                                      _order!.cancellationReason!.isEmpty
-                                  ? FontStyle.italic
-                                  : FontStyle.normal,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  );
-                },
-              ),
-
-              // Order Summary Section (only for purchase orders)
-              // Hide for borrowing orders (check both orderType and orderNumber prefix)
-              if (!isBorrowOrder)
+      body: SafeArea(
+        child: RefreshIndicator(
+          onRefresh: _loadOrderDetails,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: EdgeInsets.only(
+              left: AppDimensions.paddingM,
+              right: AppDimensions.paddingM,
+              top: AppDimensions.paddingM,
+              bottom: AppDimensions.paddingM,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Order Status Section
                 Builder(
                   builder: (context) {
                     final localizations = AppLocalizations.of(context);
+                    // Get effective status - check delivery assignment if available
+                    final effectiveStatus =
+                        _order!.deliveryAssignment != null &&
+                            _order!.deliveryAssignment!.status.toLowerCase() ==
+                                'in_delivery'
+                        ? 'in_delivery'
+                        : _order!.status;
                     return _buildSectionCard(
-                      title: localizations.orderSummary,
-                      icon: Icons.shopping_cart,
+                      title: localizations.orderStatusLabel,
+                      icon: Icons.info_outline,
                       children: [
-                        _buildInfoRow(
-                          localizations.numberOfBooks,
-                          '${_getTotalBookCount()}',
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              localizations.currentStatus,
+                              style: const TextStyle(
+                                fontSize: AppDimensions.fontSizeM,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            _buildStatusChip(effectiveStatus, context),
+                          ],
                         ),
+                        const SizedBox(height: AppDimensions.spacingM),
+                        _buildInfoRow(
+                          localizations.orderNumberLabel,
+                          _order!.orderNumber,
+                        ),
+                        _buildInfoRow(
+                          localizations.orderDateLabel,
+                          _formatDate(_order!.createdAt),
+                        ),
+                        _buildInfoRow(
+                          localizations.lastUpdated,
+                          _formatDate(_order!.updatedAt),
+                        ),
+                        // Show cancellation reason if order is cancelled
+                        if (_order!.status.toLowerCase() == 'cancelled') ...[
+                          const SizedBox(height: AppDimensions.spacingM),
+                          const Divider(),
+                          const SizedBox(height: AppDimensions.spacingS),
+                          Text(
+                            localizations.cancellationReason,
+                            style: const TextStyle(
+                              fontSize: AppDimensions.fontSizeM,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.error,
+                            ),
+                          ),
+                          const SizedBox(height: AppDimensions.spacingS),
+                          Container(
+                            padding: const EdgeInsets.all(
+                              AppDimensions.paddingM,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.error.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(
+                                AppDimensions.radiusM,
+                              ),
+                              border: Border.all(
+                                color: AppColors.error.withValues(alpha: 0.3),
+                              ),
+                            ),
+                            child: Text(
+                              _order!.cancellationReason != null &&
+                                      _order!.cancellationReason!.isNotEmpty
+                                  ? _order!.cancellationReason!
+                                  : localizations.noCancellationReasonProvided,
+                              style: TextStyle(
+                                fontSize: AppDimensions.fontSizeM,
+                                color:
+                                    _order!.cancellationReason != null &&
+                                        _order!.cancellationReason!.isNotEmpty
+                                    ? AppColors.error
+                                    : AppColors.textSecondary,
+                                fontStyle:
+                                    _order!.cancellationReason == null ||
+                                        _order!.cancellationReason!.isEmpty
+                                    ? FontStyle.italic
+                                    : FontStyle.normal,
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                     );
                   },
                 ),
 
-              // Order Items Section
-              Builder(
-                builder: (context) {
-                  final localizations = AppLocalizations.of(context);
-                  return _buildSectionCard(
-                    title: localizations.orderItems,
-                    icon: Icons.list_alt,
-                    children: [
-                      if (_order!.items.isNotEmpty)
-                        ..._order!.items.map(
-                          (item) => Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // Book image placeholder
-                                  Container(
-                                    width: 60,
-                                    height: 80,
-                                    decoration: BoxDecoration(
-                                      color: AppColors.surface,
-                                      borderRadius: BorderRadius.circular(
-                                        AppDimensions.radiusS,
-                                      ),
-                                      border: Border.all(
-                                        color: AppColors.border,
+                // Order Summary Section (only for purchase orders)
+                // Hide for borrowing orders (check both orderType and orderNumber prefix)
+                if (!isBorrowOrder)
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      return _buildSectionCard(
+                        title: localizations.orderSummary,
+                        icon: Icons.shopping_cart,
+                        children: [
+                          _buildInfoRow(
+                            localizations.numberOfBooks,
+                            '${_getTotalBookCount()}',
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+
+                // Order Items Section
+                Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return _buildSectionCard(
+                      title: localizations.orderItems,
+                      icon: Icons.list_alt,
+                      children: [
+                        if (_order!.items.isNotEmpty)
+                          ..._order!.items.map(
+                            (item) => Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // Book image
+                                    _buildBookImage(item),
+                                    const SizedBox(
+                                      width: AppDimensions.spacingM,
+                                    ),
+                                    // Book details
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            item.bookTitle,
+                                            style: const TextStyle(
+                                              fontSize: AppDimensions.fontSizeM,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          if (item.bookAuthor != null &&
+                                              item.bookAuthor!.isNotEmpty) ...[
+                                            const SizedBox(
+                                              height: AppDimensions.spacingXS,
+                                            ),
+                                            Text(
+                                              '${localizations.by} ${item.bookAuthor}',
+                                              style: const TextStyle(
+                                                fontSize:
+                                                    AppDimensions.fontSizeS,
+                                                color: AppColors.textSecondary,
+                                              ),
+                                            ),
+                                          ],
+                                          const SizedBox(
+                                            height: AppDimensions.spacingXS,
+                                          ),
+                                          Text(
+                                            '${localizations.quantityLabel} ${item.quantity}',
+                                            style: const TextStyle(
+                                              fontSize: AppDimensions.fontSizeS,
+                                              color: AppColors.textSecondary,
+                                            ),
+                                          ),
+                                          const SizedBox(
+                                            height: AppDimensions.spacingXS,
+                                          ),
+                                          Text(
+                                            '${localizations.priceLabel}: \$${item.unitPrice.toStringAsFixed(2)}',
+                                            style: const TextStyle(
+                                              fontSize: AppDimensions.fontSizeS,
+                                              color: AppColors.textSecondary,
+                                            ),
+                                          ),
+                                          const SizedBox(
+                                            height: AppDimensions.spacingXS,
+                                          ),
+                                          Text(
+                                            '${localizations.totalLabel}: \$${item.totalPrice.toStringAsFixed(2)}',
+                                            style: const TextStyle(
+                                              fontSize: AppDimensions.fontSizeM,
+                                              fontWeight: FontWeight.w600,
+                                              color: AppColors.primary,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
-                                    child: const Icon(
-                                      Icons.book,
-                                      color: AppColors.textSecondary,
-                                      size: 30,
-                                    ),
+                                  ],
+                                ),
+                                if (item != _order!.items.last) ...[
+                                  const SizedBox(
+                                    height: AppDimensions.spacingM,
                                   ),
-                                  const SizedBox(width: AppDimensions.spacingM),
-                                  // Book details
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          item.bookTitle,
-                                          style: const TextStyle(
-                                            fontSize: AppDimensions.fontSizeM,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                        const SizedBox(
-                                          height: AppDimensions.spacingXS,
-                                        ),
-                                        Text(
-                                          '${localizations.quantityLabel} ${item.quantity}',
-                                          style: const TextStyle(
-                                            fontSize: AppDimensions.fontSizeS,
-                                            color: AppColors.textSecondary,
-                                          ),
-                                        ),
-                                        const SizedBox(
-                                          height: AppDimensions.spacingXS,
-                                        ),
-                                        Text(
-                                          '${localizations.priceLabel}: \$${item.unitPrice.toStringAsFixed(2)}',
-                                          style: const TextStyle(
-                                            fontSize: AppDimensions.fontSizeS,
-                                            color: AppColors.textSecondary,
-                                          ),
-                                        ),
-                                        const SizedBox(
-                                          height: AppDimensions.spacingXS,
-                                        ),
-                                        Text(
-                                          '${localizations.totalLabel}: \$${item.totalPrice.toStringAsFixed(2)}',
-                                          style: const TextStyle(
-                                            fontSize: AppDimensions.fontSizeM,
-                                            fontWeight: FontWeight.w600,
-                                            color: AppColors.primary,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                                  const Divider(),
+                                  const SizedBox(
+                                    height: AppDimensions.spacingM,
                                   ),
                                 ],
-                              ),
-                              if (item != _order!.items.last) ...[
-                                const SizedBox(height: AppDimensions.spacingM),
-                                const Divider(),
-                                const SizedBox(height: AppDimensions.spacingM),
                               ],
-                            ],
-                          ),
-                        )
-                      else
-                        const Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(AppDimensions.paddingL),
-                            child: Text(
-                              'No items available',
-                              style: TextStyle(
-                                fontSize: AppDimensions.fontSizeM,
-                                color: AppColors.textSecondary,
-                                fontStyle: FontStyle.italic,
+                            ),
+                          )
+                        else
+                          const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(AppDimensions.paddingL),
+                              child: Text(
+                                'No items available',
+                                style: TextStyle(
+                                  fontSize: AppDimensions.fontSizeM,
+                                  color: AppColors.textSecondary,
+                                  fontStyle: FontStyle.italic,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                    ],
-                  );
-                },
-              ),
-
-              // Additional Notes Section - ALWAYS SHOW THIS SECTION
-              // This section should always be visible for all users
-              // Positioned right after Order Items section
-              Builder(
-                builder: (context) {
-                  final localizations = AppLocalizations.of(context);
-                  return _buildSectionCard(
-                    title: localizations.additionalNotes,
-                    icon: Icons.note,
-                    children: [
-                      // Display notes if available
-                      if (_order!.hasNotes) ...[
-                        // Display list of notes with author information
-                        ..._order!.notesList.map(
-                          (note) => _buildNoteCard(note),
-                        ),
-                        const SizedBox(height: AppDimensions.spacingM),
-                      ] else if (_order!.notes != null &&
-                          _order!.notes!.isNotEmpty) ...[
-                        // Fallback: Show legacy notes if new notes list is empty but legacy field has content
-                        _buildNoteCard(
-                          OrderNote(
-                            id: 0,
-                            content: _order!.notes!,
-                            createdAt: _order!.updatedAt,
-                            updatedAt: _order!.updatedAt,
-                          ),
-                        ),
-                        const SizedBox(height: AppDimensions.spacingM),
                       ],
-                      // Show message if no notes and user can add notes
-                      if (!_order!.hasNotes &&
-                          (_order!.notes == null || _order!.notes!.isEmpty))
-                        Builder(
-                          builder: (context) {
-                            final localizations = AppLocalizations.of(context);
-                            return Padding(
-                              padding: const EdgeInsets.all(
-                                AppDimensions.paddingM,
-                              ),
-                              child: Text(
-                                localizations.noNotesYet,
-                                style: const TextStyle(
-                                  fontSize: AppDimensions.fontSizeS,
-                                  color: AppColors.textSecondary,
+                    );
+                  },
+                ),
+
+                // Additional Notes Section - ALWAYS SHOW THIS SECTION
+                // This section should always be visible for all users
+                // Positioned right after Order Items section
+                Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    return _buildSectionCard(
+                      title: localizations.additionalNotes,
+                      icon: Icons.note,
+                      children: [
+                        // Display notes if available
+                        if (_order!.hasNotes) ...[
+                          // Display list of notes with author information
+                          ..._order!.notesList.map(
+                            (note) => _buildNoteCard(note),
+                          ),
+                          const SizedBox(height: AppDimensions.spacingM),
+                        ] else if (_order!.notes != null &&
+                            _order!.notes!.isNotEmpty) ...[
+                          // Fallback: Show legacy notes if new notes list is empty but legacy field has content
+                          _buildNoteCard(
+                            OrderNote(
+                              id: 0,
+                              content: _order!.notes!,
+                              createdAt: _order!.updatedAt,
+                              updatedAt: _order!.updatedAt,
+                            ),
+                          ),
+                          const SizedBox(height: AppDimensions.spacingM),
+                        ],
+                        // Show message if no notes and user can add notes
+                        if (!_order!.hasNotes &&
+                            (_order!.notes == null || _order!.notes!.isEmpty))
+                          Builder(
+                            builder: (context) {
+                              final localizations = AppLocalizations.of(
+                                context,
+                              );
+                              return Padding(
+                                padding: const EdgeInsets.all(
+                                  AppDimensions.paddingM,
                                 ),
-                                textAlign: TextAlign.center,
-                              ),
-                            );
-                          },
-                        ),
-                      // Show Add Note button only if order is not delivered
-                      if (!_isDeliveryComplete() &&
-                          (_order!.canEditNotes ?? true))
-                        Builder(
-                          builder: (context) {
-                            final localizations = AppLocalizations.of(context);
-                            return SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton.icon(
-                                onPressed: _addNotes,
-                                icon: const Icon(Icons.add),
-                                label: Text(localizations.addNote),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.primary,
-                                  foregroundColor: AppColors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: AppDimensions.paddingM,
+                                child: Text(
+                                  localizations.noNotesYet,
+                                  style: const TextStyle(
+                                    fontSize: AppDimensions.fontSizeS,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              );
+                            },
+                          ),
+                        // Show Add Note button only if order is not delivered
+                        if (!_isDeliveryComplete() &&
+                            (_order!.canEditNotes ?? true))
+                          Builder(
+                            builder: (context) {
+                              final localizations = AppLocalizations.of(
+                                context,
+                              );
+                              return SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  onPressed: _addNotes,
+                                  icon: const Icon(Icons.add),
+                                  label: Text(localizations.addNote),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.primary,
+                                    foregroundColor: AppColors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: AppDimensions.paddingM,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            );
-                          },
-                        ),
-                    ],
-                  );
-                },
-              ),
-
-              // Payment Information Section
-              Builder(
-                builder: (context) {
-                  final localizations = AppLocalizations.of(context);
-                  if (_order!.paymentInfo != null) {
-                    return _buildSectionCard(
-                      title: localizations.paymentInformation,
-                      icon: Icons.payment,
-                      children: [
-                        _buildInfoRow(
-                          localizations.paymentMethod,
-                          _getPaymentMethodDisplay(
-                            _order!.paymentInfo!.paymentMethod,
+                              );
+                            },
                           ),
-                        ),
-                        _buildInfoRow(
-                          localizations.paymentStatus,
-                          _getPaymentStatusDisplay(_order!.paymentInfo!.status),
-                        ),
-                        if (_order!.paymentInfo!.transactionId != null)
+                      ],
+                    );
+                  },
+                ),
+
+                // Payment Information Section
+                Builder(
+                  builder: (context) {
+                    final localizations = AppLocalizations.of(context);
+                    if (_order!.paymentInfo != null) {
+                      return _buildSectionCard(
+                        title: localizations.paymentInformation,
+                        icon: Icons.payment,
+                        children: [
                           _buildInfoRow(
-                            localizations.transactionId,
-                            _order!.paymentInfo!.transactionId!,
+                            localizations.paymentMethod,
+                            _getPaymentMethodDisplay(
+                              _order!.paymentInfo!.paymentMethod,
+                            ),
                           ),
-                      ],
-                    );
-                  } else if (_order!.paymentMethod != null &&
-                      _order!.paymentMethod!.isNotEmpty) {
-                    return _buildSectionCard(
-                      title: localizations.paymentInformation,
-                      icon: Icons.payment,
-                      children: [
-                        _buildInfoRow(
-                          localizations.paymentMethod,
-                          _getPaymentMethodDisplay(_order!.paymentMethod!),
-                        ),
-                        _buildInfoRow(
-                          localizations.paymentStatus,
-                          _getPaymentStatusDisplay(_order!.status),
-                        ),
-                      ],
-                    );
-                  }
-                  return const SizedBox.shrink();
-                },
-              ),
-
-              // Customer Information Section - Show for delivery managers only
-              Builder(
-                builder: (context) {
-                  final authProvider = Provider.of<AuthProvider>(
-                    context,
-                    listen: false,
-                  );
-                  final userType = authProvider.user?.userType;
-                  final isDeliveryManager = userType == 'delivery_admin';
-
-                  if (!isDeliveryManager) {
+                          _buildInfoRow(
+                            localizations.paymentStatus,
+                            _getPaymentStatusDisplay(
+                              _order!.paymentInfo!.status,
+                            ),
+                          ),
+                          if (_order!.paymentInfo!.transactionId != null)
+                            _buildInfoRow(
+                              localizations.transactionId,
+                              _order!.paymentInfo!.transactionId!,
+                            ),
+                        ],
+                      );
+                    } else if (_order!.paymentMethod != null &&
+                        _order!.paymentMethod!.isNotEmpty) {
+                      return _buildSectionCard(
+                        title: localizations.paymentInformation,
+                        icon: Icons.payment,
+                        children: [
+                          _buildInfoRow(
+                            localizations.paymentMethod,
+                            _getPaymentMethodDisplay(_order!.paymentMethod!),
+                          ),
+                          _buildInfoRow(
+                            localizations.paymentStatus,
+                            _getPaymentStatusDisplay(_order!.status),
+                          ),
+                        ],
+                      );
+                    }
                     return const SizedBox.shrink();
-                  }
+                  },
+                ),
 
-                  final localizations = AppLocalizations.of(context);
-                  return _buildSectionCard(
-                    title: localizations.customerInformation,
-                    icon: Icons.person,
-                    children: [
-                      _buildInfoRow(
-                        localizations.fullName,
-                        _order!.customerName,
-                      ),
-                      _buildInfoRow(
-                        localizations.phoneNumber,
-                        _order!.customerPhone.isNotEmpty
-                            ? _order!.customerPhone
-                            : localizations.notProvided,
-                      ),
-                      _buildInfoRow(localizations.email, _order!.customerEmail),
-                      if (_order!.deliveryAddress != null) ...[
-                        _buildInfoRow(
-                          localizations.addressLabel,
-                          _order!.deliveryAddressText ??
-                              localizations.notProvided,
-                        ),
-                      ],
-                    ],
-                  );
-                },
-              ),
-
-              // Delivery Manager Information Section - Hide for delivery managers
-              if (_order!.status.toLowerCase() != 'cancelled')
+                // Customer Information Section - Show for delivery managers only
                 Builder(
                   builder: (context) {
                     final authProvider = Provider.of<AuthProvider>(
@@ -1462,88 +1560,34 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                     final userType = authProvider.user?.userType;
                     final isDeliveryManager = userType == 'delivery_admin';
 
-                    // Hide this section for delivery managers
-                    if (isDeliveryManager) {
+                    if (!isDeliveryManager) {
                       return const SizedBox.shrink();
                     }
 
                     final localizations = AppLocalizations.of(context);
                     return _buildSectionCard(
-                      title: localizations.deliveryManager,
-                      icon: Icons.local_shipping,
+                      title: localizations.customerInformation,
+                      icon: Icons.person,
                       children: [
-                        if (_order!.deliveryAssignment != null) ...[
+                        _buildInfoRow(
+                          localizations.fullName,
+                          _order!.customerName,
+                        ),
+                        _buildInfoRow(
+                          localizations.phoneNumber,
+                          _order!.customerPhone.isNotEmpty
+                              ? _order!.customerPhone
+                              : localizations.notProvided,
+                        ),
+                        _buildInfoRow(
+                          localizations.email,
+                          _order!.customerEmail,
+                        ),
+                        if (_order!.deliveryAddress != null) ...[
                           _buildInfoRow(
-                            localizations.managerName,
-                            _order!.deliveryAssignment!.deliveryManagerName,
-                          ),
-                          _buildInfoRow(
-                            localizations.status,
-                            _getDeliveryStatusDisplay(
-                              _order!.deliveryAssignment!.status,
-                            ),
-                          ),
-                          _buildInfoRow(
-                            localizations.assignedAt,
-                            _formatDate(_order!.deliveryAssignment!.assignedAt),
-                          ),
-                          if (_order!.deliveryAssignment!.startedAt != null)
-                            _buildInfoRow(
-                              localizations.startedAt,
-                              _formatDate(
-                                _order!.deliveryAssignment!.startedAt!,
-                              ),
-                            ),
-                          if (_order!.deliveryAssignment!.completedAt != null)
-                            _buildInfoRow(
-                              localizations.completedAt,
-                              _formatDate(
-                                _order!.deliveryAssignment!.completedAt!,
-                              ),
-                            ),
-                          if (_order!.deliveryAssignment!.assignedByName !=
-                              null)
-                            _buildInfoRow(
-                              localizations.assignedBy,
-                              _order!.deliveryAssignment!.assignedByName!,
-                            ),
-                        ] else ...[
-                          Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(
-                                AppDimensions.paddingL,
-                              ),
-                              child: Column(
-                                children: [
-                                  const Icon(
-                                    Icons.local_shipping_outlined,
-                                    size: 48,
-                                    color: AppColors.textSecondary,
-                                  ),
-                                  const SizedBox(
-                                    height: AppDimensions.spacingM,
-                                  ),
-                                  Text(
-                                    localizations.noDeliveryManagerAssigned,
-                                    style: const TextStyle(
-                                      fontSize: AppDimensions.fontSizeM,
-                                      color: AppColors.textSecondary,
-                                    ),
-                                  ),
-                                  const SizedBox(
-                                    height: AppDimensions.spacingS,
-                                  ),
-                                  Text(
-                                    localizations.orderNotAcceptedYetMessage,
-                                    style: const TextStyle(
-                                      fontSize: AppDimensions.fontSizeS,
-                                      color: AppColors.textSecondary,
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ],
-                              ),
-                            ),
+                            localizations.addressLabel,
+                            _order!.deliveryAddressText ??
+                                localizations.notProvided,
                           ),
                         ],
                       ],
@@ -1551,234 +1595,360 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                   },
                 ),
 
-              // Return Book Section (for borrowing orders)
-              if (_order!.isBorrowingOrder && _borrowRequest != null)
-                _buildReturnBookSection(),
+                // Delivery Manager Information Section - Hide for delivery managers
+                if (_order!.status.toLowerCase() != 'cancelled')
+                  Builder(
+                    builder: (context) {
+                      final authProvider = Provider.of<AuthProvider>(
+                        context,
+                        listen: false,
+                      );
+                      final userType = authProvider.user?.userType;
+                      final isDeliveryManager = userType == 'delivery_admin';
 
-              // Activity Log Section - Show for library admins only (not delivery managers)
-              Builder(
-                builder: (context) {
-                  final authProvider = Provider.of<AuthProvider>(
-                    context,
-                    listen: false,
-                  );
-                  final userType = authProvider.user?.userType;
-                  // Only show for library_admin, exclude delivery_admin
-                  final isLibraryAdmin = userType == 'library_admin';
+                      // Hide this section for delivery managers
+                      if (isDeliveryManager) {
+                        return const SizedBox.shrink();
+                      }
 
-                  if (!isLibraryAdmin) {
-                    return const SizedBox.shrink();
-                  }
-
-                  return _buildSectionCard(
-                    title: 'Activity Log',
-                    icon: Icons.history,
-                    children: [
-                      if (_isLoadingActivities)
-                        const Padding(
-                          padding: EdgeInsets.all(AppDimensions.paddingM),
-                          child: Center(child: LoadingIndicator()),
-                        )
-                      else if (_activities.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.all(AppDimensions.paddingM),
-                          child: Text(
-                            'No activities recorded yet.',
-                            style: TextStyle(
-                              fontSize: AppDimensions.fontSizeS,
-                              color: AppColors.textSecondary,
+                      final localizations = AppLocalizations.of(context);
+                      return _buildSectionCard(
+                        title: localizations.deliveryManager,
+                        icon: Icons.local_shipping,
+                        children: [
+                          if (_order!.deliveryAssignment != null) ...[
+                            _buildInfoRow(
+                              localizations.managerName,
+                              _order!.deliveryAssignment!.deliveryManagerName,
                             ),
-                            textAlign: TextAlign.center,
-                          ),
-                        )
-                      else
-                        ..._activities.map(
-                          (activity) => _buildActivityCard(activity),
-                        ),
-                    ],
-                  );
-                },
-              ),
-
-              // View Delivery Location Button - Show for customers when status is in_delivery
-              Builder(
-                builder: (context) {
-                  final authProvider = Provider.of<AuthProvider>(
-                    context,
-                    listen: false,
-                  );
-                  final userType = authProvider.user?.userType;
-                  final isCustomer =
-                      userType == null ||
-                      (userType != 'library_admin' &&
-                          userType != 'delivery_admin');
-                  final orderStatus = _order!.status.toLowerCase().trim();
-                  final isInDelivery =
-                      _order!.isInDelivery || orderStatus == 'in_delivery';
-
-                  if (isCustomer && isInDelivery && !_order!.isCancelled) {
-                    final localizations = AppLocalizations.of(context);
-                    return _buildSectionCard(
-                      title: localizations.deliveryTracking,
-                      icon: Icons.location_on,
-                      children: [
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: _viewDeliveryLocation,
-                            icon: const Icon(Icons.map),
-                            label: Text(localizations.viewDeliveryLocation),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primary,
-                              foregroundColor: AppColors.white,
-                              padding: const EdgeInsets.symmetric(
-                                vertical: AppDimensions.paddingM,
+                            _buildInfoRow(
+                              localizations.assignedAt,
+                              _formatDate(
+                                _order!.deliveryAssignment!.assignedAt,
                               ),
                             ),
+                            if (_order!.deliveryAssignment!.startedAt != null)
+                              _buildInfoRow(
+                                localizations.startedAt,
+                                _formatDate(
+                                  _order!.deliveryAssignment!.startedAt!,
+                                ),
+                              ),
+                            if (_order!.deliveryAssignment!.completedAt != null)
+                              _buildInfoRow(
+                                localizations.completedAt,
+                                _formatDate(
+                                  _order!.deliveryAssignment!.completedAt!,
+                                ),
+                              ),
+                            if (_order!.deliveryAssignment!.assignedByName !=
+                                null)
+                              _buildInfoRow(
+                                localizations.assignedBy,
+                                _order!.deliveryAssignment!.assignedByName!,
+                              ),
+                          ] else ...[
+                            Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(
+                                  AppDimensions.paddingL,
+                                ),
+                                child: Column(
+                                  children: [
+                                    const Icon(
+                                      Icons.local_shipping_outlined,
+                                      size: 48,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                    const SizedBox(
+                                      height: AppDimensions.spacingM,
+                                    ),
+                                    Text(
+                                      localizations.noDeliveryManagerAssigned,
+                                      style: const TextStyle(
+                                        fontSize: AppDimensions.fontSizeM,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                    ),
+                                    const SizedBox(
+                                      height: AppDimensions.spacingS,
+                                    ),
+                                    Text(
+                                      localizations.orderNotAcceptedYetMessage,
+                                      style: const TextStyle(
+                                        fontSize: AppDimensions.fontSizeS,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      );
+                    },
+                  ),
+
+                // Return Book Section (for borrowing orders)
+                if (_order!.isBorrowingOrder && _borrowRequest != null)
+                  _buildReturnBookSection(),
+
+                // Activity Log Section - Show for library admins only (not delivery managers)
+                Builder(
+                  builder: (context) {
+                    final authProvider = Provider.of<AuthProvider>(
+                      context,
+                      listen: false,
+                    );
+                    final userType = authProvider.user?.userType;
+                    // Only show for library_admin, exclude delivery_admin
+                    final isLibraryAdmin = userType == 'library_admin';
+
+                    if (!isLibraryAdmin) {
+                      return const SizedBox.shrink();
+                    }
+
+                    return _buildSectionCard(
+                      title: 'Activity Log',
+                      icon: Icons.history,
+                      children: [
+                        if (_isLoadingActivities)
+                          const Padding(
+                            padding: EdgeInsets.all(AppDimensions.paddingM),
+                            child: Center(child: LoadingIndicator()),
+                          )
+                        else if (_activities.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.all(AppDimensions.paddingM),
+                            child: Text(
+                              'No activities recorded yet.',
+                              style: TextStyle(
+                                fontSize: AppDimensions.fontSizeS,
+                                color: AppColors.textSecondary,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          )
+                        else
+                          ..._activities.map(
+                            (activity) => _buildActivityCard(activity),
                           ),
-                        ),
                       ],
                     );
-                  }
+                  },
+                ),
 
-                  return const SizedBox.shrink();
-                },
-              ),
-
-              // Delivery Manager Action Buttons - Show when status is waiting_for_delivery_manager
-              Builder(
-                builder: (context) {
-                  final authProvider = Provider.of<AuthProvider>(
-                    context,
-                    listen: false,
-                  );
-                  final isDeliveryManager =
-                      authProvider.user?.userType == 'delivery_admin';
-                  final orderStatus = _order!.status.toLowerCase().trim();
-                  final isWaitingStatus =
-                      _order!.isWaitingForDeliveryManager ||
-                      orderStatus == 'waiting_for_delivery_manager';
-
-                  if (isDeliveryManager &&
-                      isWaitingStatus &&
-                      !_order!.isCancelled) {
-                    return Builder(
-                      builder: (context) {
-                        final localizations = AppLocalizations.of(context);
-                        return _buildSectionCard(
-                          title: localizations.deliveryActions,
-                          icon: Icons.local_shipping,
-                          children: [
-                            if (_isProcessingAction)
-                              const Center(child: LoadingIndicator())
-                            else
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: ElevatedButton(
-                                      onPressed: _acceptDelivery,
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: AppColors.primary,
-                                        foregroundColor: AppColors.white,
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: AppDimensions.paddingM,
-                                        ),
-                                      ),
-                                      child: Text(
-                                        localizations.approveDelivery,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: AppDimensions.spacingM),
-                                  Expanded(
-                                    child: ElevatedButton(
-                                      onPressed: _showRejectDeliveryDialog,
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: AppColors.error,
-                                        foregroundColor: AppColors.white,
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: AppDimensions.paddingM,
-                                        ),
-                                      ),
-                                      child: Text(localizations.rejectDelivery),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                          ],
-                        );
-                      },
+                // View Delivery Location Button - Show for customers when status is in_delivery
+                Builder(
+                  builder: (context) {
+                    final authProvider = Provider.of<AuthProvider>(
+                      context,
+                      listen: false,
                     );
-                  }
+                    final userType = authProvider.user?.userType;
+                    final isCustomer =
+                        userType == null ||
+                        (userType != 'library_admin' &&
+                            userType != 'delivery_admin');
 
-                  // Show Complete Delivery button when status is in_delivery
-                  final isInDelivery =
-                      _order!.isInDelivery || orderStatus == 'in_delivery';
+                    // Check both order status and delivery assignment status
+                    final orderStatus = _order!.status.toLowerCase().trim();
+                    String? deliveryStatus;
+                    if (_order!.deliveryAssignment != null) {
+                      deliveryStatus = _order!.deliveryAssignment!.status
+                          .toLowerCase()
+                          .trim();
+                    }
+                    final isInDelivery =
+                        _order!.isInDelivery ||
+                        orderStatus == 'in_delivery' ||
+                        (deliveryStatus != null &&
+                            (deliveryStatus == 'in_delivery' ||
+                                deliveryStatus == 'in-delivery' ||
+                                deliveryStatus == 'in delivery'));
 
-                  if (isDeliveryManager &&
-                      isInDelivery &&
-                      !_order!.isCancelled) {
-                    return Builder(
-                      builder: (context) {
-                        final localizations = AppLocalizations.of(context);
-                        return _buildSectionCard(
-                          title: localizations.deliveryActions,
-                          icon: Icons.local_shipping,
-                          children: [
-                            if (_isProcessingAction)
-                              const Center(child: LoadingIndicator())
-                            else
-                              Column(
-                                children: [
-                                  SizedBox(
-                                    width: double.infinity,
-                                    child: ElevatedButton.icon(
-                                      onPressed: _updateCurrentLocation,
-                                      icon: const Icon(Icons.my_location),
-                                      label: Text(
-                                        localizations.updateCurrentLocation,
-                                      ),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: AppColors.primary,
-                                        foregroundColor: AppColors.white,
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: AppDimensions.paddingM,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(
-                                    height: AppDimensions.spacingM,
-                                  ),
-                                  SizedBox(
-                                    width: double.infinity,
-                                    child: ElevatedButton.icon(
-                                      onPressed: _completeDelivery,
-                                      icon: const Icon(Icons.check_circle),
-                                      label: Text(
-                                        localizations.completeDelivery,
-                                      ),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: AppColors.success,
-                                        foregroundColor: AppColors.white,
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: AppDimensions.paddingM,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                          ],
-                        );
-                      },
+                    // Debug: Print button visibility condition
+                    debugPrint(
+                      'OrderDetailScreen: Button visibility check - '
+                      'isCustomer=$isCustomer, '
+                      'order.status=$orderStatus, '
+                      'order.isInDelivery=${_order!.isInDelivery}, '
+                      'deliveryAssignment!=null=${_order!.deliveryAssignment != null}, '
+                      'deliveryAssignment.status=$deliveryStatus, '
+                      'isInDelivery=$isInDelivery, '
+                      'isCancelled=${_order!.isCancelled}',
                     );
-                  }
 
-                  return const SizedBox.shrink();
-                },
-              ),
-            ],
+                    if (isCustomer && isInDelivery && !_order!.isCancelled) {
+                      final localizations = AppLocalizations.of(context);
+                      return _buildSectionCard(
+                        title: localizations.deliveryTracking,
+                        icon: Icons.location_on,
+                        children: [
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: _viewDeliveryLocation,
+                              icon: const Icon(Icons.map),
+                              label: Text(localizations.viewDeliveryLocation),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                foregroundColor: AppColors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: AppDimensions.paddingM,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    }
+
+                    return const SizedBox.shrink();
+                  },
+                ),
+
+                // Delivery Manager Action Buttons - Show when status is waiting_for_delivery_manager
+                Builder(
+                  builder: (context) {
+                    final authProvider = Provider.of<AuthProvider>(
+                      context,
+                      listen: false,
+                    );
+                    final isDeliveryManager =
+                        authProvider.user?.userType == 'delivery_admin';
+                    final orderStatus = _order!.status.toLowerCase().trim();
+                    final isWaitingStatus =
+                        _order!.isWaitingForDeliveryManager ||
+                        orderStatus == 'waiting_for_delivery_manager';
+
+                    if (isDeliveryManager &&
+                        isWaitingStatus &&
+                        !_order!.isCancelled) {
+                      return Builder(
+                        builder: (context) {
+                          final localizations = AppLocalizations.of(context);
+                          return _buildSectionCard(
+                            title: localizations.deliveryActions,
+                            icon: Icons.local_shipping,
+                            children: [
+                              if (_isProcessingAction)
+                                const Center(child: LoadingIndicator())
+                              else
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: ElevatedButton(
+                                        onPressed: _acceptDelivery,
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppColors.primary,
+                                          foregroundColor: AppColors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: AppDimensions.paddingM,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          localizations.approveDelivery,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(
+                                      width: AppDimensions.spacingM,
+                                    ),
+                                    Expanded(
+                                      child: ElevatedButton(
+                                        onPressed: _showRejectDeliveryDialog,
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppColors.error,
+                                          foregroundColor: AppColors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: AppDimensions.paddingM,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          localizations.rejectDelivery,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                            ],
+                          );
+                        },
+                      );
+                    }
+
+                    // Show Complete Delivery button when status is in_delivery
+                    final isInDelivery =
+                        _order!.isInDelivery || orderStatus == 'in_delivery';
+
+                    if (isDeliveryManager &&
+                        isInDelivery &&
+                        !_order!.isCancelled) {
+                      return Builder(
+                        builder: (context) {
+                          final localizations = AppLocalizations.of(context);
+                          return _buildSectionCard(
+                            title: localizations.deliveryActions,
+                            icon: Icons.local_shipping,
+                            children: [
+                              if (_isProcessingAction)
+                                const Center(child: LoadingIndicator())
+                              else
+                                Column(
+                                  children: [
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: ElevatedButton.icon(
+                                        onPressed: _updateCurrentLocation,
+                                        icon: const Icon(Icons.my_location),
+                                        label: Text(
+                                          localizations.updateCurrentLocation,
+                                        ),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppColors.primary,
+                                          foregroundColor: AppColors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: AppDimensions.paddingM,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(
+                                      height: AppDimensions.spacingM,
+                                    ),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: ElevatedButton.icon(
+                                        onPressed: _completeDelivery,
+                                        icon: const Icon(Icons.check_circle),
+                                        label: Text(
+                                          localizations.completeDelivery,
+                                        ),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppColors.success,
+                                          foregroundColor: AppColors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: AppDimensions.paddingM,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                            ],
+                          );
+                        },
+                      );
+                    }
+
+                    return const SizedBox.shrink();
+                  },
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1818,6 +1988,8 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         return localizations.paymentStatusUnpaid;
       case 'pending':
         return localizations.paymentStatusPending;
+      case 'completed':
+        return localizations.paymentStatusPaid;
       case 'delivered':
         // For borrow requests, delivered is a valid status
         // Always use statusDelivered which is already translated
@@ -1883,24 +2055,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           // getOrderStatusLabel might throw for invalid statuses, continue to fallback
         }
         // Final fallback: return the status as-is
-        return status;
-    }
-  }
-
-  String _getDeliveryStatusDisplay(String status) {
-    final localizations = AppLocalizations.of(context);
-    switch (status.toLowerCase()) {
-      case 'assigned':
-        return localizations.deliveryStatusAssigned;
-      case 'accepted':
-        return localizations.accepted;
-      case 'in_progress':
-        return localizations.deliveryStatusInProgress;
-      case 'completed':
-        return localizations.deliveryStatusCompleted;
-      case 'cancelled':
-        return localizations.deliveryStatusCancelled;
-      default:
         return status;
     }
   }
@@ -2550,7 +2704,11 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       if (!mounted) return;
 
       if (locationData != null) {
-        final location = locationData['location'] as Map<String, dynamic>?;
+        // Handle response format: data.location or direct location
+        final data = locationData['data'] as Map<String, dynamic>?;
+        final location =
+            (data?['location'] ?? locationData['location'])
+                as Map<String, dynamic>?;
         final latitude = location?['latitude'] as double?;
         final longitude = location?['longitude'] as double?;
 

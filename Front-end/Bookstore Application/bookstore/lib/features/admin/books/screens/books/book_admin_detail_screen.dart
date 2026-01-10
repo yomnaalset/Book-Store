@@ -5,6 +5,7 @@ import '../../../providers/library_manager/books_provider.dart';
 import '../../../../../../routes/app_routes.dart';
 import '../../../../reviews/widgets/reviews_list.dart';
 import '../../../../../../core/localization/app_localizations.dart';
+import '../../../../../../core/services/api_config.dart';
 
 class BookAdminDetailScreen extends StatefulWidget {
   const BookAdminDetailScreen({super.key});
@@ -183,27 +184,7 @@ class _BookAdminDetailScreenState extends State<BookAdminDetailScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Book Images
-            if (_book.images != null && _book.images!.isNotEmpty)
-              SizedBox(
-                height: 200,
-                child: PageView.builder(
-                  itemCount: _book.images!.length,
-                  itemBuilder: (context, index) {
-                    return Image.network(
-                      _book.images![index],
-                      fit: BoxFit.contain,
-                    );
-                  },
-                ),
-              )
-            else
-              Container(
-                height: 200,
-                color: Colors.grey[300],
-                child: const Center(
-                  child: Icon(Icons.image_not_supported, size: 64),
-                ),
-              ),
+            _buildBookImages(),
 
             const SizedBox(height: 16),
 
@@ -585,5 +566,104 @@ class _BookAdminDetailScreenState extends State<BookAdminDetailScreen> {
   String _formatDate(DateTime? date) {
     if (date == null) return 'N/A';
     return '${date.day}/${date.month}/${date.year}';
+  }
+
+  Widget _buildBookImages() {
+    // Try to get images from various sources
+    final List<String> imageUrls = [];
+
+    // First, try the images list
+    if (_book.images != null && _book.images!.isNotEmpty) {
+      imageUrls.addAll(_book.images!);
+    }
+
+    // If no images in list, try primaryImageUrl or coverImageUrl
+    if (imageUrls.isEmpty) {
+      final primaryUrl = _book.primaryImageUrl ?? _book.coverImageUrl;
+      if (primaryUrl != null && primaryUrl.isNotEmpty) {
+        imageUrls.add(primaryUrl);
+      }
+    }
+
+    if (imageUrls.isEmpty) {
+      return Container(
+        height: 200,
+        color: Colors.grey[300],
+        child: const Center(child: Icon(Icons.image_not_supported, size: 64)),
+      );
+    }
+
+    // Build full URLs using ApiConfig
+    final fullImageUrls = imageUrls
+        .map((url) => ApiConfig.buildImageUrl(url) ?? url)
+        .where((url) => url.isNotEmpty)
+        .toList();
+
+    if (fullImageUrls.isEmpty) {
+      return Container(
+        height: 200,
+        color: Colors.grey[300],
+        child: const Center(child: Icon(Icons.image_not_supported, size: 64)),
+      );
+    }
+
+    debugPrint(
+      'BookAdminDetailScreen: Displaying ${fullImageUrls.length} book images',
+    );
+
+    if (fullImageUrls.length == 1) {
+      // Single image - no need for PageView
+      return SizedBox(
+        height: 200,
+        child: Image.network(
+          fullImageUrls[0],
+          fit: BoxFit.contain,
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) return child;
+            return const Center(child: CircularProgressIndicator());
+          },
+          errorBuilder: (context, error, stackTrace) {
+            debugPrint(
+              'BookAdminDetailScreen: Error loading book image: $error',
+            );
+            return Container(
+              color: Colors.grey[300],
+              child: const Center(
+                child: Icon(Icons.image_not_supported, size: 64),
+              ),
+            );
+          },
+        ),
+      );
+    }
+
+    // Multiple images - use PageView
+    return SizedBox(
+      height: 200,
+      child: PageView.builder(
+        itemCount: fullImageUrls.length,
+        itemBuilder: (context, index) {
+          return Image.network(
+            fullImageUrls[index],
+            fit: BoxFit.contain,
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) return child;
+              return const Center(child: CircularProgressIndicator());
+            },
+            errorBuilder: (context, error, stackTrace) {
+              debugPrint(
+                'BookAdminDetailScreen: Error loading book image $index: $error',
+              );
+              return Container(
+                color: Colors.grey[300],
+                child: const Center(
+                  child: Icon(Icons.image_not_supported, size: 64),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
   }
 }

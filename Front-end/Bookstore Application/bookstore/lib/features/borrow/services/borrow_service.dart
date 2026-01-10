@@ -217,9 +217,23 @@ class BorrowService {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success'] == true) {
-          final borrowings = (data['data'] as List)
-              .map((item) => BorrowRequest.fromJson(item))
-              .toList();
+          final borrowings = (data['data'] as List).map((item) {
+            // Debug: Log status fields for first item
+            if (data['data'].indexOf(item) == 0) {
+              debugPrint('DEBUG: First borrowing item status fields:');
+              debugPrint('  - status: ${item['status']}');
+              debugPrint('  - borrow_status: ${item['borrow_status']}');
+              debugPrint(
+                '  - delivery_request: ${item['delivery_request'] != null ? "EXISTS" : "NULL"}',
+              );
+              if (item['delivery_request'] != null) {
+                debugPrint(
+                  '  - delivery_request.status: ${item['delivery_request']['status']}',
+                );
+              }
+            }
+            return BorrowRequest.fromJson(item);
+          }).toList();
 
           return borrowings;
         } else {

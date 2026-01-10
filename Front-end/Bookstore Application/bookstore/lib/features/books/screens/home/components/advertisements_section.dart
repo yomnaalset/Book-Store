@@ -26,7 +26,7 @@ class _AdvertisementsSectionState extends State<AdvertisementsSection>
   @override
   void initState() {
     super.initState();
-    _adsService = AdsService(baseUrl: ApiConfig.getAndroidEmulatorUrl());
+    _adsService = AdsService(baseUrl: ApiConfig.getBaseUrl());
     _carouselController = CarouselSliderController();
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 800),
@@ -58,8 +58,8 @@ class _AdvertisementsSectionState extends State<AdvertisementsSection>
     try {
       debugPrint('Starting to load advertisements from database...');
 
-      // Load advertisements from API only
-      debugPrint('Loading advertisements from API...');
+      // Load advertisements from API only (force refresh)
+      debugPrint('Loading advertisements from API with force refresh...');
       final ads = await _adsService.getPublicAds(limit: 10);
 
       if (ads.isNotEmpty) {

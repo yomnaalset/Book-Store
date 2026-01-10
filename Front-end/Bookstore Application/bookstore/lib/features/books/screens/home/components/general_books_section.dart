@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/localization/app_localizations.dart';
-import '../../../../cart/providers/cart_provider.dart';
 import '../../../providers/books_provider.dart';
 import '../../../models/book.dart';
 import '../../../widgets/book_price_display.dart';
@@ -22,7 +21,10 @@ class _GeneralBooksSectionState extends State<GeneralBooksSection> {
   @override
   void initState() {
     super.initState();
-    _loadBooks();
+    // Defer loading until after the build phase completes
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadBooks();
+    });
   }
 
   Future<void> _loadBooks() async {
@@ -40,7 +42,10 @@ class _GeneralBooksSectionState extends State<GeneralBooksSection> {
 
       switch (sortBy) {
         case 'all':
-          books = await booksProvider.getMostPopularBooks(limit: 10);
+          books = await booksProvider.getMostPopularBooks(
+            limit: 10,
+            forceRefresh: true,
+          );
           break;
         case 'newest':
           books = await booksProvider.getNewBooks(limit: 10);
@@ -49,19 +54,16 @@ class _GeneralBooksSectionState extends State<GeneralBooksSection> {
           books = await booksProvider.getTopRatedBooks(limit: 10);
           break;
         default:
-          books = await booksProvider.getMostPopularBooks(limit: 10);
+          books = await booksProvider.getMostPopularBooks(
+            limit: 10,
+            forceRefresh: true,
+          );
       }
 
       if (mounted) {
         setState(() {
-          // Show ALL books in the library (both available for purchase and borrowing)
-          _books = books
-              .where(
-                (book) =>
-                    book.isAvailable == true ||
-                    book.isAvailableForBorrow == true,
-              )
-              .toList();
+          // Show ALL books from the database without any filtering
+          _books = books;
           _isLoading = false;
         });
       }
@@ -444,14 +446,18 @@ class _GeneralBooksSectionState extends State<GeneralBooksSection> {
                           ),
                           child: Builder(
                             builder: (context) {
-                              final localizations = AppLocalizations.of(context);
+                              final localizations = AppLocalizations.of(
+                                context,
+                              );
                               return Text(
-                                localizations.discountOff(book.savingsPercentage.toInt()),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 8,
-                              fontWeight: FontWeight.bold,
-                            ),
+                                localizations.discountOff(
+                                  book.savingsPercentage.toInt(),
+                                ),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               );
                             },
                           ),
@@ -498,49 +504,6 @@ class _GeneralBooksSectionState extends State<GeneralBooksSection> {
                           isCompact: true,
                           fontSize: 9,
                           smallFontSize: 8,
-                        ),
-                        const SizedBox(height: 4),
-                        // Action Buttons Row
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            if (book.isAvailable == true)
-                              GestureDetector(
-                                onTap: () => _addToCart(book),
-                                child: Container(
-                                  padding: const EdgeInsets.all(3),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.uranianBlue.withValues(
-                                      alpha: 0.1,
-                                    ),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: const Icon(
-                                    Icons.add_shopping_cart,
-                                    size: 14,
-                                    color: AppColors.uranianBlue,
-                                  ),
-                                ),
-                              ),
-                            if (book.isAvailableForBorrow == true)
-                              GestureDetector(
-                                onTap: () => _requestBorrow(book),
-                                child: Container(
-                                  padding: const EdgeInsets.all(3),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.success.withValues(
-                                      alpha: 0.1,
-                                    ),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: const Icon(
-                                    Icons.library_add,
-                                    size: 14,
-                                    color: AppColors.success,
-                                  ),
-                                ),
-                              ),
-                          ],
                         ),
                       ],
                     ),
@@ -604,26 +567,5 @@ class _GeneralBooksSectionState extends State<GeneralBooksSection> {
       default:
         return 'No books found in the library';
     }
-  }
-
-  void _addToCart(Book book) {
-    final cartProvider = Provider.of<CartProvider>(context, listen: false);
-    cartProvider.addToCart(book, 1, context: context);
-    _showSnackBar('Added to cart!');
-  }
-
-  void _requestBorrow(Book book) {
-    Navigator.pushNamed(context, '/borrow-request', arguments: {'book': book});
-  }
-
-  void _showSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        duration: const Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      ),
-    );
   }
 }

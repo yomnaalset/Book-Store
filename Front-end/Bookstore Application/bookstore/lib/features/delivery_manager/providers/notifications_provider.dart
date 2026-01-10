@@ -52,10 +52,23 @@ class DeliveryNotificationsProvider extends ChangeNotifier {
     try {
       // Use the proper notifications endpoint
       final response = await _deliveryService.getNotificationsx();
+      debugPrint(
+        'DeliveryNotificationsProvider: Loaded ${response.length} notifications from API',
+      );
+      if (response.isNotEmpty) {
+        debugPrint(
+          'DeliveryNotificationsProvider: First notification keys: ${response.first.keys.toList()}',
+        );
+        debugPrint(
+          'DeliveryNotificationsProvider: First notification: ${response.first}',
+        );
+      }
       return response;
     } catch (e) {
       // If notifications endpoint fails, return empty list
-      debugPrint('Failed to load notifications: $e');
+      debugPrint(
+        'DeliveryNotificationsProvider: Failed to load notifications: $e',
+      );
       return [];
     }
   }
@@ -119,16 +132,27 @@ class DeliveryNotificationsProvider extends ChangeNotifier {
         .where(
           (notification) =>
               notification['type'] == 'urgent' ||
-              notification['priority'] == 'high',
+              notification['notification_type'] == 'urgent' ||
+              notification['priority'] == 'high' ||
+              notification['priority'] == 'urgent',
         )
         .toList();
   }
 
   List<Map<String, dynamic>> get recentNotifications {
     final now = DateTime.now();
+    // Return all notifications if they're within 7 days, or if created_at is missing, include them anyway
     return _notifications.where((notification) {
-      final createdAt = DateTime.tryParse(notification['created_at'] ?? '');
-      if (createdAt == null) return false;
+      final createdAtStr = notification['created_at'] ?? '';
+      if (createdAtStr.isEmpty) {
+        // If no created_at, include it to avoid hiding notifications
+        return true;
+      }
+      final createdAt = DateTime.tryParse(createdAtStr);
+      if (createdAt == null) {
+        // If parsing fails, include it to avoid hiding notifications
+        return true;
+      }
       return createdAt.isAfter(now.subtract(const Duration(days: 7)));
     }).toList();
   }

@@ -28,17 +28,58 @@ class _OrdersScreenState extends State<OrdersScreen> {
     await ordersProvider.loadOrdersByType('purchase');
   }
 
+  /// Get the effective status for display, checking delivery assignment if available
+  String _getEffectiveStatus(dynamic order) {
+    // If delivery assignment status is 'in_delivery', show that instead of order status
+    if (order.deliveryAssignment != null &&
+        order.deliveryAssignment!.status.toLowerCase() == 'in_delivery') {
+      return 'in_delivery';
+    }
+    return order.status ?? 'pending';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text(localizations.myOrders),
+        title: Text(
+          localizations.myOrders,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+            letterSpacing: 0.5,
+          ),
+        ),
+        backgroundColor: theme.colorScheme.primary,
+        foregroundColor: theme.colorScheme.onPrimary,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                theme.colorScheme.primary,
+                theme.colorScheme.primary.withValues(alpha: 204),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
         actions: [
-          IconButton(
-            onPressed: _loadOrders,
-            icon: const Icon(Icons.refresh),
-            tooltip: localizations.refresh,
+          Container(
+            margin: const EdgeInsets.only(right: 8, top: 8, bottom: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              shape: BoxShape.circle,
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.refresh),
+              tooltip: localizations.refresh,
+              onPressed: _loadOrders,
+            ),
           ),
         ],
       ),
@@ -62,7 +103,14 @@ class _OrdersScreenState extends State<OrdersScreen> {
           }
 
           return ListView.builder(
-            padding: const EdgeInsets.all(AppDimensions.paddingM),
+            padding: EdgeInsets.only(
+              left: AppDimensions.paddingM,
+              right: AppDimensions.paddingM,
+              top: AppDimensions.paddingM,
+              bottom:
+                  AppDimensions.paddingM +
+                  MediaQuery.of(context).padding.bottom,
+            ),
             itemCount: purchaseOrders.length,
             itemBuilder: (context, index) {
               final order = purchaseOrders[index];
@@ -77,86 +125,104 @@ class _OrdersScreenState extends State<OrdersScreen> {
   Widget _buildOrderCard(dynamic order) {
     return Card(
       margin: const EdgeInsets.only(bottom: AppDimensions.spacingM),
-      child: InkWell(
-        onTap: () {
-          Navigator.pushNamed(
-            context,
-            '/order-detail',
-            arguments: {'orderId': order.id ?? order.orderNumber},
-          );
-        },
-        borderRadius: BorderRadius.circular(AppDimensions.radiusM),
-        child: Padding(
-          padding: const EdgeInsets.all(AppDimensions.paddingM),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Builder(
-                      builder: (context) {
-                        final localizations = AppLocalizations.of(context);
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              localizations.orderNumberPrefix(
-                                '${order.orderNumber ?? order.id}',
-                              ),
-                              style: TextStyle(
-                                fontSize: AppDimensions.fontSizeM,
-                                fontWeight: FontWeight.w600,
-                                color: context.textColor,
-                              ),
-                            ),
-                            const SizedBox(height: AppDimensions.spacingS),
-                            Text(
-                              localizations.totalPrefix(
-                                '\$${order.totalAmount?.toStringAsFixed(2) ?? '0.00'}',
-                              ),
-                              style: const TextStyle(
-                                fontSize: AppDimensions.fontSizeM,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.primary,
-                              ),
-                            ),
-                            const SizedBox(height: AppDimensions.spacingS),
-                            Text(
-                              localizations.statusPrefix(
-                                localizations.getOrderStatusLabel(
-                                  order.status ?? 'pending',
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: InkWell(
+          onTap: () {
+            Navigator.pushNamed(
+              context,
+              '/order-detail',
+              arguments: {'orderId': order.id ?? order.orderNumber},
+            );
+          },
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(AppDimensions.paddingM),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Builder(
+                        builder: (context) {
+                          final localizations = AppLocalizations.of(context);
+                          final effectiveStatus = _getEffectiveStatus(order);
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                localizations.orderNumberPrefix(
+                                  '${order.orderNumber ?? order.id}',
+                                ),
+                                style: TextStyle(
+                                  fontSize: AppDimensions.fontSizeM,
+                                  fontWeight: FontWeight.w600,
+                                  color: context.textColor,
                                 ),
                               ),
-                              style: TextStyle(
-                                fontSize: AppDimensions.fontSizeS,
-                                color: context.secondaryTextColor,
+                              const SizedBox(height: AppDimensions.spacingS),
+                              Text(
+                                localizations.totalPrefix(
+                                  '\$${order.totalAmount?.toStringAsFixed(2) ?? '0.00'}',
+                                ),
+                                style: const TextStyle(
+                                  fontSize: AppDimensions.fontSizeM,
+                                  fontWeight: FontWeight.w500,
+                                  color: AppColors.primary,
+                                ),
                               ),
-                            ),
-                          ],
-                        );
-                      },
+                              const SizedBox(height: AppDimensions.spacingS),
+                              Text(
+                                localizations.statusPrefix(
+                                  localizations.getOrderStatusLabel(
+                                    effectiveStatus,
+                                  ),
+                                ),
+                                style: TextStyle(
+                                  fontSize: AppDimensions.fontSizeS,
+                                  color: context.secondaryTextColor,
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: AppDimensions.spacingS),
-                  Flexible(
-                    child: _buildStatusChip(order.status ?? 'pending', context),
-                  ),
-                ],
-              ),
-              const SizedBox(height: AppDimensions.spacingS),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Icon(
-                    Icons.arrow_forward_ios,
-                    size: 16,
-                    color: context.secondaryTextColor,
-                  ),
-                ],
-              ),
-            ],
+                    const SizedBox(width: AppDimensions.spacingS),
+                    Flexible(
+                      child: _buildStatusChip(
+                        _getEffectiveStatus(order),
+                        context,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppDimensions.spacingS),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Icon(
+                      Icons.arrow_forward_ios,
+                      size: 16,
+                      color: context.secondaryTextColor,
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -247,6 +313,18 @@ class _OrdersScreenState extends State<OrdersScreen> {
             const SizedBox(height: AppDimensions.spacingXL),
             ElevatedButton(
               onPressed: () => Navigator.pushNamed(context, '/home'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 16,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 2,
+              ),
               child: Text(localizations.browseBooks),
             ),
           ],
@@ -289,6 +367,20 @@ class _OrdersScreenState extends State<OrdersScreen> {
                     const SizedBox(height: AppDimensions.spacingXL),
                     ElevatedButton(
                       onPressed: _loadOrders,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        foregroundColor: Theme.of(
+                          context,
+                        ).colorScheme.onPrimary,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 32,
+                          vertical: 16,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 2,
+                      ),
                       child: Text(localizations.tryAgain),
                     ),
                   ],

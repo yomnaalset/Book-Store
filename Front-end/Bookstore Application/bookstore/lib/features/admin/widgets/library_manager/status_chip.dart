@@ -129,6 +129,14 @@ class StatusChip extends StatelessWidget {
         return localizations.statusCancelled.toUpperCase();
       case 'assigned_to_delivery':
         return localizations.assigned.toUpperCase();
+      // DeliveryRequest statuses
+      case 'assigned':
+        return 'ORDER ASSIGNED TO DELIVERY MANAGER';
+      case 'accepted':
+        return 'DELIVERY MANAGER ACCEPTED ORDER';
+      case 'in_delivery':
+        return 'ORDER IN DELIVERY';
+
       default:
         // Try to use getOrderStatusLabel first for order statuses
         // This handles order-specific statuses like 'rejected_by_admin', 'pending_review', etc.

@@ -11,6 +11,7 @@ import '../../cart/providers/cart_provider.dart';
 import '../../favorites/providers/favorites_provider.dart';
 import '../../reviews/widgets/reviews_list.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../borrow/providers/borrow_provider.dart';
 import '../models/book.dart';
 import '../services/books_api_service.dart';
 
@@ -179,6 +180,7 @@ class _BookDetailScreenState extends State<BookDetailScreen>
                     height: 12.0,
                   ), // Reduced to approximately 3 lines
                   _buildActionButtons(book),
+                  SizedBox(height: MediaQuery.of(context).padding.bottom),
                 ],
               ),
             ),
@@ -274,11 +276,18 @@ class _BookDetailScreenState extends State<BookDetailScreen>
       actions: [
         Consumer<FavoritesProvider>(
           builder: (context, favoritesProvider, child) {
-            return IconButton(
-              onPressed: () => _toggleFavorite(favoritesProvider),
-              icon: Icon(
-                _isFavorite ? Icons.favorite : Icons.favorite_border,
-                color: _isFavorite ? AppColors.error : Colors.white,
+            return Container(
+              margin: const EdgeInsets.only(right: 8, top: 8, bottom: 8),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.2),
+                shape: BoxShape.circle,
+              ),
+              child: IconButton(
+                onPressed: () => _toggleFavorite(favoritesProvider),
+                icon: Icon(
+                  _isFavorite ? Icons.favorite : Icons.favorite_border,
+                  color: _isFavorite ? AppColors.error : Colors.white,
+                ),
               ),
             );
           },
@@ -359,7 +368,9 @@ class _BookDetailScreenState extends State<BookDetailScreen>
                   builder: (context) {
                     final localizations = AppLocalizations.of(context);
                     return Text(
-                      localizations.saveAmount('\$${book.savingsAmount.toStringAsFixed(2)}'),
+                      localizations.saveAmount(
+                        '\$${book.savingsAmount.toStringAsFixed(2)}',
+                      ),
                       style: const TextStyle(
                         fontSize: AppDimensions.fontSizeS,
                         color: Colors.white,
@@ -660,9 +671,12 @@ class _BookDetailScreenState extends State<BookDetailScreen>
 
   Widget _buildReviewsTab(Book book) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppDimensions.spacingM,
-        vertical: AppDimensions.spacingS,
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: EdgeInsets.only(
+        left: AppDimensions.spacingM,
+        right: AppDimensions.spacingM,
+        top: AppDimensions.spacingS,
+        bottom: AppDimensions.spacingS + MediaQuery.of(context).padding.bottom,
       ),
       child: ReviewsList(
         bookId: book.id,
@@ -892,8 +906,96 @@ class _BookDetailScreenState extends State<BookDetailScreen>
     );
   }
 
-  void _borrowBook() {
-    final book = _bookDetails ?? widget.book;
-    Navigator.pushNamed(context, '/borrow-request', arguments: {'book': book});
+  Future<void> _borrowBook() async {
+    final localizations = AppLocalizations.of(context);
+    final borrowProvider = Provider.of<BorrowProvider>(context, listen: false);
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    
+    // Ensure provider has the current token
+    if (authProvider.token != null) {
+      borrowProvider.setToken(authProvider.token);
+    }
+    
+    // Show loading indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+    
+    try {
+      // Check for active or pending borrowings
+      await borrowProvider.loadBorrowHistory();
+      
+      final activeBorrowings = borrowProvider.borrowRequests.where((request) {
+        final status = request.status.toLowerCase();
+        return status == 'payment_pending' ||
+               status == 'pending' ||
+               status == 'approved' ||
+               status == 'delivered' ||
+               status == 'borrowed' ||
+               status == 'overdue' ||
+               status == 'return_requested';
+      }).toList();
+      
+      // Close loading dialog
+      if (mounted) Navigator.of(context).pop();
+      
+      if (activeBorrowings.isNotEmpty) {
+        // Show error dialog
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: Text(localizations.cannotBorrowBook),
+              content: Text(
+                activeBorrowings.any((r) => 
+                  r.status.toLowerCase() == 'payment_pending' ||
+                  r.status.toLowerCase() == 'pending' ||
+                  r.status.toLowerCase() == 'approved'
+                )
+                  ? localizations.youAlreadyHavePendingBorrowRequest
+                  : localizations.youHaveUnreturnedBooks,
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: Text(localizations.ok),
+                ),
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    Navigator.pushNamed(context, '/borrow-status');
+                  },
+                  child: Text(localizations.viewBorrowings),
+                ),
+              ],
+            ),
+          );
+        }
+        return;
+      }
+      
+      // No active borrowings, proceed to borrow request screen
+      final book = _bookDetails ?? widget.book;
+      if (mounted) {
+        Navigator.pushNamed(context, '/borrow-request', arguments: {'book': book});
+      }
+    } catch (e) {
+      // Close loading dialog if still open
+      if (mounted) Navigator.of(context).pop();
+      
+      // Show error message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(localizations.failedToCheckBorrowingStatus),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
   }
 }

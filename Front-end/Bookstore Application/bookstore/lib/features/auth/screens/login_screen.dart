@@ -75,33 +75,54 @@ class _LoginScreenState extends State<LoginScreen> {
       backgroundColor: theme.scaffoldBackgroundColor,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(AppDimensions.paddingL),
+          padding: const EdgeInsets.all(20),
           child: Form(
             key: _formKey,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: AppDimensions.spacingXXL),
+                const SizedBox(height: 40),
 
                 // Logo and Title
                 _buildHeader(l10n),
 
-                const SizedBox(height: AppDimensions.spacingXXL),
+                const SizedBox(height: 40),
 
-                // Login Form
-                _buildLoginForm(l10n),
+                // Login Form Card
+                Container(
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surface,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.08),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                        spreadRadius: 0,
+                      ),
+                    ],
+                  ),
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Login Form
+                      _buildLoginForm(l10n),
 
-                const SizedBox(height: AppDimensions.spacingL),
+                      const SizedBox(height: 24),
 
-                // Login Button
-                _buildLoginButton(l10n),
+                      // Login Button
+                      _buildLoginButton(l10n),
 
-                const SizedBox(height: AppDimensions.spacingM),
+                      const SizedBox(height: 16),
 
-                // Forgot Password
-                _buildForgotPasswordLink(l10n),
+                      // Forgot Password
+                      _buildForgotPasswordLink(l10n),
+                    ],
+                  ),
+                ),
 
-                const SizedBox(height: AppDimensions.spacingXL),
+                const SizedBox(height: 32),
 
                 // Register Link
                 _buildRegisterLink(l10n),
@@ -118,41 +139,58 @@ class _LoginScreenState extends State<LoginScreen> {
 
     return Column(
       children: [
-        // App Logo
+        // App Logo with gradient background
         Container(
-          width: 80,
-          height: 80,
+          width: 100,
+          height: 100,
           decoration: BoxDecoration(
-            color: theme.colorScheme.primary,
-            borderRadius: BorderRadius.circular(AppDimensions.radiusL),
+            gradient: LinearGradient(
+              colors: [
+                theme.colorScheme.primary,
+                theme.colorScheme.primary.withValues(alpha: 204),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: theme.colorScheme.primary.withValues(alpha: 77),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
+                spreadRadius: 0,
+              ),
+            ],
           ),
           child: Icon(
             Icons.library_books,
             color: theme.colorScheme.onPrimary,
-            size: 40,
+            size: 48,
           ),
         ),
 
-        const SizedBox(height: AppDimensions.spacingL),
+        const SizedBox(height: 24),
 
         // App Name
         Text(
           l10n.appName,
           style: TextStyle(
-            fontSize: AppDimensions.fontSizeXXXL,
+            fontSize: 32,
             fontWeight: FontWeight.bold,
             color: theme.colorScheme.onSurface,
+            letterSpacing: 0.5,
           ),
         ),
 
-        const SizedBox(height: AppDimensions.spacingS),
+        const SizedBox(height: 8),
 
         // Welcome Text
         Text(
           l10n.welcome,
           style: TextStyle(
-            fontSize: AppDimensions.fontSizeL,
+            fontSize: 16,
             color: theme.colorScheme.onSurfaceVariant,
+            fontWeight: FontWeight.w500,
           ),
         ),
       ],
@@ -217,23 +255,36 @@ class _LoginScreenState extends State<LoginScreen> {
 
     return Consumer<AuthProvider>(
       builder: (context, authProvider, child) {
-        return CustomButton(
-          text: l10n.loginButton,
-          onPressed: authProvider.isLoading
-              ? null
-              : () {
-                  debugPrint('=== LOGIN BUTTON CLICKED ===');
-                  debugPrint(
-                    'AuthProvider isLoading: ${authProvider.isLoading}',
-                  );
-                  _handleLogin();
-                },
-          type: ButtonType.primary,
-          size: ButtonSize.large,
-          isFullWidth: true,
-          isLoading: authProvider.isLoading,
-          textColor: theme.colorScheme.onPrimary,
-          backgroundColor: theme.colorScheme.primary,
+        return Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: theme.colorScheme.primary.withValues(alpha: 77),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+                spreadRadius: 0,
+              ),
+            ],
+          ),
+          child: CustomButton(
+            text: l10n.loginButton,
+            onPressed: authProvider.isLoading
+                ? null
+                : () {
+                    debugPrint('=== LOGIN BUTTON CLICKED ===');
+                    debugPrint(
+                      'AuthProvider isLoading: ${authProvider.isLoading}',
+                    );
+                    _handleLogin();
+                  },
+            type: ButtonType.primary,
+            size: ButtonSize.large,
+            isFullWidth: true,
+            isLoading: authProvider.isLoading,
+            textColor: theme.colorScheme.onPrimary,
+            backgroundColor: theme.colorScheme.primary,
+          ),
         );
       },
     );

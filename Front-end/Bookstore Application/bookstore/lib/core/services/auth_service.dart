@@ -19,7 +19,7 @@ import '../../features/admin/providers/categories_provider.dart'
 import '../../features/admin/providers/complaints_provider.dart';
 import '../../features/admin/providers/reports_provider.dart';
 import '../../features/admin/providers/delivery_provider.dart';
-import '../../features/admin/providers/library_manager/ads_provider.dart';
+import '../../features/admin/ads/providers/ads_provider.dart';
 import '../../features/admin/discounts/providers/discounts_provider.dart';
 import '../../features/orders/providers/orders_provider.dart';
 import '../../features/admin/orders/providers/orders_provider.dart'

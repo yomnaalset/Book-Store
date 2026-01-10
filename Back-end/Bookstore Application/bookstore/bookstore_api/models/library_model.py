@@ -389,6 +389,60 @@ class Author(models.Model):
             Q(nationality__icontains=search_term)
         )
 
+    def get_photo_url(self):
+        """
+        Get the URL of the author photo.
+        
+        Returns:
+            String URL of the photo or None if no photo exists
+        """
+        if self.photo:
+            try:
+                return str(self.photo.url)
+            except ValueError:
+                return None
+        return None
+    
+    @property
+    def has_photo(self):
+        """
+        Check if the author has a photo.
+        
+        Returns:
+            Boolean indicating if a photo exists
+        """
+        return bool(self.photo)
+    
+    @property
+    def is_alive(self):
+        """
+        Check if the author is alive (no death date).
+        
+        Returns:
+            Boolean indicating if the author is alive
+        """
+        return self.death_date is None
+    
+    def get_age(self):
+        """
+        Calculate the author's age based on birth and death dates.
+        
+        Returns:
+            Integer age or None if birth date is not available
+        """
+        if not self.birth_date:
+            return None
+        
+        from datetime import date
+        end_date = self.death_date if self.death_date else date.today()
+        age = end_date.year - self.birth_date.year
+        
+        # Adjust if birthday hasn't occurred yet this year
+        if (end_date.month, end_date.day) < (self.birth_date.month, self.birth_date.day):
+            age -= 1
+        
+        return age
+    
     def delete(self, *args, **kwargs):
         """
         Prevent deletion if author has books.

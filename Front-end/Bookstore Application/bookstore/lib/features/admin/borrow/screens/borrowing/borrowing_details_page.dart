@@ -358,15 +358,46 @@ class _BorrowingDetailsPageState extends State<BorrowingDetailsPage> {
         padding: const EdgeInsets.all(16.0),
         child: Row(
           children: [
-            // Book cover placeholder
-            Container(
-              width: 60,
-              height: 80,
-              decoration: BoxDecoration(
-                color: Colors.grey.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(Icons.book, color: Colors.grey, size: 30),
+            // Book cover image
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child:
+                  request.book?.coverImageUrl != null &&
+                      request.book!.coverImageUrl!.isNotEmpty
+                  ? Image.network(
+                      request.book!.coverImageUrl!,
+                      width: 60,
+                      height: 80,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          width: 60,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(
+                            Icons.book,
+                            color: Colors.grey,
+                            size: 30,
+                          ),
+                        );
+                      },
+                    )
+                  : Container(
+                      width: 60,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(
+                        Icons.book,
+                        color: Colors.grey,
+                        size: 30,
+                      ),
+                    ),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -1130,11 +1161,13 @@ class _BorrowingDetailsPageState extends State<BorrowingDetailsPage> {
   }
 
   IconData _getStatusIcon(String statusText) {
-    switch (statusText.toLowerCase()) {
+    final normalizedStatus = statusText.toLowerCase() == 'busy'
+        ? 'online'
+        : statusText.toLowerCase();
+
+    switch (normalizedStatus) {
       case 'online':
         return Icons.wifi;
-      case 'busy':
-        return Icons.local_shipping;
       case 'offline':
         return Icons.wifi_off;
       default:
@@ -1149,8 +1182,26 @@ class _BorrowingDetailsPageState extends State<BorrowingDetailsPage> {
   /// Check if delivery is currently active (started but not finished)
   /// Button should appear ONLY when status is "out_for_delivery" (delivery in progress)
   /// Button should disappear when status is "delivered", "active", or any other status (delivery completed)
+  /// Check if "Show Delivery Manager Location" button should be visible.
+  /// Button should appear ONLY when delivery begins (DeliveryRequest.status = 'in_delivery')
+  /// Button should disappear when delivery is complete (DeliveryRequest.status = 'completed')
   bool _isDeliveryActive() {
     if (_currentRequest == null) return false;
+
+    // Use DeliveryRequest status if available (preferred method)
+    if (_currentRequest!.deliveryRequest != null) {
+      final deliveryStatus = _currentRequest!.deliveryRequest!.status
+          .toLowerCase();
+      // Button only shows when delivery is actively in progress (in_delivery)
+      // Hide when completed or any other status
+      if (deliveryStatus != 'in_delivery') {
+        return false;
+      }
+      // Also check if location data is available
+      return _currentRequest!.deliveryRequest!.canTrackLocation;
+    }
+
+    // Fallback to old logic for backward compatibility (if DeliveryRequest not available)
     if (_currentRequest!.deliveryPerson == null) return false;
 
     // Normalize the status: lowercase, trim, replace spaces and hyphens with underscores
@@ -1194,13 +1245,8 @@ class _BorrowingDetailsPageState extends State<BorrowingDetailsPage> {
       return;
     }
 
-    // Verify that status is still out_for_delivery
-    final status = _currentRequest!.status
-        .toLowerCase()
-        .trim()
-        .replaceAll(' ', '_')
-        .replaceAll('-', '_');
-    if (status != 'out_for_delivery') {
+    // Verify that delivery is still active using the same logic as button visibility
+    if (!_isDeliveryActive()) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(

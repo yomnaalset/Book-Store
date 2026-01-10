@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'dart:io';
 import '../../../admin/models/author.dart';
 import '../../services/manager_api_service.dart';
 
@@ -59,7 +60,11 @@ class AuthorsProvider extends ChangeNotifier {
     }
   }
 
-  Future<Author?> createAuthor(Author author) async {
+  Future<Author?> createAuthor(
+    Author author, {
+    File? photoFile,
+    Uint8List? photoBytes,
+  }) async {
     _setLoading(true);
     _error = null;
     notifyListeners();
@@ -71,7 +76,11 @@ class AuthorsProvider extends ChangeNotifier {
       debugPrint(
         'DEBUG: AuthorsProvider - Current token status: ${_apiService.getAuthToken?.call().isNotEmpty ?? false}',
       );
-      final newAuthor = await _apiService.createAuthor(author);
+      final newAuthor = await _apiService.createAuthor(
+        author,
+        photoFile: photoFile,
+        photoBytes: photoBytes,
+      );
       debugPrint(
         'DEBUG: AuthorsProvider - Author created successfully: ${newAuthor.toJson()}',
       );
@@ -90,7 +99,11 @@ class AuthorsProvider extends ChangeNotifier {
     }
   }
 
-  Future<Author?> updateAuthor(Author author) async {
+  Future<Author?> updateAuthor(
+    Author author, {
+    File? photoFile,
+    Uint8List? photoBytes,
+  }) async {
     _setLoading(true);
     _error = null;
     notifyListeners();
@@ -99,7 +112,11 @@ class AuthorsProvider extends ChangeNotifier {
       debugPrint('DEBUG: Updating author with ID: ${author.id}');
       debugPrint('DEBUG: Author data: ${author.toJson()}');
 
-      final updatedAuthor = await _apiService.updateAuthor(author);
+      final updatedAuthor = await _apiService.updateAuthor(
+        author,
+        photoFile: photoFile,
+        photoBytes: photoBytes,
+      );
 
       debugPrint(
         'DEBUG: API returned updated author: ${updatedAuthor.toJson()}',

@@ -74,9 +74,17 @@ class CustomTextField extends StatelessWidget {
       textCapitalization: textCapitalization,
       textAlign: textAlign,
       focusNode: focusNode,
-      style: const TextStyle(
+      // Support text direction based on locale (RTL for Arabic, LTR for English)
+      textDirection: null, // Let Flutter determine based on locale
+      // Enable Unicode input for Arabic and English
+      enableSuggestions: true,
+      style: TextStyle(
         fontSize: AppDimensions.fontSizeM,
         color: AppColors.textPrimary,
+        // Use system font that supports both Arabic and English
+        fontFamily: null, // Use system default which supports Unicode
+        // Ensure proper rendering of Arabic and English characters
+        letterSpacing: 0.0,
       ),
       decoration: InputDecoration(
         hintText: hintText,
@@ -85,10 +93,12 @@ class CustomTextField extends StatelessWidget {
         errorText: errorText,
         prefixIcon: prefixIcon,
         suffixIcon: suffixIcon,
-        contentPadding: contentPadding ?? const EdgeInsets.symmetric(
-          horizontal: AppDimensions.paddingM,
-          vertical: AppDimensions.paddingM,
-        ),
+        contentPadding:
+            contentPadding ??
+            const EdgeInsets.symmetric(
+              horizontal: AppDimensions.paddingM,
+              vertical: AppDimensions.paddingM,
+            ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
           borderSide: const BorderSide(color: AppColors.border),
@@ -114,7 +124,9 @@ class CustomTextField extends StatelessWidget {
           borderSide: const BorderSide(color: AppColors.disabled),
         ),
         filled: true,
-        fillColor: enabled ? AppColors.surface : AppColors.disabled.withValues(alpha: 0.1),
+        fillColor: enabled
+            ? AppColors.surface
+            : AppColors.disabled.withValues(alpha: 0.1),
         hintStyle: const TextStyle(
           color: AppColors.textSecondary,
           fontSize: AppDimensions.fontSizeM,

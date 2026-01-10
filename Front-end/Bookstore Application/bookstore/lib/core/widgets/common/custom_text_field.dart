@@ -157,6 +157,14 @@ class _CustomTextFieldState extends State<CustomTextField> {
           keyboardType: widget.keyboardType ?? _getKeyboardType(),
           inputFormatters: widget.inputFormatters ?? _getInputFormatters(),
           autofocus: widget.autofocus,
+          // Support text direction based on locale (RTL for Arabic, LTR for English)
+          textDirection: null, // Let Flutter determine based on locale
+          // Enable Unicode input for Arabic and English
+          enableSuggestions: true,
+          // Explicitly enable IME (Input Method Editor) for multilingual support
+          enableInteractiveSelection: true,
+          // Ensure proper text input handling for RTL languages
+          textAlign: TextAlign.start, // Will be adjusted by textDirection
           style: widget.textStyle ?? _getTextStyle(theme),
           decoration: InputDecoration(
             hintText: widget.hint,
@@ -265,7 +273,9 @@ class _CustomTextFieldState extends State<CustomTextField> {
   TextInputType _getKeyboardType() {
     switch (widget.type) {
       case TextFieldType.email:
-        return TextInputType.emailAddress;
+        // Use text type for email to allow Unicode characters in email addresses
+        // The validator will handle email format validation
+        return TextInputType.text;
       case TextFieldType.phone:
         return TextInputType.phone;
       case TextFieldType.number:
@@ -273,6 +283,7 @@ class _CustomTextFieldState extends State<CustomTextField> {
       case TextFieldType.multiline:
         return TextInputType.multiline;
       default:
+        // Use text type to ensure full Unicode support (Arabic, English, etc.)
         return TextInputType.text;
     }
   }
@@ -280,14 +291,24 @@ class _CustomTextFieldState extends State<CustomTextField> {
   List<TextInputFormatter> _getInputFormatters() {
     switch (widget.type) {
       case TextFieldType.phone:
+        // Allow digits only for phone numbers (international format)
         return [
           FilteringTextInputFormatter.digitsOnly,
           LengthLimitingTextInputFormatter(15),
         ];
       case TextFieldType.number:
+        // Allow digits and decimal point for numbers
         // ignore: deprecated_member_use
         return [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))];
-      default:
+      case TextFieldType.email:
+        // Email should allow Unicode characters (for international email addresses)
+        // No restrictive formatters - let the validator handle email format
+        return [];
+      case TextFieldType.text:
+      case TextFieldType.multiline:
+      case TextFieldType.password:
+        // Allow all Unicode characters (Arabic, English, etc.)
+        // No restrictive formatters to support multilingual input
         return [];
     }
   }
@@ -296,6 +317,10 @@ class _CustomTextFieldState extends State<CustomTextField> {
     return TextStyle(
       fontSize: AppDimensions.fontSizeM,
       color: theme.colorScheme.onSurface,
+      // Use system font that supports both Arabic and English
+      fontFamily: null, // Use system default which supports Unicode
+      // Ensure proper rendering of Arabic and English characters
+      letterSpacing: 0.0,
     );
   }
 

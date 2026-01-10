@@ -30,11 +30,15 @@ class _BorrowStatusDetailScreenState extends State<BorrowStatusDetailScreen> {
   BorrowRequest? _borrowRequest;
   bool _isLoading = true;
   String? _errorMessage;
+  bool _hasReturnRequest = false; // Track if a return request exists
+  bool _paymentMethodSelected =
+      false; // Track if payment method has been selected
 
   @override
   void initState() {
     super.initState();
     _loadBorrowRequest();
+    _checkReturnRequest();
   }
 
   Future<void> _loadBorrowRequest() async {
@@ -84,6 +88,8 @@ class _BorrowStatusDetailScreenState extends State<BorrowStatusDetailScreen> {
         debugPrint(
           'BorrowStatusDetailScreen: Successfully loaded borrow request. Status: ${borrowRequest.status}',
         );
+        // Check for return request after loading borrow request
+        _checkReturnRequest();
       } else {
         if (mounted) {
           final localizations = AppLocalizations.of(context);
@@ -100,6 +106,60 @@ class _BorrowStatusDetailScreenState extends State<BorrowStatusDetailScreen> {
         setState(() {
           _errorMessage = localizations.failedToLoadBorrowRequest(e.toString());
           _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _checkReturnRequest() async {
+    if (_borrowRequest == null) return;
+    if (!mounted) return;
+
+    try {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final returnProvider = Provider.of<ReturnRequestProvider>(
+        context,
+        listen: false,
+      );
+
+      if (authProvider.token != null) {
+        returnProvider.setToken(authProvider.token!);
+      }
+
+      // Load return requests
+      await returnProvider.loadReturnRequests();
+
+      // Check if a return request exists for this borrow request
+      final returnRequests = returnProvider.returnRequests;
+      ReturnRequest? matchingReturnRequest;
+      try {
+        matchingReturnRequest = returnRequests.firstWhere(
+          (rr) => rr.borrowRequest.id == _borrowRequest!.id,
+        );
+      } catch (e) {
+        matchingReturnRequest = null;
+      }
+
+      final hasReturnRequest = matchingReturnRequest != null;
+
+      // Check if payment method has been selected
+      final paymentMethodSelected =
+          matchingReturnRequest?.paymentMethod != null &&
+          matchingReturnRequest!.paymentMethod!.isNotEmpty;
+
+      if (mounted) {
+        setState(() {
+          _hasReturnRequest = hasReturnRequest;
+          _paymentMethodSelected = paymentMethodSelected;
+        });
+      }
+    } catch (e) {
+      debugPrint('BorrowStatusDetailScreen: Error checking return request: $e');
+      // Don't show error to user, just assume no return request exists
+      if (mounted) {
+        setState(() {
+          _hasReturnRequest = false;
+          _paymentMethodSelected = false;
         });
       }
     }
@@ -217,12 +277,24 @@ class _BorrowStatusDetailScreenState extends State<BorrowStatusDetailScreen> {
     }
   }
 
-  /// Check if delivery is currently active (started but not finished)
-  /// Button should appear when status is "out_for_delivery" (delivery in progress)
-  /// OR "out_for_return_pickup" (return pickup in progress)
-  /// Button should disappear when status is "delivered", "active", or any other status (delivery completed)
-  bool _isDeliveryActive() {
+  /// Check if delivery location tracking is available
+  /// Button should appear ONLY when DeliveryRequest.status == 'in_delivery'
+  /// Button should disappear when DeliveryRequest.status == 'completed'
+  /// This protects privacy and prevents unnecessary tracking
+  bool _canTrackDeliveryLocation() {
     if (_borrowRequest == null) return false;
+
+    // Use DeliveryRequest if available
+    if (_borrowRequest!.deliveryRequest != null) {
+      final deliveryStatus = _borrowRequest!.deliveryRequest!.status
+          .toLowerCase();
+      // Button only shows when delivery is actively in progress (in_delivery)
+      // Hide when completed or any other status
+      return deliveryStatus == 'in_delivery' &&
+          _borrowRequest!.deliveryRequest!.canTrackLocation;
+    }
+
+    // Fallback to old logic for backward compatibility (if DeliveryRequest not available)
     if (_borrowRequest!.deliveryPerson == null) return false;
 
     // Normalize the status: lowercase, trim, replace spaces and hyphens with underscores
@@ -240,6 +312,7 @@ class _BorrowStatusDetailScreenState extends State<BorrowStatusDetailScreen> {
   }
 
   /// Open delivery manager location in Google Maps
+  /// Uses DeliveryRequest location data when available (only when status is 'in_delivery')
   Future<void> _openDeliveryManagerLocation() async {
     if (!mounted) return;
 
@@ -256,6 +329,47 @@ class _BorrowStatusDetailScreenState extends State<BorrowStatusDetailScreen> {
       return;
     }
 
+    // Priority 1: Use DeliveryRequest location if available (new approach)
+    if (_borrowRequest!.deliveryRequest != null) {
+      final deliveryRequest = _borrowRequest!.deliveryRequest!;
+
+      // Verify status is in_delivery
+      if (deliveryRequest.status.toLowerCase() != 'in_delivery') {
+        if (mounted) {
+          final localizations = AppLocalizations.of(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(localizations.locationTrackingAvailable),
+              backgroundColor: AppColors.warning,
+            ),
+          );
+        }
+        return;
+      }
+
+      // Use location from DeliveryRequest
+      if (deliveryRequest.latitude != null &&
+          deliveryRequest.longitude != null) {
+        await _launchGoogleMaps(
+          deliveryRequest.latitude!,
+          deliveryRequest.longitude!,
+        );
+        return;
+      } else {
+        if (mounted) {
+          final localizations = AppLocalizations.of(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(localizations.deliveryManagerLocationNotAvailable),
+              backgroundColor: AppColors.warning,
+            ),
+          );
+        }
+        return;
+      }
+    }
+
+    // Priority 2: Fallback to old API endpoint (backward compatibility)
     if (_borrowRequest!.deliveryPerson == null) {
       if (mounted) {
         final localizations = AppLocalizations.of(context);
@@ -471,6 +585,61 @@ class _BorrowStatusDetailScreenState extends State<BorrowStatusDetailScreen> {
     try {
       if (!mounted) return;
       final localizations = AppLocalizations.of(context);
+
+      // Check if return request already exists
+      if (_hasReturnRequest) {
+        // Find the return request ID and confirm pickup
+        await returnProvider.loadReturnRequests();
+        final returnRequests = returnProvider.returnRequests;
+        ReturnRequest? matchingReturnRequest;
+        try {
+          matchingReturnRequest = returnRequests.firstWhere(
+            (rr) => rr.borrowRequest.id == _borrowRequest!.id,
+          );
+        } catch (e) {
+          matchingReturnRequest = null;
+        }
+
+        if (matchingReturnRequest != null) {
+          // Call the confirm pickup API
+          final returnService = ReturnRequestService();
+          returnService.setToken(authProvider.token);
+
+          try {
+            final result = await returnService.confirmReturnPickup(
+              int.parse(matchingReturnRequest.id),
+            );
+
+            // Reload data after confirming
+            await _loadBorrowRequest();
+            await _checkReturnRequest();
+
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    result['message'] ??
+                        'Return pickup confirmed. The delivery manager will contact you soon.',
+                  ),
+                  backgroundColor: AppColors.success,
+                  duration: const Duration(seconds: 3),
+                ),
+              );
+            }
+          } catch (e) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Error: ${e.toString()}'),
+                  backgroundColor: AppColors.error,
+                ),
+              );
+            }
+          }
+        }
+        return;
+      }
+
       try {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -489,6 +658,16 @@ class _BorrowStatusDetailScreenState extends State<BorrowStatusDetailScreen> {
       if (!mounted) return;
 
       if (success) {
+        // Wait a moment for backend to save the status change
+        await Future.delayed(const Duration(milliseconds: 500));
+
+        // Reload return requests to update the UI
+        await _checkReturnRequest();
+
+        // Reload the borrow request to get updated status
+        // Force reload by creating a new service instance
+        await _loadBorrowRequest();
+
         if (mounted) {
           try {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -501,9 +680,10 @@ class _BorrowStatusDetailScreenState extends State<BorrowStatusDetailScreen> {
             // Widget disposed, ignore
           }
         }
-        if (mounted) {
-          Navigator.pop(context);
-        }
+        // Don't navigate away, just update the UI to hide the button
+        // if (mounted) {
+        //   Navigator.pop(context);
+        // }
       } else {
         if (mounted) {
           try {
@@ -539,13 +719,35 @@ class _BorrowStatusDetailScreenState extends State<BorrowStatusDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final localizations = AppLocalizations.of(context);
     if (_isLoading) {
       return Scaffold(
         appBar: AppBar(
-          title: Text(localizations.borrowStatus),
-          backgroundColor: AppColors.primary,
-          foregroundColor: AppColors.white,
+          title: Text(
+            localizations.borrowStatus,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 20,
+              letterSpacing: 0.5,
+            ),
+          ),
+          backgroundColor: theme.colorScheme.primary,
+          foregroundColor: theme.colorScheme.onPrimary,
+          elevation: 0,
+          shadowColor: Colors.transparent,
+          flexibleSpace: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  theme.colorScheme.primary,
+                  theme.colorScheme.primary.withValues(alpha: 204),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+          ),
         ),
         body: const Center(child: LoadingIndicator()),
       );
@@ -554,9 +756,30 @@ class _BorrowStatusDetailScreenState extends State<BorrowStatusDetailScreen> {
     if (_errorMessage != null) {
       return Scaffold(
         appBar: AppBar(
-          title: Text(localizations.borrowStatus),
-          backgroundColor: AppColors.primary,
-          foregroundColor: AppColors.white,
+          title: Text(
+            localizations.borrowStatus,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 20,
+              letterSpacing: 0.5,
+            ),
+          ),
+          backgroundColor: theme.colorScheme.primary,
+          foregroundColor: theme.colorScheme.onPrimary,
+          elevation: 0,
+          shadowColor: Colors.transparent,
+          flexibleSpace: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  theme.colorScheme.primary,
+                  theme.colorScheme.primary.withValues(alpha: 204),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+          ),
         ),
         body: Center(
           child: Column(
@@ -577,9 +800,30 @@ class _BorrowStatusDetailScreenState extends State<BorrowStatusDetailScreen> {
     if (_borrowRequest == null) {
       return Scaffold(
         appBar: AppBar(
-          title: Text(localizations.borrowStatus),
-          backgroundColor: AppColors.primary,
-          foregroundColor: AppColors.white,
+          title: Text(
+            localizations.borrowStatus,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 20,
+              letterSpacing: 0.5,
+            ),
+          ),
+          backgroundColor: theme.colorScheme.primary,
+          foregroundColor: theme.colorScheme.onPrimary,
+          elevation: 0,
+          shadowColor: Colors.transparent,
+          flexibleSpace: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  theme.colorScheme.primary,
+                  theme.colorScheme.primary.withValues(alpha: 204),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+          ),
         ),
         body: Center(child: Text(localizations.borrowRequestNotFound)),
       );
@@ -592,18 +836,35 @@ class _BorrowStatusDetailScreenState extends State<BorrowStatusDetailScreen> {
     // Calculate if the book is overdue (current date > due date)
     final isOverdue = dueDate != null && now.isAfter(dueDate);
 
-    // Calculate days overdue (positive number when overdue)
-    final daysOverdue = dueDate != null && isOverdue
-        ? now.difference(dueDate).inDays
-        : 0;
+    // Calculate fine amount if overdue - $0.10 per hour
+    final hourFineRate = 0.10;
+    double fineAmount = 0.0;
+    int hoursOverdue = 0;
 
-    // Calculate fine amount if overdue (daily rate: $1.00 per day)
-    final dailyFineRate = 1.00;
-    final calculatedFineAmount = isOverdue ? daysOverdue * dailyFineRate : 0.0;
+    // If payment method is selected (fine is finalized), use backend values
+    // Otherwise calculate in real-time
+    final backendFine = request.fineAmount ?? 0.0;
 
-    // Use fine amount from backend if available, otherwise use calculated amount
-    final fineAmount =
-        request.fineAmount ?? (isOverdue ? calculatedFineAmount : 0.0);
+    if (_paymentMethodSelected && backendFine > 0) {
+      // Fine is finalized - use backend values (don't recalculate)
+      fineAmount = backendFine;
+      // Calculate hours from finalized fine amount (reverse calculation)
+      hoursOverdue = (fineAmount / hourFineRate).round();
+      debugPrint(
+        'BorrowStatus: Fine FINALIZED - Hours: $hoursOverdue, Fine: \$${fineAmount.toStringAsFixed(2)}, _paymentMethodSelected: $_paymentMethodSelected',
+      );
+    } else if (isOverdue) {
+      // Fine not finalized - calculate in real-time
+      hoursOverdue = now.difference(dueDate).inHours;
+      fineAmount = hoursOverdue * hourFineRate;
+      debugPrint(
+        'BorrowStatus: Fine LIVE - Hours: $hoursOverdue, Fine: \$${fineAmount.toStringAsFixed(2)}, _paymentMethodSelected: $_paymentMethodSelected, backendFine: $backendFine',
+      );
+    }
+
+    debugPrint(
+      'BorrowStatus: Final - fineAmount: \$${fineAmount.toStringAsFixed(2)}, isOverdue: $isOverdue, _paymentMethodSelected: $_paymentMethodSelected',
+    );
 
     // Check if status allows showing return button and fine
     final status = request.status.toLowerCase();
@@ -612,13 +873,41 @@ class _BorrowStatusDetailScreenState extends State<BorrowStatusDetailScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(localizations.borrowStatus),
-        backgroundColor: AppColors.primary,
-        foregroundColor: AppColors.white,
+        title: Text(
+          localizations.borrowStatus,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+            letterSpacing: 0.5,
+          ),
+        ),
+        backgroundColor: theme.colorScheme.primary,
+        foregroundColor: theme.colorScheme.onPrimary,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                theme.colorScheme.primary,
+                theme.colorScheme.primary.withValues(alpha: 204),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadBorrowRequest,
+          Container(
+            margin: const EdgeInsets.only(right: 8, top: 8, bottom: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              shape: BoxShape.circle,
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _loadBorrowRequest,
+            ),
           ),
         ],
       ),
@@ -634,7 +923,11 @@ class _BorrowStatusDetailScreenState extends State<BorrowStatusDetailScreen> {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
                 side: BorderSide(
-                  color: _getStatusColor(request.status).withValues(alpha: 0.2),
+                  color:
+                      (request.deliveryRequest != null
+                              ? AppColors.info
+                              : _getStatusColor(request.status))
+                          .withValues(alpha: 0.2),
                   width: 1.5,
                 ),
               ),
@@ -646,7 +939,10 @@ class _BorrowStatusDetailScreenState extends State<BorrowStatusDetailScreen> {
                     end: Alignment.bottomRight,
                     colors: [
                       AppColors.white,
-                      _getStatusColor(request.status).withValues(alpha: 0.03),
+                      (request.deliveryRequest != null
+                              ? AppColors.info
+                              : _getStatusColor(request.status))
+                          .withValues(alpha: 0.03),
                     ],
                   ),
                 ),
@@ -688,6 +984,8 @@ class _BorrowStatusDetailScreenState extends State<BorrowStatusDetailScreen> {
                               ],
                             ),
                           ),
+                          // UNIFIED DELIVERY STATUS: Always show the primary status (delivery_request_status when available)
+                          // The status field now contains the unified status from delivery_request_status
                           _buildStatusChip(request.status),
                         ],
                       ),
@@ -714,28 +1012,57 @@ class _BorrowStatusDetailScreenState extends State<BorrowStatusDetailScreen> {
                             ),
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(12),
-                              child: request.book?.coverImageUrl != null
+                              child:
+                                  request.book?.coverImageUrl != null &&
+                                      request.book!.coverImageUrl!.isNotEmpty
                                   ? Image.network(
                                       request.book!.coverImageUrl!,
+                                      width: 90,
+                                      height: 135,
                                       fit: BoxFit.cover,
                                       errorBuilder:
                                           (context, error, stackTrace) {
                                             return Container(
-                                              color: AppColors.surface,
+                                              width: 90,
+                                              height: 135,
+                                              decoration: BoxDecoration(
+                                                gradient: const LinearGradient(
+                                                  begin: Alignment.topLeft,
+                                                  end: Alignment.bottomRight,
+                                                  colors: [
+                                                    AppColors.primaryLight,
+                                                    AppColors.primary,
+                                                  ],
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                              ),
                                               child: const Icon(
                                                 Icons.book,
                                                 size: 40,
-                                                color: AppColors.textSecondary,
+                                                color: AppColors.white,
                                               ),
                                             );
                                           },
                                     )
                                   : Container(
-                                      color: AppColors.surface,
+                                      width: 90,
+                                      height: 135,
+                                      decoration: BoxDecoration(
+                                        gradient: const LinearGradient(
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
+                                          colors: [
+                                            AppColors.primaryLight,
+                                            AppColors.primary,
+                                          ],
+                                        ),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
                                       child: const Icon(
                                         Icons.book,
                                         size: 40,
-                                        color: AppColors.textSecondary,
+                                        color: AppColors.white,
                                       ),
                                     ),
                             ),
@@ -784,7 +1111,9 @@ class _BorrowStatusDetailScreenState extends State<BorrowStatusDetailScreen> {
                           Icon(
                             Icons.info_outline,
                             size: 20,
-                            color: _getStatusColor(request.status),
+                            color: request.deliveryRequest != null
+                                ? AppColors.info
+                                : _getStatusColor(request.status),
                           ),
                           const SizedBox(width: AppDimensions.spacingS),
                           Text(
@@ -810,13 +1139,35 @@ class _BorrowStatusDetailScreenState extends State<BorrowStatusDetailScreen> {
                             ).withValues(alpha: 0.3),
                           ),
                         ),
-                        child: Text(
-                          localizations.getBorrowStatusLabel(request.status),
-                          style: TextStyle(
-                            fontSize: AppDimensions.fontSizeM,
-                            fontWeight: FontWeight.w600,
-                            color: _getStatusColor(request.status),
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // UNIFIED DELIVERY STATUS: Always show the primary unified status
+                            // The status field now contains delivery_request_status when available
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.local_shipping,
+                                  size: 20,
+                                  color: _getStatusColor(request.status),
+                                ),
+                                const SizedBox(width: AppDimensions.spacingS),
+                                Expanded(
+                                  child: Text(
+                                    // Use unified status label - this now reflects delivery_request_status
+                                    localizations.getBorrowStatusLabel(
+                                      request.status,
+                                    ),
+                                    style: TextStyle(
+                                      fontSize: AppDimensions.fontSizeM,
+                                      fontWeight: FontWeight.w600,
+                                      color: _getStatusColor(request.status),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
                       ),
 
@@ -844,24 +1195,77 @@ class _BorrowStatusDetailScreenState extends State<BorrowStatusDetailScreen> {
                           localizations.deliveryDate,
                           _formatDate(request.deliveryDate!),
                         ),
-                      if (request.dueDate != null)
+                      if (request.dueDate != null) ...[
                         _buildInfoItem(
                           Icons.event,
                           localizations.dueDate,
                           _formatDate(request.dueDate!),
                         ),
-                      if (request.finalReturnDate != null)
-                        _buildInfoItem(
-                          Icons.check_circle,
-                          localizations.returnDate,
-                          _formatDate(request.finalReturnDate!),
-                        ),
-                      _buildInfoItem(
-                        Icons.access_time,
-                        localizations.borrowPeriod,
-                        localizations.durationDays(request.durationDays),
-                      ),
-
+                        // Show overdue indicator and fine if book is overdue
+                        if (isOverdue) ...[
+                          const SizedBox(height: AppDimensions.spacingXS),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppDimensions.paddingM,
+                              vertical: AppDimensions.paddingS,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.error.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: AppColors.error.withValues(alpha: 0.3),
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.warning_amber_rounded,
+                                      size: 16,
+                                      color: AppColors.error,
+                                    ),
+                                    const SizedBox(
+                                      width: AppDimensions.spacingXS,
+                                    ),
+                                    Text(
+                                      'Overdue by $hoursOverdue hour${hoursOverdue != 1 ? 's' : ''}',
+                                      style: const TextStyle(
+                                        fontSize: AppDimensions.fontSizeS,
+                                        color: AppColors.error,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                // Show fine amount when overdue
+                                const SizedBox(height: AppDimensions.spacingXS),
+                                Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.attach_money,
+                                      size: 16,
+                                      color: AppColors.error,
+                                    ),
+                                    const SizedBox(
+                                      width: AppDimensions.spacingXS,
+                                    ),
+                                    Text(
+                                      '${localizations.fineAmount}: \$${fineAmount.toStringAsFixed(2)}',
+                                      style: const TextStyle(
+                                        fontSize: AppDimensions.fontSizeM,
+                                        color: AppColors.error,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
                       // Delivery Manager Section
                       if (request.deliveryPerson != null) ...[
                         const SizedBox(height: AppDimensions.spacingL),
@@ -939,8 +1343,8 @@ class _BorrowStatusDetailScreenState extends State<BorrowStatusDetailScreen> {
                         ),
 
                         // View Delivery Manager Location Button
-                        // Only show when status is "out_for_delivery"
-                        if (_isDeliveryActive()) ...[
+                        // Only show when DeliveryRequest.status == 'in_delivery' (protects privacy)
+                        if (_canTrackDeliveryLocation()) ...[
                           const SizedBox(height: AppDimensions.spacingM),
                           SizedBox(
                             width: double.infinity,
@@ -1006,19 +1410,12 @@ class _BorrowStatusDetailScreenState extends State<BorrowStatusDetailScreen> {
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Builder(
-                                    builder: (context) {
-                                      final localizations = AppLocalizations.of(
-                                        context,
-                                      );
-                                      return Text(
-                                        '${localizations.daysOverdue}: $daysOverdue',
-                                        style: const TextStyle(
-                                          fontSize: AppDimensions.fontSizeS,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      );
-                                    },
+                                  Text(
+                                    'Hours Overdue: $hoursOverdue',
+                                    style: const TextStyle(
+                                      fontSize: AppDimensions.fontSizeS,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
                                   const SizedBox(height: 4),
                                   Builder(
@@ -1053,15 +1450,16 @@ class _BorrowStatusDetailScreenState extends State<BorrowStatusDetailScreen> {
                                 ],
                               ),
                               const SizedBox(height: AppDimensions.spacingM),
-                              // Show "Payment Method" button if fine is not paid
-                              if (request.fineStatus == null ||
-                                  request.fineStatus!.toLowerCase() !=
-                                      'paid') ...[
+                              // Show "Payment Method" button if fine is not paid AND payment method not selected
+                              if (!_paymentMethodSelected &&
+                                  (request.fineStatus == null ||
+                                      request.fineStatus!.toLowerCase() !=
+                                          'paid')) ...[
                                 SizedBox(
                                   width: double.infinity,
                                   child: ElevatedButton.icon(
                                     onPressed: () async {
-                                      // Create or get return request first, then navigate to payment
+                                      // Get or create return request first, then navigate to payment
                                       try {
                                         final returnProvider =
                                             Provider.of<ReturnRequestProvider>(
@@ -1080,26 +1478,88 @@ class _BorrowStatusDetailScreenState extends State<BorrowStatusDetailScreen> {
                                           );
                                         }
 
-                                        // Create return request if it doesn't exist
-                                        final success = await returnProvider
-                                            .createReturnRequest(request.id);
-
                                         ReturnRequest? returnRequest;
 
-                                        if (!success) {
-                                          // Check if return request already exists
-                                          final errorMessage =
-                                              returnProvider.errorMessage ?? '';
-                                          final alreadyExists =
-                                              errorMessage.contains(
-                                                'already exists',
-                                              ) ||
-                                              errorMessage.contains(
-                                                'A return request already exists',
-                                              );
+                                        // First, check if a return request already exists
+                                        if (_hasReturnRequest) {
+                                          // Return request exists, load it directly
+                                          await returnProvider
+                                              .loadReturnRequests();
+                                          final returnRequests =
+                                              returnProvider.returnRequests;
+                                          try {
+                                            returnRequest = returnRequests
+                                                .firstWhere(
+                                                  (rr) =>
+                                                      rr.borrowRequest.id ==
+                                                      request.id,
+                                                );
+                                          } catch (e) {
+                                            // Return request not found in list
+                                            returnRequest = null;
+                                          }
+                                        } else {
+                                          // Create return request if it doesn't exist
+                                          final success = await returnProvider
+                                              .createReturnRequest(request.id);
 
-                                          if (alreadyExists) {
-                                            // Load return requests and find the existing one
+                                          if (!success) {
+                                            // Check if return request already exists (from error message)
+                                            final errorMessage =
+                                                returnProvider.errorMessage ??
+                                                '';
+                                            final alreadyExists =
+                                                errorMessage.contains(
+                                                  'already exists',
+                                                ) ||
+                                                errorMessage.contains(
+                                                  'A return request already exists',
+                                                ) ||
+                                                errorMessage.contains(
+                                                  'Failed to create return request',
+                                                );
+
+                                            if (alreadyExists) {
+                                              // Load return requests and find the existing one
+                                              await returnProvider
+                                                  .loadReturnRequests();
+                                              final returnRequests =
+                                                  returnProvider.returnRequests;
+                                              try {
+                                                returnRequest = returnRequests
+                                                    .firstWhere(
+                                                      (rr) =>
+                                                          rr.borrowRequest.id ==
+                                                          request.id,
+                                                    );
+                                              } catch (e) {
+                                                // Return request not found in list
+                                                returnRequest = null;
+                                              }
+                                            }
+
+                                            // If we couldn't find an existing return request, show error
+                                            if (returnRequest == null) {
+                                              if (!mounted) return;
+                                              if (!context.mounted) return;
+                                              ScaffoldMessenger.of(
+                                                context,
+                                              ).showSnackBar(
+                                                SnackBar(
+                                                  content: Text(
+                                                    returnProvider
+                                                            .errorMessage ??
+                                                        'Failed to create return request',
+                                                  ),
+                                                  backgroundColor:
+                                                      AppColors.error,
+                                                ),
+                                              );
+                                              return;
+                                            }
+                                          } else {
+                                            // Get return request details to get fineId
+                                            // The return request list should have the newly created one
                                             await returnProvider
                                                 .loadReturnRequests();
                                             final returnRequests =
@@ -1112,38 +1572,12 @@ class _BorrowStatusDetailScreenState extends State<BorrowStatusDetailScreen> {
                                                         request.id,
                                                   );
                                             } catch (e) {
-                                              // Return request not found in list
-                                              returnRequest = null;
+                                              returnRequest =
+                                                  returnRequests.isNotEmpty
+                                                  ? returnRequests.first
+                                                  : null;
                                             }
                                           }
-
-                                          // If we couldn't find an existing return request, show error
-                                          if (returnRequest == null) {
-                                            if (!mounted) return;
-                                            if (!context.mounted) return;
-                                            ScaffoldMessenger.of(
-                                              context,
-                                            ).showSnackBar(
-                                              SnackBar(
-                                                content: Text(
-                                                  returnProvider.errorMessage ??
-                                                      'Failed to create return request',
-                                                ),
-                                                backgroundColor:
-                                                    AppColors.error,
-                                              ),
-                                            );
-                                            return;
-                                          }
-                                        } else {
-                                          // Get return request details to get fineId
-                                          // The return request list should have the newly created one
-                                          final returnRequests =
-                                              returnProvider.returnRequests;
-                                          returnRequest =
-                                              returnRequests.isNotEmpty
-                                              ? returnRequests.first
-                                              : null;
                                         }
 
                                         if (returnRequest == null) {
@@ -1212,12 +1646,13 @@ class _BorrowStatusDetailScreenState extends State<BorrowStatusDetailScreen> {
                                               arguments: {
                                                 'fineId': fineId,
                                                 'fineAmount': fineAmount,
-                                                'daysOverdue': daysOverdue,
+                                                'hoursOverdue': hoursOverdue,
                                               },
                                             );
-                                        // Reload borrow request after payment
+                                        // Reload borrow request after payment and update return request flag
                                         if (result == true && mounted) {
                                           await _loadBorrowRequest();
+                                          await _checkReturnRequest();
                                         }
                                       } catch (e) {
                                         if (mounted) {
@@ -1244,10 +1679,11 @@ class _BorrowStatusDetailScreenState extends State<BorrowStatusDetailScreen> {
                                   ),
                                 ),
                               ],
-                              // Show "Return Book" button only if fine is paid
-                              if (request.fineStatus != null &&
-                                  request.fineStatus!.toLowerCase() ==
-                                      'paid') ...[
+                              // Show "Return Book" button if fine is paid OR payment method is selected
+                              if (_paymentMethodSelected ||
+                                  (request.fineStatus != null &&
+                                      request.fineStatus!.toLowerCase() ==
+                                          'paid')) ...[
                                 SizedBox(
                                   width: double.infinity,
                                   child: ElevatedButton.icon(
@@ -1284,7 +1720,7 @@ class _BorrowStatusDetailScreenState extends State<BorrowStatusDetailScreen> {
                               const SizedBox(width: AppDimensions.spacingS),
                               Expanded(
                                 child: Text(
-                                  localizations.overdueByDays(daysOverdue),
+                                  'Overdue by $hoursOverdue hour${hoursOverdue != 1 ? 's' : ''}',
                                   style: const TextStyle(
                                     color: AppColors.error,
                                     fontWeight: FontWeight.w600,
@@ -1297,8 +1733,36 @@ class _BorrowStatusDetailScreenState extends State<BorrowStatusDetailScreen> {
                         ),
                       ],
 
-                      // Return Button (when active but not overdue, or when overdue but fine not shown)
-                      if (status == 'active' && !isOverdue) ...[
+                      // Return Button - Show for active or delivered status (books that can be returned)
+                      // Only show if no return request already exists
+                      // For active: only show if not overdue (overdue books need to pay fine first)
+                      // For delivered: always show (delivered books can always be returned)
+                      if (!_hasReturnRequest &&
+                          status == 'active' &&
+                          !isOverdue) ...[
+                        const SizedBox(height: AppDimensions.spacingL),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: _handleReturn,
+                            icon: const Icon(Icons.assignment_return),
+                            label: Text(localizations.returnBook),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              foregroundColor: AppColors.white,
+                              padding: const EdgeInsets.symmetric(
+                                vertical: AppDimensions.paddingM,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                      // Return Button for delivered status (always show, regardless of overdue)
+                      // Only show if no return request already exists
+                      if (!_hasReturnRequest && status == 'delivered') ...[
                         const SizedBox(height: AppDimensions.spacingL),
                         SizedBox(
                           width: double.infinity,

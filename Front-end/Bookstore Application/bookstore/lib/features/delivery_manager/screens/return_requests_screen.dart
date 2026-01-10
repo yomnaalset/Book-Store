@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/localization/app_localizations.dart';
-import '../../../core/constants/app_colors.dart';
 import '../models/unified_delivery.dart';
 import '../services/unified_delivery_service.dart';
 import '../../../features/auth/providers/auth_provider.dart';
@@ -44,10 +43,43 @@ class _ReturnRequestsScreenState extends State<ReturnRequestsScreen> {
       );
 
       if (result['success'] == true) {
-        final data = result['data'] as List;
+        // Handle different response formats
+        List<dynamic> dataList;
+        final data = result['data'];
+
+        if (data is List) {
+          dataList = data;
+        } else if (data is Map<String, dynamic>) {
+          // Handle paginated response or nested structure
+          final results = data['results'];
+          if (results is List) {
+            dataList = results;
+          } else if (results is Map<String, dynamic> &&
+              results['results'] is List) {
+            // Nested paginated response
+            dataList = results['results'] as List;
+          } else {
+            dataList = [];
+          }
+        } else {
+          dataList = [];
+        }
+
         setState(() {
-          _deliveries = data
-              .map((json) => UnifiedDelivery.fromJson(json))
+          _deliveries = dataList
+              .map((json) {
+                try {
+                  if (json is Map<String, dynamic>) {
+                    return UnifiedDelivery.fromJson(json);
+                  } else {
+                    return null;
+                  }
+                } catch (e) {
+                  debugPrint('Error parsing delivery item: $e');
+                  return null;
+                }
+              })
+              .whereType<UnifiedDelivery>()
               .toList();
           _isLoading = false;
         });
@@ -65,135 +97,48 @@ class _ReturnRequestsScreenState extends State<ReturnRequestsScreen> {
     }
   }
 
-  Future<void> _handleAccept(int deliveryId) async {
-    try {
-      final result = await UnifiedDeliveryService.acceptDelivery(deliveryId);
-      if (!mounted) return;
-      if (result['success'] == true) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Delivery request accepted')),
-        );
-        _loadDeliveries();
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result['message'] ?? 'Failed to accept')),
-        );
-      }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error: $e')));
-    }
-  }
-
-  Future<void> _handleReject(int deliveryId) async {
-    final reasonController = TextEditingController();
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Reject Delivery Request'),
-        content: TextField(
-          controller: reasonController,
-          decoration: const InputDecoration(
-            labelText: 'Rejection Reason',
-            hintText: 'Enter reason for rejection',
-          ),
-          maxLines: 3,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, reasonController.text),
-            child: const Text('Reject'),
-          ),
-        ],
-      ),
-    );
-
-    if (result != null && result.isNotEmpty) {
-      try {
-        final apiResult = await UnifiedDeliveryService.rejectDelivery(
-          deliveryId,
-          result,
-        );
-        if (!mounted) return;
-        if (apiResult['success'] == true) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Delivery request rejected')),
-          );
-          _loadDeliveries();
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(apiResult['message'] ?? 'Failed to reject')),
-          );
-        }
-      } catch (e) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
-      }
-    }
-  }
-
-  Future<void> _handleStart(int deliveryId) async {
-    try {
-      final result = await UnifiedDeliveryService.startDelivery(deliveryId);
-      if (!mounted) return;
-      if (result['success'] == true) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Delivery started')));
-        _loadDeliveries();
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result['message'] ?? 'Failed to start')),
-        );
-      }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error: $e')));
-    }
-  }
-
-  Future<void> _handleComplete(int deliveryId) async {
-    try {
-      final result = await UnifiedDeliveryService.completeDelivery(deliveryId);
-      if (!mounted) return;
-      if (result['success'] == true) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Delivery completed')));
-        _loadDeliveries();
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result['message'] ?? 'Failed to complete')),
-        );
-      }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error: $e')));
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final localizations = AppLocalizations.of(context);
+    final theme = Theme.of(context);
     return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: Text(localizations.returnRequests),
+        title: Text(
+          localizations.returnRequests,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+            letterSpacing: 0.5,
+          ),
+        ),
+        backgroundColor: theme.colorScheme.primary,
+        foregroundColor: theme.colorScheme.onPrimary,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                theme.colorScheme.primary,
+                theme.colorScheme.primary.withValues(alpha: 204),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadDeliveries,
+          Container(
+            margin: const EdgeInsets.only(right: 8, top: 8, bottom: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              shape: BoxShape.circle,
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _loadDeliveries,
+            ),
           ),
         ],
       ),
@@ -204,10 +149,33 @@ class _ReturnRequestsScreenState extends State<ReturnRequestsScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(_errorMessage!),
+                  Icon(
+                    Icons.error_outline,
+                    size: 64,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    _errorMessage!,
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
                   const SizedBox(height: 16),
                   ElevatedButton(
                     onPressed: _loadDeliveries,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: theme.colorScheme.primary,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
                     child: const Text('Retry'),
                   ),
                 ],
@@ -215,9 +183,24 @@ class _ReturnRequestsScreenState extends State<ReturnRequestsScreen> {
             )
           : _deliveries.isEmpty
           ? Center(
-              child: Text(
-                'No return delivery requests',
-                style: Theme.of(context).textTheme.bodyLarge,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.undo_outlined,
+                    size: 64,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No return delivery requests',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
               ),
             )
           : RefreshIndicator(
@@ -242,9 +225,8 @@ class _ReturnRequestsScreenState extends State<ReturnRequestsScreen> {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => DeliveryRequestDetailScreen(
-                delivery: delivery,
-              ),
+              builder: (context) =>
+                  DeliveryRequestDetailScreen(delivery: delivery),
             ),
           );
         },
@@ -269,13 +251,14 @@ class _ReturnRequestsScreenState extends State<ReturnRequestsScreen> {
               const SizedBox(height: 12),
               Text('Customer: ${delivery.customerName ?? "N/A"}'),
               const SizedBox(height: 8),
-              Text('Address: ${delivery.deliveryAddress.isNotEmpty ? delivery.deliveryAddress : "Not provided"}'),
+              Text(
+                'Address: ${delivery.deliveryAddress.isNotEmpty ? delivery.deliveryAddress : "Not provided"}',
+              ),
               if (delivery.deliveryCity != null) ...[
                 const SizedBox(height: 4),
                 Text('City: ${delivery.deliveryCity}'),
               ],
-              const SizedBox(height: 16),
-              _buildActionButtons(delivery),
+              // Action buttons removed from list view - only show on detail page
             ],
           ),
         ),
@@ -307,77 +290,21 @@ class _ReturnRequestsScreenState extends State<ReturnRequestsScreen> {
       default:
         color = Colors.grey;
     }
-    return Chip(
-      label: Text(status.toUpperCase()),
-      backgroundColor: color.withValues(alpha: 0.2),
-      labelStyle: TextStyle(color: color, fontWeight: FontWeight.bold),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        status.toUpperCase(),
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.bold,
+          fontSize: 11,
+          letterSpacing: 0.5,
+        ),
+      ),
     );
-  }
-
-  Widget _buildActionButtons(UnifiedDelivery delivery) {
-    // Unified button display logic based on status
-    switch (delivery.deliveryStatus) {
-      case 'assigned':
-        return Row(
-          children: [
-            Expanded(
-              child: ElevatedButton(
-                onPressed: () => _handleAccept(delivery.id),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.success,
-                ),
-                child: const Text('Accept'),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: OutlinedButton(
-                onPressed: () => _handleReject(delivery.id),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.error,
-                ),
-                child: const Text('Reject'),
-              ),
-            ),
-          ],
-        );
-      case 'accepted':
-        return SizedBox(
-          width: double.infinity,
-          child: ElevatedButton(
-            onPressed: () => _handleStart(delivery.id),
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
-            child: const Text('Start Delivery'),
-          ),
-        );
-      case 'in_delivery':
-        return Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: () {
-                  // Navigate to location update screen
-                },
-                icon: const Icon(Icons.location_on),
-                label: const Text('Update Location'),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: ElevatedButton(
-                onPressed: () => _handleComplete(delivery.id),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.success,
-                ),
-                child: const Text('Complete'),
-              ),
-            ),
-          ],
-        );
-      case 'completed':
-      case 'rejected':
-      default:
-        return const SizedBox.shrink();
-    }
   }
 }

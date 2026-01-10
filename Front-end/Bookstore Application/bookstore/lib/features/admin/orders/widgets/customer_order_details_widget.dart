@@ -43,10 +43,17 @@ class _CustomerOrderDetailsWidgetState
                 title: localizations.orderDetails,
                 icon: Icons.shopping_cart,
                 children: [
-                  widget.shared.buildInfoRow(
-                    'Order Number',
-                    '#ORD-${widget.order.id.toString().padLeft(4, '0')}',
-                  ),
+                  widget.shared.buildInfoRow(localizations.orderNumber, () {
+                    final orderNumber = widget.order.orderNumber.isNotEmpty
+                        ? widget.order.orderNumber
+                        : 'ORD-${widget.order.id.toString().padLeft(4, '0')}';
+                    // Remove any existing # from start or end to avoid double #
+                    final cleanOrderNumber = orderNumber.replaceFirst(
+                      RegExp(r'^#+|#+$'),
+                      '',
+                    );
+                    return '#$cleanOrderNumber';
+                  }()),
                   widget.shared.buildInfoRow(
                     'Creation Date',
                     widget.shared.formatDate(widget.order.createdAt),
@@ -54,9 +61,17 @@ class _CustomerOrderDetailsWidgetState
                   Builder(
                     builder: (context) {
                       final localizations = AppLocalizations.of(context);
+                      // Get effective status - check delivery assignment if available
+                      final effectiveStatus =
+                          widget.order.deliveryAssignment != null &&
+                              widget.order.deliveryAssignment!.status
+                                      .toLowerCase() ==
+                                  'in_delivery'
+                          ? 'in_delivery'
+                          : widget.order.status;
                       return widget.shared.buildInfoRow(
                         'Current Status',
-                        localizations.getOrderStatusLabel(widget.order.status),
+                        localizations.getOrderStatusLabel(effectiveStatus),
                       );
                     },
                   ),
@@ -184,8 +199,44 @@ class _CustomerOrderDetailsWidgetState
           const SizedBox(height: 16),
 
           // View Delivery Location Button (when status is "in_delivery")
-          if (widget.order.isInDelivery && !widget.order.isCancelled)
-            _buildViewDeliveryLocationButton(),
+          // Check both order status and delivery assignment status
+          Builder(
+            builder: (context) {
+              // More robust status checking - handle various formats
+              String? deliveryStatus;
+              if (widget.order.deliveryAssignment?.status != null) {
+                deliveryStatus = widget.order.deliveryAssignment!.status
+                    .toLowerCase()
+                    .trim();
+              }
+              final isDeliveryActive =
+                  deliveryStatus == 'in_delivery' ||
+                  deliveryStatus == 'in-delivery' ||
+                  deliveryStatus == 'in delivery';
+
+              final shouldShowButton =
+                  (widget.order.isInDelivery || isDeliveryActive) &&
+                  !widget.order.isCancelled;
+
+              // Debug: Print button visibility condition
+              debugPrint(
+                'CustomerOrderDetailsWidget: Button visibility check - '
+                'order.status=${widget.order.status}, '
+                'order.isInDelivery=${widget.order.isInDelivery}, '
+                'deliveryAssignment!=null=${widget.order.deliveryAssignment != null}, '
+                'deliveryAssignment.status=${widget.order.deliveryAssignment?.status}, '
+                'deliveryStatus(normalized)=$deliveryStatus, '
+                'isDeliveryActive=$isDeliveryActive, '
+                'isCancelled=${widget.order.isCancelled}, '
+                'shouldShowButton=$shouldShowButton',
+              );
+
+              if (shouldShowButton) {
+                return _buildViewDeliveryLocationButton();
+              }
+              return const SizedBox.shrink();
+            },
+          ),
         ],
       ),
     );
@@ -244,7 +295,11 @@ class _CustomerOrderDetailsWidgetState
 
       if (mounted) {
         if (locationData != null) {
-          final location = locationData['location'] as Map<String, dynamic>?;
+          // Handle response format: data.location or direct location
+          final data = locationData['data'] as Map<String, dynamic>?;
+          final location =
+              (data?['location'] ?? locationData['location'])
+                  as Map<String, dynamic>?;
           final latitude = location?['latitude'] as double?;
           final longitude = location?['longitude'] as double?;
 
@@ -261,11 +316,17 @@ class _CustomerOrderDetailsWidgetState
             );
           }
         } else {
+          final errorMessage =
+              provider.error ?? 'Failed to get delivery location';
+          // Check if error is about FormatException (HTML response instead of JSON)
+          final cleanErrorMessage =
+              errorMessage.contains('FormatException') ||
+                  errorMessage.contains('<!DOCTYPE')
+              ? 'Delivery location service is temporarily unavailable. Please try again later.'
+              : errorMessage;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(
-                provider.error ?? 'Failed to get delivery location',
-              ),
+              content: Text(cleanErrorMessage),
               backgroundColor: Colors.red,
             ),
           );

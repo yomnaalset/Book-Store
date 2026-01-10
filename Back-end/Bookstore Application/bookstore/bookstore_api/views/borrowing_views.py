@@ -16,7 +16,7 @@ from ..models.return_model import ReturnFine
 from ..serializers.return_serializers import ReturnFineSerializer
 from ..serializers.borrowing_serializers import (
     BorrowRequestCreateSerializer, BorrowRequestListSerializer, BorrowRequestDetailSerializer,
-    BorrowApprovalSerializer, BorrowExtensionCreateSerializer, BorrowExtensionSerializer,
+    AdminBorrowRequestSerializer, BorrowApprovalSerializer, BorrowExtensionCreateSerializer, BorrowExtensionSerializer,
     BorrowRatingSerializer, EarlyReturnSerializer,
     DeliveryUpdateSerializer, MostBorrowedBookSerializer, BorrowingReportSerializer,
     PendingRequestsSerializer, DeliveryReadySerializer, DeliveryManagerSerializer,
@@ -231,11 +231,38 @@ class CustomerBorrowingsView(generics.ListAPIView):
         try:
             queryset = self.get_queryset()
             serializer = self.get_serializer(queryset, many=True)
+            data = serializer.data
+            
+            # For each borrow request, always fetch and include the associated DeliveryRequest if it exists
+            # According to unified delivery status requirements: delivery_request.status is the source of truth
+            from ..models.delivery_model import DeliveryRequest
+            from ..serializers.delivery_serializers import CustomerDeliveryRequestSerializer
+            
+            for i, borrow_data in enumerate(data):
+                borrow_id = borrow_data.get('id')
+                if borrow_id:
+                    try:
+                        delivery_request = DeliveryRequest.objects.filter(
+                            borrow_request_id=borrow_id,
+                            delivery_type='borrow'
+                        ).select_related(
+                            'delivery_manager',
+                            'delivery_manager__delivery_profile'
+                        ).first()
+                        
+                        if delivery_request:
+                            delivery_serializer = CustomerDeliveryRequestSerializer(delivery_request)
+                            data[i]['delivery_request'] = delivery_serializer.data
+                        else:
+                            data[i]['delivery_request'] = None
+                    except Exception as e:
+                        logger.warning(f"Error fetching delivery request for borrow {borrow_id}: {str(e)}")
+                        data[i]['delivery_request'] = None
             
             return Response({
                 'success': True,
                 'message': 'Customer borrowings retrieved successfully',
-                'data': serializer.data
+                'data': data
             }, status=status.HTTP_200_OK)
             
         except Exception as e:
@@ -249,10 +276,17 @@ class CustomerBorrowingsView(generics.ListAPIView):
 
 class BorrowRequestDetailView(generics.RetrieveAPIView):
     """
-    API view for viewing borrow request details
+    API view for viewing borrow request details.
+    Uses AdminBorrowRequestSerializer for admins to include both statuses and location data.
+    Uses BorrowRequestDetailSerializer for customers.
     """
-    serializer_class = BorrowRequestDetailSerializer
     permission_classes = [permissions.IsAuthenticated]
+    
+    def get_serializer_class(self):
+        """Use admin serializer for admins, regular serializer for customers"""
+        if self.request.user.is_library_admin() or self.request.user.is_delivery_admin():
+            return AdminBorrowRequestSerializer
+        return BorrowRequestDetailSerializer
     
     def get_object(self):
         """Get borrow request object with permission check"""
@@ -293,6 +327,27 @@ class BorrowRequestDetailView(generics.RetrieveAPIView):
             instance = self.get_object()
             serializer = self.get_serializer(instance)
             data = serializer.data
+            
+            # For non-admin users, always include delivery request if it exists
+            # Admin serializer already includes this via AdminBorrowRequestSerializer
+            # According to unified delivery status requirements: delivery_request.status is the source of truth
+            if not (request.user.is_library_admin() or request.user.is_delivery_admin()):
+                from ..models.delivery_model import DeliveryRequest
+                from ..serializers.delivery_serializers import CustomerDeliveryRequestSerializer
+                
+                delivery_request = DeliveryRequest.objects.filter(
+                    borrow_request=instance,
+                    delivery_type='borrow'
+                ).select_related(
+                    'delivery_manager',
+                    'delivery_manager__delivery_profile'
+                ).first()
+                
+                if delivery_request:
+                    delivery_serializer = CustomerDeliveryRequestSerializer(delivery_request)
+                    data['delivery_request'] = delivery_serializer.data
+                else:
+                    data['delivery_request'] = None
             
             # Check if there's a return request and return fine for this borrowing
             from ..models.return_model import ReturnRequest, ReturnFine
@@ -1176,13 +1231,33 @@ class GetDeliveryLocationView(APIView):
                     'errors': {'permission': ['You do not have permission to view this location']}
                 }, status=status.HTTP_403_FORBIDDEN)
             
-            # Step 3.4: Location button is VISIBLE only during OUT_FOR_DELIVERY or OUT_FOR_RETURN_PICKUP
-            if borrow_request.status not in [BorrowStatusChoices.OUT_FOR_DELIVERY, BorrowStatusChoices.OUT_FOR_RETURN_PICKUP]:
+            # Step 3.4: Location button is VISIBLE only when DeliveryRequest status is 'in_delivery'
+            # Check DeliveryRequest status (preferred) or fallback to BorrowRequest status
+            from ..models.delivery_model import DeliveryRequest
+            delivery_request = DeliveryRequest.objects.filter(
+                borrow_request=borrow_request,
+                delivery_type='borrow'
+            ).first()
+            
+            # Check if delivery is active based on DeliveryRequest status
+            is_delivery_active = False
+            if delivery_request:
+                # DeliveryRequest status 'in_delivery' means delivery is actively in progress
+                is_delivery_active = delivery_request.status == 'in_delivery'
+            else:
+                # Fallback: Check BorrowRequest status for backward compatibility
+                is_delivery_active = borrow_request.status in [
+                    BorrowStatusChoices.OUT_FOR_DELIVERY, 
+                    BorrowStatusChoices.OUT_FOR_RETURN_PICKUP
+                ]
+            
+            if not is_delivery_active:
                 return Response({
                     'success': False,
                     'message': 'Location tracking is not available for this request',
                     'errors': {'status': ['Location tracking is only available when delivery is in progress']},
                     'current_status': borrow_request.status,
+                    'delivery_request_status': delivery_request.status if delivery_request else None,
                     'tracking_available': False
                 }, status=status.HTTP_400_BAD_REQUEST)
             
@@ -1292,6 +1367,34 @@ class CompleteDeliveryView(APIView):
             # Update order status to delivered
             order.status = 'delivered'
             order.save()
+            
+            # Automatically update payment status to 'completed' for cash on delivery orders
+            if order.payment:
+                from ..models import Payment
+                # Get fresh payment instance from database with select_for_update for transaction safety
+                payment = Payment.objects.select_for_update().get(id=order.payment.id)
+                logger.info(f"Checking payment {payment.id} for borrowing order {order.id}: payment_type='{payment.payment_type}', status='{payment.status}'")
+                
+                # Check if payment method is cash on delivery and status is pending or processing
+                if payment.payment_type == 'cash_on_delivery' and payment.status in ['pending', 'processing']:
+                    old_status = payment.status
+                    payment.status = 'completed'
+                    payment.completed_at = timezone.now()
+                    payment.save(update_fields=['status', 'completed_at', 'updated_at'])
+                    
+                    # Verify the update was saved by refreshing from database
+                    payment.refresh_from_db()
+                    logger.info(f"SUCCESS: Updated payment {payment.id} status from '{old_status}' to '{payment.status}' for cash on delivery borrowing order {order.id}")
+                    
+                    # Refresh the order's payment relationship to ensure it reflects the updated payment
+                    order.refresh_from_db()
+                    # Force reload of payment relationship
+                    if hasattr(order, '_payment_cache'):
+                        delattr(order, '_payment_cache')
+                else:
+                    logger.warning(f"Payment {payment.id} not updated: payment_type='{payment.payment_type}' (expected 'cash_on_delivery'), status='{payment.status}' (expected 'pending' or 'processing')")
+            else:
+                logger.warning(f"Borrowing order {order.id} has no payment associated")
             
             # Update borrow request status to DELIVERED (as per workflow requirements)
             borrow_request.status = BorrowStatusChoices.DELIVERED
@@ -1562,9 +1665,10 @@ class BorrowCancelView(APIView):
 
 class AllBorrowingRequestsView(generics.ListAPIView):
     """
-    API view for library managers to view all borrowing requests with proper nested structure
+    API view for library managers to view all borrowing requests with proper nested structure.
+    Uses AdminBorrowRequestSerializer to include both borrow_status and delivery_status separately.
     """
-    serializer_class = BorrowRequestListSerializer
+    serializer_class = AdminBorrowRequestSerializer
     permission_classes = [permissions.IsAuthenticated, IsLibraryAdmin]
     
     def get_queryset(self):
@@ -1577,11 +1681,12 @@ class AllBorrowingRequestsView(generics.ListAPIView):
         try:
             queryset = self.get_queryset()
             serializer = self.get_serializer(queryset, many=True)
+            data = serializer.data
             
             return Response({
                 'success': True,
                 'message': 'All borrowing requests retrieved successfully',
-                'data': serializer.data
+                'data': data
             }, status=status.HTTP_200_OK)
             
         except Exception as e:

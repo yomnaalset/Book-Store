@@ -44,6 +44,32 @@ class ReturnRequestService {
     }
   }
 
+  /// Confirm return pickup - Customer confirms they are ready for pickup
+  /// POST /api/returns/requests/{id}/confirm-pickup/
+  Future<Map<String, dynamic>> confirmReturnPickup(
+    dynamic returnRequestId,
+  ) async {
+    try {
+      final response = await ApiClient.post(
+        '/returns/requests/$returnRequestId/confirm-pickup/',
+        body: {},
+        token: _token,
+      );
+
+      final responseData = ApiClient.handleResponse(response);
+      if (ApiClient.isSuccess(response) && responseData['success'] == true) {
+        return responseData;
+      } else {
+        throw Exception(
+          responseData['message'] ?? 'Failed to confirm return pickup',
+        );
+      }
+    } catch (e) {
+      debugPrint('ReturnRequestService: Error confirming return pickup: $e');
+      rethrow;
+    }
+  }
+
   /// Approve return request - Admin
   Future<ReturnRequest> approveReturnRequestById(int returnId) async {
     try {
@@ -353,7 +379,7 @@ class ReturnRequestService {
   }
 
   /// Increase return fine - Admin
-  Future<ReturnRequest> increaseReturnFine(
+  Future<Map<String, dynamic>> increaseReturnFine(
     int returnId,
     double additionalAmount,
   ) async {
@@ -367,7 +393,7 @@ class ReturnRequestService {
       if (ApiClient.isSuccess(response)) {
         final responseData = ApiClient.handleResponse(response);
         if (responseData['success'] == true) {
-          return ReturnRequest.fromJson(responseData['data']['return_request']);
+          return responseData;
         }
         throw Exception(responseData['message'] ?? 'Failed to increase fine');
       } else {

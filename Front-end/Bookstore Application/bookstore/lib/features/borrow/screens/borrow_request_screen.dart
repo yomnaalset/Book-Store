@@ -27,7 +27,7 @@ class _BorrowRequestScreenState extends State<BorrowRequestScreen> {
   final _deliveryAddressController = TextEditingController();
 
   int _selectedDays = 7;
-  final List<int> _durationOptions = [2, 7, 14];
+  final List<int> _durationOptions = [1, 2, 7, 14]; // Duration options in days
   bool _isLoadingProfile = false;
 
   @override
@@ -124,128 +124,73 @@ class _BorrowRequestScreenState extends State<BorrowRequestScreen> {
   Future<void> _submitRequest() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final borrowProvider = Provider.of<BorrowProvider>(context, listen: false);
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    // Calculate fees
+    // Borrowing fee from book's borrow price
+    double borrowingFee = widget.book.borrowPriceAsDouble > 0
+        ? widget.book.borrowPriceAsDouble
+        : 10.0; // Default fallback
 
-    debugPrint('=== BORROW REQUEST SCREEN DEBUG ===');
-    debugPrint('Book ID: ${widget.book.id}');
-    debugPrint('Selected Days: $_selectedDays');
-    debugPrint('Delivery Address: ${_deliveryAddressController.text.trim()}');
-    debugPrint('Notes: ${_notesController.text.trim()}');
-    debugPrint('Auth Token Available: ${authProvider.token != null}');
+    // Delivery fee is 4% of borrowing fee
+    final deliveryFee = borrowingFee * 0.04;
+    final totalFee = borrowingFee + deliveryFee;
 
-    // Ensure provider has the current token
-    if (authProvider.token != null) {
-      borrowProvider.setToken(authProvider.token);
-      debugPrint(
-        'DEBUG: Borrow request - Updated provider with token: ${authProvider.token!.substring(0, 20)}...',
-      );
-    } else {
-      debugPrint(
-        'DEBUG: Borrow request - No token available from AuthProvider',
-      );
-    }
-
-    debugPrint('Calling borrowProvider.requestBorrow...');
-    final success = await borrowProvider.requestBorrow(
-      bookId: widget.book.id.toString(),
-      borrowPeriodDays: _selectedDays,
-      deliveryAddress: _deliveryAddressController.text.trim(),
-      notes: _notesController.text.trim(),
+    // Navigate to payment screen WITHOUT creating the request yet
+    // Pass all the necessary data to create the request after payment
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PaymentScreen(
+          borrowRequest: null, // No request created yet
+          book: borrow_book.Book(
+            id: int.parse(widget.book.id),
+            title: widget.book.title,
+            author: widget.book.author?.name,
+            coverImageUrl: widget.book.coverImageUrl,
+            price: borrowingFee,
+          ),
+          borrowingFee: borrowingFee,
+          deliveryFee: deliveryFee,
+          totalFee: totalFee,
+          // Pass the request data to be used after payment
+          bookId: widget.book.id, // Keep as string since the API expects string
+          borrowPeriodDays: _selectedDays,
+          deliveryAddress: _deliveryAddressController.text.trim(),
+          notes: _notesController.text.trim(),
+        ),
+      ),
     );
-    debugPrint('Borrow request result: $success');
-
-    if (mounted) {
-      if (success) {
-        // Get the created borrow request from provider
-        final createdRequest = borrowProvider.borrowRequests.firstWhere(
-          (req) => req.book?.id.toString() == widget.book.id,
-          orElse: () => borrowProvider.borrowRequests.first,
-        );
-
-        // Get book from request or use widget.book
-        final borrowBook = createdRequest.book;
-        if (borrowBook == null) {
-          final localizations = AppLocalizations.of(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(localizations.failedToLoadBookDetailsShort),
-              backgroundColor: AppColors.error,
-            ),
-          );
-          return;
-        }
-
-        // Calculate fees
-        // Borrowing fee from book's price (this should be borrow_price from backend)
-        // If price is null, we'll need to get it from the book data
-        // For now, use a default or get from widget.book if available
-        double borrowingFee =
-            borrowBook.price ??
-            (widget.book.borrowPriceAsDouble > 0
-                ? widget.book.borrowPriceAsDouble
-                : 10.0); // Default fallback
-
-        // Delivery fee is 4% of borrowing fee
-        final deliveryFee = borrowingFee * 0.04;
-        final totalFee = borrowingFee + deliveryFee;
-
-        // Navigate to payment screen
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => PaymentScreen(
-              borrowRequest: createdRequest,
-              book: borrow_book.Book(
-                id: borrowBook.id,
-                title: borrowBook.title.isNotEmpty
-                    ? borrowBook.title
-                    : widget.book.title,
-                author: borrowBook.author ?? widget.book.author?.toString(),
-                coverImageUrl:
-                    borrowBook.coverImageUrl ?? widget.book.coverImageUrl,
-                price: borrowingFee,
-              ),
-              borrowingFee: borrowingFee,
-              deliveryFee: deliveryFee,
-              totalFee: totalFee,
-            ),
-          ),
-        );
-      } else {
-        final localizations = AppLocalizations.of(context);
-        String errorMessage =
-            borrowProvider.errorMessage ?? 'Failed to submit request';
-
-        // Translate common backend error messages
-        final errorLower = errorMessage.toLowerCase();
-        if (errorLower.contains('cannot borrow') &&
-            errorLower.contains('outstanding fine')) {
-          errorMessage = localizations.youCannotBorrowUntilFinePaid;
-        } else if (errorLower.contains('cannot submit') &&
-            errorLower.contains('pending fine')) {
-          errorMessage =
-              localizations.youCannotSubmitBorrowRequestUntilFinePaid;
-        }
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
-    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text(localizations.borrowRequest),
-        backgroundColor: AppColors.primary,
-        foregroundColor: AppColors.white,
+        title: Text(
+          localizations.borrowRequest,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+            letterSpacing: 0.5,
+          ),
+        ),
+        backgroundColor: theme.colorScheme.primary,
+        foregroundColor: theme.colorScheme.onPrimary,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                theme.colorScheme.primary,
+                theme.colorScheme.primary.withValues(alpha: 204),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
       ),
       body: Consumer<BorrowProvider>(
         builder: (context, borrowProvider, child) {
@@ -272,65 +217,85 @@ class _BorrowRequestScreenState extends State<BorrowRequestScreen> {
                 children: [
                   // Book Info
                   Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(AppDimensions.paddingM),
-                      child: Row(
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Image.network(
-                              widget.book.coverImageUrl ?? '',
-                              width: 80,
-                              height: 120,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) {
-                                return Container(
-                                  width: 80,
-                                  height: 120,
-                                  color: AppColors.surface,
-                                  child: const Icon(Icons.book),
-                                );
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: AppDimensions.spacingM),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  widget.book.title,
-                                  style: const TextStyle(
-                                    fontSize: AppDimensions.fontSizeL,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: AppDimensions.spacingS),
-                                if (widget.book.author != null)
-                                  Text(
-                                    localizations.byAuthor(
-                                      widget.book.author?.name ??
-                                          localizations.author,
-                                    ),
-                                    style: const TextStyle(
-                                      fontSize: AppDimensions.fontSizeM,
-                                      color: AppColors.textSecondary,
-                                    ),
-                                  ),
-                                const SizedBox(height: AppDimensions.spacingS),
-                                Text(
-                                  localizations.availableCopies(
-                                    widget.book.availableCopies ?? 0,
-                                  ),
-                                  style: const TextStyle(
-                                    fontSize: AppDimensions.fontSizeS,
-                                    color: AppColors.success,
-                                  ),
-                                ),
-                              ],
-                            ),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.05),
+                            blurRadius: 10,
+                            offset: const Offset(0, 2),
                           ),
                         ],
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(AppDimensions.paddingM),
+                        child: Row(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.network(
+                                widget.book.coverImageUrl ?? '',
+                                width: 80,
+                                height: 120,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return Container(
+                                    width: 80,
+                                    height: 120,
+                                    color: AppColors.surface,
+                                    child: const Icon(Icons.book),
+                                  );
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: AppDimensions.spacingM),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    widget.book.title,
+                                    style: const TextStyle(
+                                      fontSize: AppDimensions.fontSizeL,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(
+                                    height: AppDimensions.spacingS,
+                                  ),
+                                  if (widget.book.author != null)
+                                    Text(
+                                      localizations.byAuthor(
+                                        widget.book.author?.name ??
+                                            localizations.author,
+                                      ),
+                                      style: const TextStyle(
+                                        fontSize: AppDimensions.fontSizeM,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                    ),
+                                  const SizedBox(
+                                    height: AppDimensions.spacingS,
+                                  ),
+                                  Text(
+                                    localizations.availableCopies(
+                                      widget.book.availableCopies ?? 0,
+                                    ),
+                                    style: const TextStyle(
+                                      fontSize: AppDimensions.fontSizeS,
+                                      color: AppColors.success,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -351,8 +316,9 @@ class _BorrowRequestScreenState extends State<BorrowRequestScreen> {
                     spacing: AppDimensions.spacingM,
                     children: _durationOptions.map((days) {
                       final isSelected = _selectedDays == days;
+                      final label = '$days ${localizations.days}';
                       return ChoiceChip(
-                        label: Text('$days ${localizations.days}'),
+                        label: Text(label),
                         selected: isSelected,
                         onSelected: (selected) {
                           if (selected) {

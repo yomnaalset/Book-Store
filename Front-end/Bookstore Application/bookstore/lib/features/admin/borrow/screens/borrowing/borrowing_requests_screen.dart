@@ -302,7 +302,8 @@ class _BorrowingRequestsScreenState extends State<BorrowingRequestsScreen>
                           manager['status'] as String? ??
                           manager['delivery_status'] as String? ??
                           'offline';
-                      // Capitalize first letter: "online" -> "Online", "busy" -> "Busy", "offline" -> "Offline"
+                      // Capitalize first letter: "online" -> "Online", "offline" -> "Offline"
+                      // Note: Legacy 'busy' status is handled as 'online'
                       final statusText = rawStatus.isNotEmpty
                           ? rawStatus[0].toUpperCase() +
                                 rawStatus.substring(1).toLowerCase()
@@ -579,7 +580,7 @@ class _BorrowingRequestsScreenState extends State<BorrowingRequestsScreen>
   Widget build(BuildContext context) {
     final localizations = AppLocalizations.of(context);
     final statusTabs = _getStatusTabs(localizations);
-    
+
     return Scaffold(
       appBar: AppBar(
         title: Text(localizations.borrowRequests),
@@ -737,7 +738,28 @@ class _BorrowingRequestsScreenState extends State<BorrowingRequestsScreen>
                       },
                     ),
                   ),
-                  StatusChip(status: request.status),
+                  // UNIFIED DELIVERY STATUS: Use the primary status (which is now delivery_request_status when available)
+                  // For customers: status = delivery_request_status (unified)
+                  // For admins: status = delivery_request_status (unified), borrowStatus = original borrow status
+                  Builder(
+                    builder: (context) {
+                      // Use the unified status (status field now contains delivery_request_status when available)
+                      final statusToShow = request.status;
+                      // Debug logging
+                      debugPrint('DEBUG: StatusChip - Request #${request.id}:');
+                      debugPrint(
+                        '  - Unified status (primary): ${request.status}',
+                      );
+                      debugPrint(
+                        '  - borrowStatus (admin-only): ${request.borrowStatus}',
+                      );
+                      debugPrint(
+                        '  - deliveryRequest.status: ${request.deliveryRequest?.status}',
+                      );
+                      debugPrint('  - Final status shown: $statusToShow');
+                      return StatusChip(status: statusToShow);
+                    },
+                  ),
                 ],
               ),
 
@@ -765,14 +787,23 @@ class _BorrowingRequestsScreenState extends State<BorrowingRequestsScreen>
                         Expanded(
                           child: Builder(
                             builder: (context) {
-                              final localizations = AppLocalizations.of(context);
+                              final localizations = AppLocalizations.of(
+                                context,
+                              );
                               String customerText;
                               if (request.customerName?.isNotEmpty == true) {
-                                customerText = '${localizations.customerLabel}: ${request.customerName}';
-                              } else if (request.customer?.fullName.isNotEmpty == true) {
-                                customerText = '${localizations.customerLabel}: ${request.customer!.fullName}';
+                                customerText =
+                                    '${localizations.customerLabel}: ${request.customerName}';
+                              } else if (request
+                                      .customer
+                                      ?.fullName
+                                      .isNotEmpty ==
+                                  true) {
+                                customerText =
+                                    '${localizations.customerLabel}: ${request.customer!.fullName}';
                               } else {
-                                customerText = '${localizations.userId}: ${request.userId ?? 'N/A'}';
+                                customerText =
+                                    '${localizations.userId}: ${request.userId ?? 'N/A'}';
                               }
                               return Text(
                                 customerText,
@@ -801,14 +832,20 @@ class _BorrowingRequestsScreenState extends State<BorrowingRequestsScreen>
                         Expanded(
                           child: Builder(
                             builder: (context) {
-                              final localizations = AppLocalizations.of(context);
+                              final localizations = AppLocalizations.of(
+                                context,
+                              );
                               String bookText;
                               if (request.bookTitle?.isNotEmpty == true) {
-                                bookText = '${localizations.bookLabel}: ${request.bookTitle}';
-                              } else if (request.book?.title.isNotEmpty == true) {
-                                bookText = '${localizations.bookLabel}: ${request.book!.title}';
+                                bookText =
+                                    '${localizations.bookLabel}: ${request.bookTitle}';
+                              } else if (request.book?.title.isNotEmpty ==
+                                  true) {
+                                bookText =
+                                    '${localizations.bookLabel}: ${request.book!.title}';
                               } else {
-                                bookText = '${localizations.bookId}: ${request.bookId ?? 'N/A'}';
+                                bookText =
+                                    '${localizations.bookId}: ${request.bookId ?? 'N/A'}';
                               }
                               return Text(
                                 bookText,

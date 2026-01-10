@@ -229,6 +229,21 @@ class BorrowingService:
             
             # Set status based on whether delivery manager is assigned
             if delivery_manager:
+                # Check if delivery manager is available - only 'online' (available) managers can be assigned
+                from ..models.delivery_profile_model import DeliveryProfile
+                delivery_profile, created = DeliveryProfile.objects.get_or_create(
+                    user=delivery_manager,
+                    defaults={'delivery_status': 'offline'}
+                )
+                
+                # Only allow assignment if manager is 'online' (available)
+                if delivery_profile.delivery_status != 'online':
+                    status_display = delivery_profile.get_delivery_status_display() if delivery_profile.delivery_status else 'offline'
+                    raise ValueError(
+                        f"Cannot assign borrow request: Delivery manager is {status_display.lower()}. "
+                        f"Only available (online) managers can be assigned new requests."
+                    )
+                
                 borrow_request.status = BorrowStatusChoices.ASSIGNED_TO_DELIVERY
                 borrow_request.delivery_person = delivery_manager
                 logger.info(f"Assigning delivery manager {delivery_manager.id} to borrow request {borrow_request.id}, status set to ASSIGNED_TO_DELIVERY")
@@ -245,10 +260,28 @@ class BorrowingService:
             borrow_request.save()
             logger.info(f"Saved borrow request {borrow_request.id} with status {borrow_request.status}")
             
-            # Create delivery order as specified in requirements
-            from ..services.delivery_services import BorrowingDeliveryService
-            delivery_order = BorrowingDeliveryService.create_delivery_for_borrow(borrow_request)
-            logger.info(f"Created delivery order {delivery_order.id} for borrow request {borrow_request.id}")
+            # CRITICAL: Create DeliveryRequest with status='assigned' and delivery_manager
+            # This MUST be created here when approving, not later
+            # Design rule: status='assigned' requires delivery_manager to be set
+            from ..models import DeliveryRequest
+            
+            if delivery_manager:
+                # Create DeliveryRequest with status='assigned' and delivery_manager assigned
+                delivery_request = DeliveryRequest.objects.create(
+                    delivery_type='borrow',
+                    customer=borrow_request.customer,
+                    delivery_address=borrow_request.delivery_address,
+                    delivery_city=getattr(borrow_request, 'delivery_city', None),
+                    borrow_request=borrow_request,
+                    delivery_manager=delivery_manager,
+                    status='assigned',
+                    assigned_at=timezone.now()
+                )
+                logger.info(f"Created delivery request {delivery_request.id} for borrow request {borrow_request.id} with status='assigned' and delivery_manager={delivery_manager.id}")
+            else:
+                # If no delivery_manager provided, don't create DeliveryRequest yet
+                # It will be created when delivery_manager is assigned
+                logger.info(f"Borrow request {borrow_request.id} approved without delivery manager - DeliveryRequest will be created when manager is assigned")
             
         except Exception as e:
             logger.error(f"Error approving borrow request {borrow_request.id}: {str(e)}", exc_info=True)
@@ -365,12 +398,8 @@ class BorrowingService:
         except Exception as e:
             logger.warning(f"Failed to update order status for borrow request {borrow_request.id}: {str(e)}")
         
-        # Update delivery manager status to busy
-        try:
-            from ..services.delivery_profile_services import DeliveryProfileService
-            DeliveryProfileService.start_delivery_task(delivery_person)
-        except Exception as e:
-            logger.warning(f"Failed to update delivery manager status to busy: {str(e)}")
+        # Note: Delivery manager availability remains unchanged when accepting delivery
+        # Only 'online' (available) managers can accept deliveries, and they stay 'online'
         
         # Send notification to customer and admin
         NotificationService.create_notification(
@@ -479,12 +508,8 @@ class BorrowingService:
         borrow_request.delivery_person = delivery_person
         borrow_request.save()
         
-        # Automatically change delivery manager status to busy when starting delivery
-        try:
-            from ..services.delivery_profile_services import DeliveryProfileService
-            DeliveryProfileService.start_delivery_task(delivery_person)
-        except Exception as e:
-            logger.warning(f"Failed to update delivery manager status to busy: {str(e)}")
+        # Note: Delivery manager availability remains unchanged when starting delivery
+        # Only 'online' (available) managers can start deliveries, and they stay 'online'
         
         # Send notification to customer
         NotificationService.create_notification(
@@ -647,7 +672,9 @@ class BorrowingService:
         Complete book return and release copy back to available pool (Step 7: Upon return)
         """
         borrow_request.status = BorrowStatusChoices.RETURNED
-        borrow_request.actual_return_date = timezone.now()
+        return_date = timezone.now()
+        borrow_request.actual_return_date = return_date
+        borrow_request.final_return_date = return_date  # Set final_return_date for frontend display
         borrow_request.save()
         
         # Release copy back to available pool
@@ -720,18 +747,21 @@ class BorrowingService:
             # In real implementation, this would be handled by payment gateway
             payment = BorrowingPaymentService.process_borrowing_payment(payment)
             
-            # Create delivery order
-            from ..services.delivery_services import BorrowingDeliveryService
-            delivery_result = BorrowingDeliveryService.create_borrowing_delivery_order(borrow_request, payment)
-            
-            if not delivery_result['success']:
-                raise ValueError(delivery_result['message'])
+            # Create delivery request for borrow
+            from ..services.delivery_services import DeliveryService
+            delivery_request = DeliveryService.create_delivery_request(
+                delivery_type='borrow',
+                customer=borrow_request.customer,
+                delivery_address=borrow_request.delivery_address,
+                delivery_city=getattr(borrow_request, 'delivery_city', None),
+                borrow_request=borrow_request
+            )
             
             return {
                 'success': True,
                 'message': 'Borrowing processed successfully',
                 'payment': payment,
-                'delivery_order': delivery_result['order']
+                'delivery_request': delivery_request
             }
             
         except Exception as e:
@@ -749,17 +779,27 @@ class BorrowingService:
             # Update borrow request status
             borrow_request = BorrowingService.request_early_return(borrow_request)
             
-            # Create collection order
-            from ..services.delivery_services import BorrowingDeliveryService
-            collection_result = BorrowingDeliveryService.create_return_collection_order(borrow_request)
+            # Create return delivery request for collection
+            from ..services.delivery_services import DeliveryService
+            from ..models.return_model import ReturnRequest, ReturnStatus
             
-            if not collection_result['success']:
-                raise ValueError(collection_result['message'])
+            # Check if return request exists for this borrowing
+            return_request = ReturnRequest.objects.filter(borrowing=borrow_request).first()
+            if not return_request:
+                raise ValueError("Return request not found for this borrowing")
+            
+            delivery_request = DeliveryService.create_delivery_request(
+                delivery_type='return',
+                customer=borrow_request.customer,
+                delivery_address=borrow_request.delivery_address,
+                delivery_city=getattr(borrow_request, 'delivery_city', None),
+                return_request=return_request
+            )
             
             return {
                 'success': True,
                 'message': 'Early return collection initiated',
-                'collection_order': collection_result['order']
+                'delivery_request': delivery_request
             }
             
         except Exception as e:
@@ -807,12 +847,13 @@ class BorrowingService:
         """
         Get customer's borrow requests
         Excludes borrow requests with RETURN_REQUESTED status (these are handled by ReturnRequest model)
+        Uses select_related for delivery_request to avoid N+1 queries
         """
         queryset = BorrowRequest.objects.filter(
             customer=customer
         ).exclude(
             status=BorrowStatusChoices.RETURN_REQUESTED
-        ).select_related('book', 'book__author')
+        ).select_related('book', 'book__author').prefetch_related('delivery_requests')
         
         if status:
             queryset = queryset.filter(status=status)
@@ -823,23 +864,46 @@ class BorrowingService:
     def get_all_borrowing_requests(status: Optional[str] = None, search: Optional[str] = None) -> List[BorrowRequest]:
         """
         Get all borrowing requests with optional status filter and search
-        Excludes borrow requests with RETURN_REQUESTED status (these are handled by ReturnRequest model)
+        CRITICAL: Excludes borrow requests that are in the return flow (have ReturnRequest)
+        These should only appear in ReturnRequest views, not in Borrow Requests list
         
         Args:
             status: Optional status filter (e.g., 'pending', 'approved', 'active', etc.)
             search: Optional search query for customer name, book title, or request ID
             
         Returns:
-            List of borrowing requests
+            List of borrowing requests (excluding those in return flow)
         """
-        # Exclude RETURN_REQUESTED status - these should only appear in ReturnRequest views
+        # CRITICAL: Exclude all return-related statuses AND BorrowRequests that have ReturnRequests
+        # This ensures clear separation between Borrow and Return workflows
+        # Return-related statuses: RETURN_REQUESTED, RETURN_ASSIGNED, OUT_FOR_RETURN_PICKUP, RETURNED, RETURNED_AFTER_DELAY
+        from ..models.return_model import ReturnRequest
+        
+        # Method 1: Exclude by status (covers most cases)
+        return_statuses = [
+            BorrowStatusChoices.RETURN_REQUESTED,
+            BorrowStatusChoices.RETURN_ASSIGNED,
+            BorrowStatusChoices.OUT_FOR_RETURN_PICKUP,
+            BorrowStatusChoices.RETURNED,
+            BorrowStatusChoices.RETURNED_AFTER_DELAY,
+        ]
+        
+        # Method 2: Exclude BorrowRequests that have ReturnRequests (most reliable)
+        # Get IDs of BorrowRequests that have ReturnRequests
+        borrow_ids_with_returns = ReturnRequest.objects.values_list('borrowing_id', flat=True).distinct()
+        
+        # Use prefetch_related for delivery_requests to avoid N+1 queries
         queryset = BorrowRequest.objects.exclude(
-            status=BorrowStatusChoices.RETURN_REQUESTED
-        ).select_related('customer', 'book').order_by('-request_date')
+            status__in=return_statuses
+        ).exclude(
+            id__in=borrow_ids_with_returns
+        ).select_related('customer', 'book').prefetch_related('delivery_requests').order_by('-request_date')
         
         # Add status filter if provided
         if status and status.lower() != 'all':
             # Map frontend status names to backend status values
+            # Note: 'returned' status will return empty results as we exclude return-related statuses
+            # Returned books should be viewed via ReturnRequest endpoints, not BorrowRequest endpoints
             status_mapping = {
                 'pending': BorrowStatusChoices.PENDING,
                 'under review': BorrowStatusChoices.PENDING,
@@ -847,7 +911,7 @@ class BorrowingService:
                 'rejected': BorrowStatusChoices.REJECTED,
                 'active': BorrowStatusChoices.ACTIVE,
                 'delivered': BorrowStatusChoices.ACTIVE,  # Delivered books are active
-                'returned': BorrowStatusChoices.RETURNED,
+                'returned': BorrowStatusChoices.RETURNED,  # Will return empty (excluded above)
                 'overdue': BorrowStatusChoices.LATE,
             }
             
@@ -873,15 +937,23 @@ class BorrowingService:
     def get_pending_requests(search: Optional[str] = None) -> List[BorrowRequest]:
         """
         Get pending borrow requests for library manager with optional search
+        CRITICAL: Excludes borrow requests that are in the return flow (have ReturnRequest)
         
         Args:
             search: Optional search query to filter by customer name, book name, or request ID
             
         Returns:
-            List of pending borrow requests
+            List of pending borrow requests (excluding those in return flow)
         """
+        # CRITICAL: Exclude BorrowRequests that have ReturnRequests
+        # Even if status is PENDING, if a ReturnRequest exists, it shouldn't appear here
+        from ..models.return_model import ReturnRequest
+        borrow_ids_with_returns = ReturnRequest.objects.values_list('borrowing_id', flat=True).distinct()
+        
         queryset = BorrowRequest.objects.filter(
             status=BorrowStatusChoices.PENDING
+        ).exclude(
+            id__in=borrow_ids_with_returns
         ).select_related('customer', 'book').order_by('request_date')
         
         # Add search functionality
@@ -1018,7 +1090,7 @@ class BorrowingService:
         
         # After ensuring all profiles exist, re-query to get fresh data with all profiles loaded
         # This ensures we get all managers with their updated profiles
-        # IMPORTANT: Return ALL managers regardless of status (online, busy, offline)
+        # IMPORTANT: Return ALL managers regardless of status (online, offline)
         # Use select_related to efficiently load profiles
         # Note: select_related with OneToOneField uses LEFT OUTER JOIN, so it includes
         # all managers even if they don't have profiles (though we create them above)
@@ -1029,24 +1101,27 @@ class BorrowingService:
         
         # Log the count for debugging
         manager_count = final_queryset.count()
-        logger.info(f"BorrowingService.get_available_delivery_managers: Returning {manager_count} delivery managers (ALL statuses: online, busy, offline)")
+        logger.info(f"BorrowingService.get_available_delivery_managers: Returning {manager_count} delivery managers (ALL statuses: online, offline)")
         
         # Log each manager's status for debugging
-        status_counts = {'online': 0, 'busy': 0, 'offline': 0, 'unknown': 0}
+        status_counts = {'online': 0, 'offline': 0, 'unknown': 0}
         for manager in final_queryset:
             try:
                 status = 'unknown'
                 if hasattr(manager, 'delivery_profile') and manager.delivery_profile:
                     status = manager.delivery_profile.delivery_status or 'offline'
+                    # Handle legacy 'busy' status if it exists
+                    if status == 'busy':
+                        status = 'online'
                 status_counts[status] = status_counts.get(status, 0) + 1
                 logger.info(f"BorrowingService: Manager {manager.id} ({manager.get_full_name()}) - Status: {status}")
             except Exception as e:
                 status_counts['unknown'] += 1
                 logger.warning(f"BorrowingService: Error logging manager {manager.id}: {str(e)}")
         
-        logger.info(f"BorrowingService: Status breakdown - Online: {status_counts['online']}, Busy: {status_counts['busy']}, Offline: {status_counts['offline']}, Unknown: {status_counts['unknown']}")
+        logger.info(f"BorrowingService: Status breakdown - Online: {status_counts['online']}, Offline: {status_counts['offline']}, Unknown: {status_counts['unknown']}")
         
-        # Return ALL delivery managers (online, busy, offline) - NO FILTERING BY STATUS
+        # Return ALL delivery managers (online, offline) - NO FILTERING BY STATUS
         # The frontend will display all managers but only allow selection of online ones
         return final_queryset
 
@@ -1202,7 +1277,9 @@ class LateReturnService:
         """
         try:
             # Step 1: Update delivery status
-            borrow_request.actual_return_date = timezone.now()
+            return_date = timezone.now()
+            borrow_request.actual_return_date = return_date
+            borrow_request.final_return_date = return_date  # Set final_return_date for frontend display
             borrow_request.status = BorrowStatusChoices.RETURNED_AFTER_DELAY
             borrow_request.save()
             

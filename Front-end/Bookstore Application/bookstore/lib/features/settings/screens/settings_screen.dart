@@ -4,6 +4,9 @@ import '../../../core/constants/app_dimensions.dart';
 import '../../../core/services/theme_service.dart' as theme;
 import '../../../core/translations.dart';
 import '../../../core/localization/app_localizations.dart';
+import '../../../core/services/ip_address_service.dart';
+import '../../../core/services/api_config.dart';
+import '../../../core/widgets/common/custom_text_field.dart';
 
 import '../../../features/auth/providers/auth_provider.dart';
 import '../../profile/providers/language_preference_provider.dart';
@@ -18,13 +21,32 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  final TextEditingController _ipAddressController = TextEditingController();
+  String? _ipAddressError;
+
   @override
   void initState() {
     super.initState();
     // Load all settings data when screen initializes
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadAllSettingsData();
+      _loadIpAddress();
     });
+  }
+
+  @override
+  void dispose() {
+    _ipAddressController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadIpAddress() async {
+    final ip = await IpAddressService.getIpAddress();
+    if (mounted) {
+      setState(() {
+        _ipAddressController.text = ip;
+      });
+    }
   }
 
   Future<void> _loadAllSettingsData() async {
@@ -85,8 +107,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final currentBrightness = Theme.of(context).brightness;
     debugPrint('SettingsScreen build - Theme brightness: $currentBrightness');
 
+    final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: Text(AppTranslations.t(context, 'settings'))),
+      appBar: AppBar(
+        title: Text(
+          AppTranslations.t(context, 'settings'),
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+            letterSpacing: 0.5,
+          ),
+        ),
+        backgroundColor: theme.colorScheme.primary,
+        foregroundColor: theme.colorScheme.onPrimary,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                theme.colorScheme.primary,
+                theme.colorScheme.primary.withValues(alpha: 204),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(AppDimensions.paddingM),
         children: [
@@ -97,6 +145,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _buildLanguageSection(),
           const SizedBox(height: AppDimensions.spacingL),
           _buildPreferencesSection(),
+          const SizedBox(height: AppDimensions.spacingL),
+          _buildServerIpSection(),
           const SizedBox(height: AppDimensions.spacingL),
           _buildSupportSection(),
           const SizedBox(height: AppDimensions.spacingL),
@@ -230,6 +280,96 @@ class _SettingsScreenState extends State<SettingsScreen> {
         // Privacy Settings removed as per user request
       ],
     );
+  }
+
+  Widget _buildServerIpSection() {
+    return _buildSection(
+      title: 'Server IP Address',
+      icon: Icons.dns_outlined,
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(AppDimensions.paddingM),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CustomTextField(
+                label: 'IP Address',
+                hint: '192.168.1.5',
+                controller: _ipAddressController,
+                type: TextFieldType.text,
+                keyboardType: TextInputType.number,
+                onChanged: (value) {
+                  setState(() {
+                    _ipAddressError = null;
+                  });
+                },
+                errorText: _ipAddressError,
+              ),
+              const SizedBox(height: AppDimensions.spacingM),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _saveIpAddress,
+                  icon: const Icon(Icons.save),
+                  label: const Text('Save'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _saveIpAddress() async {
+    final ipAddress = _ipAddressController.text.trim();
+
+    // Validate IP address
+    if (ipAddress.isEmpty) {
+      setState(() {
+        _ipAddressError = 'IP address cannot be empty';
+      });
+      return;
+    }
+
+    if (!IpAddressService.isValidIpAddress(ipAddress)) {
+      setState(() {
+        _ipAddressError = 'Invalid IP address';
+      });
+      return;
+    }
+
+    // Store context-dependent values before async operations
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final theme = Theme.of(context);
+
+    // Save IP address
+    final success = await IpAddressService.saveIpAddress(ipAddress);
+
+    if (!mounted) return;
+
+    if (success) {
+      // Refresh API config
+      await ApiConfig.refreshBaseUrl();
+
+      if (!mounted) return;
+
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: const Text('IP Address saved successfully'),
+          backgroundColor: theme.colorScheme.primary,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } else {
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: const Text('Failed to save IP address'),
+          backgroundColor: theme.colorScheme.error,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   Widget _buildSupportSection() {
@@ -492,11 +632,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 builder: (context) {
                   final localizations = AppLocalizations.of(context);
                   return Column(
-                mainAxisSize: MainAxisSize.min,
+                    mainAxisSize: MainAxisSize.min,
                     children: languageProvider.availableLanguages.map((
                       language,
                     ) {
-                  final languageCode = language['code'] as String;
+                      final languageCode = language['code'] as String;
                       // Use localized language names
                       String languageName;
                       switch (languageCode) {
@@ -510,12 +650,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           languageName = language['name'] as String;
                       }
 
-                  return RadioListTile<String>(
-                    title: Text(languageName),
-                    subtitle: Text(languageCode.toUpperCase()),
-                    value: languageCode,
-                  );
-                }).toList(),
+                      return RadioListTile<String>(
+                        title: Text(languageName),
+                        subtitle: Text(languageCode.toUpperCase()),
+                        value: languageCode,
+                      );
+                    }).toList(),
                   );
                 },
               ),

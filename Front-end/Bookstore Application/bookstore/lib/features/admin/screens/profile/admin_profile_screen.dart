@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'dart:typed_data';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_dimensions.dart';
 import '../../../../core/widgets/common/custom_button.dart';
@@ -9,6 +11,7 @@ import '../../../../core/widgets/common/custom_text_field.dart';
 import '../../../../core/widgets/common/loading_indicator.dart';
 import '../../../../core/utils/validators.dart';
 import '../../../../core/services/auth_service.dart';
+import '../../../../core/services/api_config.dart';
 import '../../../../core/localization/app_localizations.dart';
 import '../../../auth/providers/auth_provider.dart';
 import '../../../profile/providers/profile_provider.dart';
@@ -37,9 +40,10 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
 
   bool _isEditing = false;
   bool _isLoading = false;
-  bool _isUploadingImage = false;
   bool _isLoadingUserData = false;
   File? _selectedImage;
+  Uint8List? _selectedImageBytes;
+  String? _selectedImageFileName;
   final ImagePicker _imagePicker = ImagePicker();
 
   @override
@@ -156,8 +160,14 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
   }
 
   Future<void> _saveProfile() async {
-    if (!_formKey.currentState!.validate()) return;
+    debugPrint('AdminProfileScreen: _saveProfile called');
 
+    if (!_formKey.currentState!.validate()) {
+      debugPrint('AdminProfileScreen: Form validation failed');
+      return;
+    }
+
+    debugPrint('AdminProfileScreen: Form validation passed, starting save...');
     setState(() => _isLoading = true);
 
     try {
@@ -193,6 +203,11 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
         setState(() => _isLoading = false);
         return;
       }
+
+      // Debug: Check if profile picture is selected
+      debugPrint(
+        'AdminProfileScreen: _saveProfile - _selectedImage: ${_selectedImage != null}, _selectedImageBytes: ${_selectedImageBytes != null}',
+      );
 
       // Only include changed fields in the update
       final Map<String, dynamic> changedFields = {};
@@ -287,8 +302,94 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
             : _countryController.text.trim();
       }
 
+      // Check if profile picture needs to be uploaded
+      bool profilePictureUploaded = false;
+      final hasSelectedImage =
+          _selectedImage != null || _selectedImageBytes != null;
+      debugPrint(
+        'AdminProfileScreen: Checking for profile picture - hasSelectedImage: $hasSelectedImage',
+      );
+
+      if (hasSelectedImage) {
+        debugPrint(
+          'AdminProfileScreen: Uploading profile picture as part of save...',
+        );
+        debugPrint(
+          'AdminProfileScreen: Image details - Web: $kIsWeb, Has File: ${_selectedImage != null}, Has Bytes: ${_selectedImageBytes != null}, FileName: $_selectedImageFileName',
+        );
+        try {
+          profileProvider.setToken(token);
+
+          final uploadSuccess = kIsWeb && _selectedImageBytes != null
+              ? await profileProvider.uploadProfilePictureBytes(
+                  _selectedImageBytes!,
+                  fileName: _selectedImageFileName ?? 'profile_picture.jpg',
+                  token: token,
+                )
+              : _selectedImage != null
+              ? await profileProvider.uploadProfilePicture(
+                  _selectedImage!.path,
+                  token: token,
+                )
+              : false;
+
+          debugPrint(
+            'AdminProfileScreen: Profile picture upload result: $uploadSuccess',
+          );
+
+          if (uploadSuccess) {
+            profilePictureUploaded = true;
+            debugPrint(
+              'AdminProfileScreen: Profile picture uploaded successfully',
+            );
+            // Clear the selected image since it's now uploaded
+            if (mounted) {
+              setState(() {
+                _selectedImage = null;
+                _selectedImageBytes = null;
+                _selectedImageFileName = null;
+              });
+              // Refresh user data to get the new profile picture URL
+              await AuthService.getUserProfile(context);
+            }
+          } else {
+            debugPrint(
+              'AdminProfileScreen: Profile picture upload failed: ${profileProvider.errorMessage}',
+            );
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    profileProvider.errorMessage ??
+                        localizations.failedToUploadProfilePicture,
+                  ),
+                  backgroundColor: AppColors.error,
+                ),
+              );
+            }
+            setState(() => _isLoading = false);
+            return;
+          }
+        } catch (e) {
+          debugPrint('AdminProfileScreen: Error uploading profile picture: $e');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  localizations.errorUploadingProfilePicture(e.toString()),
+                ),
+                backgroundColor: AppColors.error,
+              ),
+            );
+          }
+          setState(() => _isLoading = false);
+          return;
+        }
+      }
+
       // Check if there are any changes
-      if (changedFields.isEmpty) {
+      if (changedFields.isEmpty && !profilePictureUploaded) {
+        if (!mounted) return;
         final localizations = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -303,22 +404,40 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
       // Ensure ProfileProvider has the token
       profileProvider.setToken(token);
 
-      final success = await profileProvider.updateProfile(
-        changedFields,
-        token: token, // Explicitly pass the token
-        userType: currentUser.userType, // Pass user type for endpoint selection
-        context: context, // Pass context for AuthProvider refresh
-      );
+      // Check if widget is still mounted before using context
+      if (!mounted) return;
+
+      // If only profile picture was uploaded (no other changes), skip updateProfile call
+      bool profileUpdateSuccess = true;
+      if (changedFields.isNotEmpty) {
+        profileUpdateSuccess = await profileProvider.updateProfile(
+          changedFields,
+          token: token, // Explicitly pass the token
+          userType:
+              currentUser.userType, // Pass user type for endpoint selection
+          context: context, // Pass context for AuthProvider refresh
+        );
+      }
 
       if (mounted) {
-        if (success) {
+        if (profileUpdateSuccess || profilePictureUploaded) {
           setState(() => _isEditing = false);
 
           // Update the local user data in AuthProvider with changed data only
-          authProvider.updateUserProfile(changedFields);
+          if (changedFields.isNotEmpty) {
+            authProvider.updateUserProfile(changedFields);
+          }
 
           // Show specific success message based on what was updated
-          String successMessage = _getSuccessMessage(changedFields);
+          String successMessage;
+          if (profilePictureUploaded && changedFields.isEmpty) {
+            successMessage = localizations.profilePictureUpdatedSuccessfully;
+          } else if (profilePictureUploaded && changedFields.isNotEmpty) {
+            successMessage =
+                '${localizations.profileUpdatedSuccessfully}. ${localizations.profilePictureUpdatedSuccessfully}';
+          } else {
+            successMessage = _getSuccessMessage(changedFields);
+          }
 
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -469,20 +588,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
           CircleAvatar(
             radius: 60,
             backgroundColor: AppColors.primary.withValues(alpha: 0.1),
-            backgroundImage: _selectedImage != null
-                ? FileImage(_selectedImage!)
-                : (authProvider.user?.profilePicture != null
-                      ? NetworkImage(authProvider.user!.profilePicture!)
-                      : null),
-            child:
-                _selectedImage == null &&
-                    authProvider.user?.profilePicture == null
-                ? const Icon(
-                    Icons.admin_panel_settings,
-                    size: 60,
-                    color: AppColors.primary,
-                  )
-                : null,
+            child: _buildProfileImage(authProvider),
           ),
           if (_isEditing)
             Positioned(
@@ -494,21 +600,8 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
                   shape: BoxShape.circle,
                 ),
                 child: IconButton(
-                  icon: _isUploadingImage
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              Colors.white,
-                            ),
-                          ),
-                        )
-                      : const Icon(Icons.camera_alt, color: Colors.white),
-                  onPressed: _isUploadingImage
-                      ? null
-                      : _handleProfilePictureUpdate,
+                  icon: const Icon(Icons.camera_alt, color: Colors.white),
+                  onPressed: _handleProfilePictureUpdate,
                 ),
               ),
             ),
@@ -1140,12 +1233,51 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
         );
 
         if (image != null) {
-          setState(() {
-            _selectedImage = File(image.path);
-          });
+          debugPrint(
+            'AdminProfileScreen: Image selected - Web: $kIsWeb, Name: ${image.name}',
+          );
 
-          // Upload the image
-          await _uploadProfilePicture();
+          if (kIsWeb) {
+            // For web, read image as bytes
+            final bytes = await image.readAsBytes();
+            debugPrint(
+              'AdminProfileScreen: Image bytes read - Size: ${bytes.length}',
+            );
+            setState(() {
+              _selectedImageBytes = bytes;
+              _selectedImageFileName = image.name;
+              _selectedImage = null;
+            });
+            debugPrint(
+              'AdminProfileScreen: Image stored in _selectedImageBytes',
+            );
+          } else {
+            // For mobile/desktop, use File
+            setState(() {
+              _selectedImage = File(image.path);
+              _selectedImageBytes = null;
+              _selectedImageFileName = null;
+            });
+            debugPrint(
+              'AdminProfileScreen: Image stored in _selectedImage - Path: ${image.path}',
+            );
+          }
+
+          // Don't upload immediately - wait for Save Changes button
+          // The image will be uploaded when user clicks "Save Changes"
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Image selected. Click "Save Changes" to upload.',
+                ),
+                backgroundColor: AppColors.success,
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
+        } else {
+          debugPrint('AdminProfileScreen: No image selected (image is null)');
         }
       }
     } catch (e) {
@@ -1162,87 +1294,64 @@ class _AdminProfileScreenState extends State<AdminProfileScreen>
     }
   }
 
-  Future<void> _uploadProfilePicture() async {
-    if (_selectedImage == null) return;
-
-    setState(() {
-      _isUploadingImage = true;
-    });
-
-    try {
-      final profileProvider = Provider.of<ProfileProvider>(
-        context,
-        listen: false,
+  Widget _buildProfileImage(AuthProvider authProvider) {
+    // Show selected image (new upload)
+    if (kIsWeb && _selectedImageBytes != null) {
+      return ClipOval(
+        child: Image.memory(
+          _selectedImageBytes!,
+          width: 120,
+          height: 120,
+          fit: BoxFit.cover,
+        ),
       );
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-
-      final token = authProvider.token;
-      final localizations = AppLocalizations.of(context);
-      if (token == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(localizations.authenticationTokenNotAvailable),
-            backgroundColor: AppColors.error,
-          ),
-        );
-        return;
-      }
-
-      profileProvider.setToken(token);
-
-      final success = await profileProvider.uploadProfilePicture(
-        _selectedImage!.path,
-        token: token,
+    } else if (!kIsWeb && _selectedImage != null) {
+      return ClipOval(
+        child: Image.file(
+          _selectedImage!,
+          width: 120,
+          height: 120,
+          fit: BoxFit.cover,
+        ),
       );
-
-      if (mounted) {
-        final localizations = AppLocalizations.of(context);
-        if (success) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(localizations.profilePictureUpdatedSuccessfully),
-              backgroundColor: AppColors.success,
-            ),
-          );
-
-          // Refresh user data to get the new profile picture URL
-          await AuthService.getUserProfile(context);
-
-          // Clear the selected image since it's now uploaded
-          setState(() {
-            _selectedImage = null;
-          });
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                profileProvider.errorMessage ??
-                    localizations.failedToUploadProfilePicture,
-              ),
-              backgroundColor: AppColors.error,
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      debugPrint('Error uploading profile picture: $e');
-      if (mounted) {
-        final localizations = AppLocalizations.of(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              localizations.errorUploadingProfilePicture(e.toString()),
-            ),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isUploadingImage = false;
-        });
-      }
     }
+
+    // Show existing profile picture
+    final profilePictureUrl = authProvider.user?.profilePicture;
+    if (profilePictureUrl != null && profilePictureUrl.isNotEmpty) {
+      final fullImageUrl =
+          ApiConfig.buildImageUrl(profilePictureUrl) ?? profilePictureUrl;
+      return ClipOval(
+        child: Image.network(
+          fullImageUrl,
+          width: 120,
+          height: 120,
+          fit: BoxFit.cover,
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) return child;
+            return const Center(
+              child: CircularProgressIndicator(strokeWidth: 2),
+            );
+          },
+          errorBuilder: (context, error, stackTrace) {
+            debugPrint(
+              'AdminProfileScreen: Error loading profile picture: $error',
+            );
+            return const Icon(
+              Icons.admin_panel_settings,
+              size: 60,
+              color: AppColors.primary,
+            );
+          },
+        ),
+      );
+    }
+
+    // Default placeholder
+    return const Icon(
+      Icons.admin_panel_settings,
+      size: 60,
+      color: AppColors.primary,
+    );
   }
 }

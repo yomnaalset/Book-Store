@@ -28,6 +28,7 @@ class _BorrowingRequestDetailScreenState
   final BorrowService _borrowService = BorrowService();
   BorrowRequest? _request;
   ReturnRequest? _returnRequest;
+  // Delivery request is now included in BorrowRequest.deliveryRequest (from AdminBorrowRequestSerializer)
   bool _isLoading = true;
   bool _isLoadingReturnRequest = false;
   String? _errorMessage;
@@ -173,6 +174,9 @@ class _BorrowingRequestDetailScreenState
     debugPrint('=== LOAD RETURN REQUEST END ===');
   }
 
+  // Delivery request is now included in BorrowRequest via AdminBorrowRequestSerializer
+  // No need for separate loading - it's already in _request!.deliveryRequest
+
   Future<void> _loadRequestDetails() async {
     try {
       setState(() {
@@ -289,6 +293,9 @@ class _BorrowingRequestDetailScreenState
               'DEBUG: NOT loading return request - status does not match',
             );
           }
+
+          // Delivery request is now included in BorrowRequest via AdminBorrowRequestSerializer
+          // No need to load separately - it's already in _request!.deliveryRequest
           debugPrint('==================================');
         }
       }
@@ -320,8 +327,26 @@ class _BorrowingRequestDetailScreenState
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          AppLocalizations.of(context).requestNumber(widget.requestId),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                AppLocalizations.of(context).requestNumber(widget.requestId),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (_request != null) ...[
+              const SizedBox(width: 8),
+              // Show BorrowRequest status as primary (borrow_status)
+              // Delivery status is shown separately as additional info
+              StatusChip(
+                status: _request!.borrowStatus ?? _request!.status,
+                backgroundColor: Colors.white.withValues(alpha: 0.2),
+                textColor: Colors.white,
+              ),
+            ],
+          ],
         ),
         backgroundColor: const Color(0xFFB5E7FF),
         foregroundColor: Colors.white,
@@ -505,7 +530,8 @@ class _BorrowingRequestDetailScreenState
                     ),
                   ),
                 ),
-                StatusChip(status: _request!.status),
+                // Show BorrowRequest status as primary (borrow_status)
+                StatusChip(status: _request!.borrowStatus ?? _request!.status),
               ],
             ),
             const SizedBox(height: 16),
@@ -821,18 +847,45 @@ class _BorrowingRequestDetailScreenState
             const SizedBox(height: 16),
             Row(
               children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.book_outlined,
-                    color: Colors.grey,
-                    size: 24,
-                  ),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child:
+                      _request!.book?.coverImageUrl != null &&
+                          _request!.book!.coverImageUrl!.isNotEmpty
+                      ? Image.network(
+                          _request!.book!.coverImageUrl!,
+                          width: 60,
+                          height: 80,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              width: 60,
+                              height: 80,
+                              decoration: BoxDecoration(
+                                color: Colors.grey[300],
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(
+                                Icons.book_outlined,
+                                color: Colors.grey,
+                                size: 30,
+                              ),
+                            );
+                          },
+                        )
+                      : Container(
+                          width: 60,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[300],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(
+                            Icons.book_outlined,
+                            color: Colors.grey,
+                            size: 30,
+                          ),
+                        ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -1813,11 +1866,14 @@ class _BorrowingRequestDetailScreenState
   }
 
   IconData _getManagerStatusIcon(String statusText) {
-    switch (statusText.toLowerCase()) {
+    // Handle legacy 'busy' status by treating it as 'online'
+    final normalizedStatus = statusText.toLowerCase() == 'busy'
+        ? 'online'
+        : statusText.toLowerCase();
+
+    switch (normalizedStatus) {
       case 'online':
         return Icons.wifi;
-      case 'busy':
-        return Icons.local_shipping;
       case 'offline':
         return Icons.wifi_off;
       default:
@@ -2072,9 +2128,15 @@ class _BorrowingRequestDetailScreenState
     );
   }
 
-  /// Check if delivery is currently active (started but not finished)
-  /// Button should appear ONLY when status is "out_for_delivery" (delivery in progress)
-  /// Button should disappear when status is "delivered" or "active" (delivery completed)
+  /// Check if "Show Delivery Manager Location" button should be visible.
+  /// Button should appear ONLY when delivery begins (status = 'in_delivery')
+  /// Button should disappear when delivery is complete (status = 'completed')
+  /// Requirements:
+  /// - User must be admin
+  /// - DeliveryRequest must exist
+  /// - DeliveryRequest.status must be 'in_delivery' (not 'completed' or other statuses)
+  /// - DeliveryRequest must have a delivery_manager
+  /// - DeliveryRequest must have location data (last_latitude/last_longitude or latitude/longitude)
   bool _isDeliveryActive() {
     debugPrint('DEBUG: ===== _isDeliveryActive CALLED =====');
 
@@ -2083,46 +2145,50 @@ class _BorrowingRequestDetailScreenState
       return false;
     }
 
-    if (_request!.deliveryPerson == null) {
-      debugPrint('DEBUG: _isDeliveryActive - deliveryPerson is null -> FALSE');
+    // Check if delivery request exists
+    if (_request!.deliveryRequest == null) {
+      debugPrint('DEBUG: _isDeliveryActive - deliveryRequest is null -> FALSE');
       return false;
     }
 
-    // Get the raw status string
-    final rawStatus = _request!.status;
-    debugPrint(
-      'DEBUG: _isDeliveryActive - Raw status: "$rawStatus" (type: ${rawStatus.runtimeType})',
-    );
-    debugPrint('DEBUG: _isDeliveryActive - Status length: ${rawStatus.length}');
-    debugPrint(
-      'DEBUG: _isDeliveryActive - Status code units: ${rawStatus.codeUnits}',
-    );
+    final deliveryRequest = _request!.deliveryRequest!;
+    final deliveryStatus = deliveryRequest.status.toLowerCase();
 
-    // Normalize the status: lowercase, trim, replace spaces and hyphens with underscores
-    final normalizedStatus = rawStatus
-        .toLowerCase()
-        .trim()
-        .replaceAll(' ', '_')
-        .replaceAll('-', '_')
-        .replaceAll(RegExp(r'[^\w_]'), ''); // Remove any special characters
-    debugPrint(
-      'DEBUG: _isDeliveryActive - Normalized status: "$normalizedStatus"',
-    );
-    debugPrint(
-      'DEBUG: _isDeliveryActive - Comparing: "$normalizedStatus" == "out_for_delivery"',
-    );
+    // CRITICAL: Button only shows when delivery is actively in progress (in_delivery)
+    // Hide when completed or any other status
+    if (deliveryStatus != 'in_delivery') {
+      debugPrint(
+        'DEBUG: _isDeliveryActive - Delivery status is "$deliveryStatus" (not "in_delivery") -> FALSE',
+      );
+      return false;
+    }
 
-    // Button should ONLY be visible when status is exactly "out_for_delivery"
-    // Hide when status is "delivered", "active", or any other status
-    final isOutForDelivery = normalizedStatus == 'out_for_delivery';
+    // Check if delivery manager exists
+    if (deliveryRequest.deliveryManagerName == null ||
+        deliveryRequest.deliveryManagerName!.isEmpty) {
+      debugPrint(
+        'DEBUG: _isDeliveryActive - deliveryManagerName is null/empty -> FALSE',
+      );
+      return false;
+    }
 
-    debugPrint(
-      'DEBUG: _isDeliveryActive - Comparison result: $isOutForDelivery',
-    );
-    debugPrint('DEBUG: _isDeliveryActive - Final result: $isOutForDelivery');
+    // Check if location data exists (prefer last_latitude/last_longitude for admin, fallback to latitude/longitude)
+    final hasLocation =
+        (deliveryRequest.lastLatitude != null &&
+            deliveryRequest.lastLongitude != null) ||
+        (deliveryRequest.latitude != null && deliveryRequest.longitude != null);
+
+    if (!hasLocation) {
+      debugPrint(
+        'DEBUG: _isDeliveryActive - No location data available -> FALSE',
+      );
+      return false;
+    }
+
+    debugPrint('DEBUG: _isDeliveryActive - All conditions met -> TRUE');
     debugPrint('DEBUG: ===== _isDeliveryActive END =====');
 
-    return isOutForDelivery;
+    return true;
   }
 
   String _getDeliveryManagerName() {
@@ -2203,9 +2269,8 @@ class _BorrowingRequestDetailScreenState
       return;
     }
 
-    // Verify that status is still out_for_delivery
-    final status = _request!.status.toLowerCase().trim().replaceAll(' ', '_');
-    if (status != 'out_for_delivery') {
+    // Verify that delivery is still active
+    if (!_isDeliveryActive()) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -2455,19 +2520,34 @@ class _BorrowingRequestDetailScreenState
               ),
               child: Row(
                 children: [
-                  Icon(
-                    _getStatusIcon(_request!.status),
-                    color: _getStatusColor(_request!.status),
-                    size: 20,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    _getStatusMessage(_request!.status),
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: _getStatusColor(_request!.status),
-                    ),
+                  Builder(
+                    builder: (context) {
+                      // Use BorrowRequest status as primary (borrow_status)
+                      final statusToShow =
+                          _request!.borrowStatus ?? _request!.status;
+                      final statusColorToShow = _getStatusColor(statusToShow);
+                      final statusIconToShow = _getStatusIcon(statusToShow);
+
+                      return Row(
+                        children: [
+                          Icon(
+                            statusIconToShow,
+                            color: statusColorToShow,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            // Show borrow status as primary
+                            _getStatusMessage(statusToShow),
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: statusColorToShow,
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ],
               ),
@@ -2587,6 +2667,46 @@ class _BorrowingRequestDetailScreenState
                   localizations.duration,
                   '${_request!.durationDays} ${localizations.days}',
                   Icons.access_time,
+                );
+              },
+            ),
+            Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                // Show borrow status as primary
+                final borrowStatusValue =
+                    _request!.borrowStatus ?? _request!.status;
+                final borrowStatusText = _getStatusMessage(borrowStatusValue);
+                final borrowStatusColor = _getStatusColor(borrowStatusValue);
+
+                // Show delivery status as additional info if available
+                String? deliveryStatusText;
+                if (_request!.deliveryRequest != null) {
+                  final deliveryStatus = _request!.deliveryRequest!.status;
+                  deliveryStatusText = _getDeliveryStatusDisplay(
+                    deliveryStatus,
+                  );
+                }
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildDetailRow(
+                      localizations.status,
+                      borrowStatusText,
+                      Icons.info_outline,
+                      textColor: borrowStatusColor,
+                    ),
+                    if (deliveryStatusText != null) ...[
+                      const SizedBox(height: 8),
+                      _buildDetailRow(
+                        'Delivery Status',
+                        deliveryStatusText,
+                        Icons.local_shipping,
+                        textColor: Colors.blue,
+                      ),
+                    ],
+                  ],
                 );
               },
             ),
@@ -2757,6 +2877,27 @@ class _BorrowingRequestDetailScreenState
         ),
       ],
     );
+  }
+
+  /// Get delivery status display text from database status
+  /// Returns customer-friendly messages matching the requirements
+  String _getDeliveryStatusDisplay(String status) {
+    switch (status.toLowerCase()) {
+      case 'pending':
+        return AppLocalizations.of(context).pending;
+      case 'assigned':
+        return 'Order assigned to Delivery Manager';
+      case 'accepted':
+        return 'Delivery Manager accepted order';
+      case 'in_delivery':
+        return 'Order in delivery';
+      case 'completed':
+        return 'Order delivered';
+      case 'rejected':
+        return AppLocalizations.of(context).rejected;
+      default:
+        return status;
+    }
   }
 
   Color _getStatusColor(String status) {

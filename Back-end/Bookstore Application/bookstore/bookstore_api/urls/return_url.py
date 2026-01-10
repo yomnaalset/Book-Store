@@ -16,6 +16,7 @@ from bookstore_api.views.return_view import (
     AllFinesView,
     GetReturnDeliveryLocationView,
     SelectReturnFinePaymentMethodView,
+    CustomerConfirmReturnPickupView,
     ConfirmCardPaymentView,
     ConfirmCashPaymentView,
     ConfirmReturnFineView,
@@ -53,6 +54,9 @@ return_urls = [
     path('fines/<int:fine_id>/select-payment-method/', SelectReturnFinePaymentMethodView.as_view(), name='select_return_fine_payment_method'),
     path('fines/<int:fine_id>/confirm-card-payment/', ConfirmCardPaymentView.as_view(), name='confirm_card_payment'),
     path('fines/<int:fine_id>/confirm-cash-payment/', ConfirmCashPaymentView.as_view(), name='confirm_cash_payment'),
+    
+    # Customer confirm pickup endpoint
+    path('requests/<int:pk>/confirm-pickup/', CustomerConfirmReturnPickupView.as_view(), name='customer_confirm_return_pickup'),
     
     # Admin Fine Management endpoints
     path('requests/<int:pk>/confirm-fine/', ConfirmReturnFineView.as_view(), name='confirm_return_fine'),

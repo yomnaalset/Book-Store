@@ -759,19 +759,10 @@ class ReportManagementService:
             )
             
             total_deliveries = deliveries.count()
-            completed_deliveries = deliveries.filter(actual_delivery_time__isnull=False).count()
-            pending_deliveries = deliveries.filter(
-                actual_delivery_time__isnull=True,
-                estimated_delivery_time__gt=timezone.now()
-            ).count()
-            in_progress_deliveries = deliveries.filter(
-                actual_delivery_time__isnull=True,
-                estimated_delivery_time__lte=timezone.now()
-            ).count()
-            failed_deliveries = deliveries.filter(
-                actual_delivery_time__isnull=True,
-                estimated_delivery_time__lt=timezone.now() - timedelta(days=1)
-            ).count()
+            completed_deliveries = deliveries.filter(status='completed', completed_at__isnull=False).count()
+            pending_deliveries = deliveries.filter(status__in=['pending', 'assigned']).count()
+            in_progress_deliveries = deliveries.filter(status__in=['accepted', 'in_delivery']).count()
+            failed_deliveries = deliveries.filter(status='rejected').count()
             
             # Get delivery performance by agent (top 10)
             agent_performance = deliveries.filter(
@@ -780,7 +771,7 @@ class ReportManagementService:
                 'delivery_manager__first_name', 'delivery_manager__last_name', 'delivery_manager__id'
             ).annotate(
                 delivery_count=Count('id'),
-                completed_count=Count('id', filter=Q(actual_delivery_time__isnull=False))
+                completed_count=Count('id', filter=Q(status='completed', completed_at__isnull=False))
             ).order_by('-delivery_count')[:10]
             
             agent_data = []

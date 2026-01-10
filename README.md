@@ -74,8 +74,16 @@ Bookstore-project/
    ```bash
    python manage.py runserver
    ```
+   
+   **For mobile device access (phone/tablet on same Wi-Fi):**
+   ```bash
+   python manage.py runserver 0.0.0.0:8000
+   ```
+   This makes the server accessible from other devices on your network at `http://YOUR_IP:8000/`
 
-The API will be available at `http://127.0.0.1:8000/`
+The API will be available at:
+- `http://127.0.0.1:8000/` (localhost only)
+- `http://0.0.0.0:8000/` (network accessible, when using `0.0.0.0:8000`)
 
 ### Frontend Setup
 

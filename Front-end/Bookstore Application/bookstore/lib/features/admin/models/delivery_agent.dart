@@ -45,14 +45,15 @@ class DeliveryAgent {
 
   factory DeliveryAgent.fromJson(Map<String, dynamic> json) {
     // Get status from multiple possible fields (status, delivery_status, status_display)
-    String status = json['status'] ?? 
-                    json['delivery_status'] ?? 
-                    json['status_display'] ?? 
-                    'offline';
-    
+    String status =
+        json['status'] ??
+        json['delivery_status'] ??
+        json['status_display'] ??
+        'offline';
+
     // Normalize status to lowercase for consistency
     status = status.toLowerCase();
-    
+
     return DeliveryAgent(
       id: json['id'] ?? 0,
       name: json['name'] ?? json['full_name'] ?? '',
@@ -173,43 +174,57 @@ class DeliveryAgent {
   bool get isOnline => isActive && isAvailable;
 
   String get statusDisplay {
-    switch (status.toLowerCase()) {
+    // Handle legacy 'busy' status by treating it as 'online'
+    final normalizedStatus = status.toLowerCase() == 'busy'
+        ? 'online'
+        : status.toLowerCase();
+
+    switch (normalizedStatus) {
       case 'active':
       case 'online':
         return 'Online';
       case 'inactive':
       case 'offline':
         return 'Offline';
-      case 'busy':
-        return 'Busy';
       default:
         return 'Offline';
     }
   }
-  
+
   // Get status color for UI display
   Color get statusColor {
-    switch (status.toLowerCase()) {
+    // Handle legacy 'busy' status by treating it as 'online'
+    final normalizedStatus = status.toLowerCase() == 'busy'
+        ? 'online'
+        : status.toLowerCase();
+
+    switch (normalizedStatus) {
       case 'active':
       case 'online':
         return Colors.green;
-      case 'busy':
-        return Colors.orange;
       case 'inactive':
       case 'offline':
       default:
         return Colors.grey;
     }
   }
-  
-  // Check if manager is online
-  bool get isOnlineStatus => status.toLowerCase() == 'online' || status.toLowerCase() == 'active';
-  
-  // Check if manager is busy
-  bool get isBusyStatus => status.toLowerCase() == 'busy';
-  
+
+  // Check if manager is online (including legacy 'busy' status)
+  bool get isOnlineStatus {
+    final normalizedStatus = status.toLowerCase();
+    return normalizedStatus == 'online' ||
+        normalizedStatus == 'active' ||
+        normalizedStatus == 'busy'; // Legacy support
+  }
+
+  // Check if manager is busy (legacy - always returns false now)
+  bool get isBusyStatus => false; // 'busy' status is no longer used
+
   // Check if manager is offline
-  bool get isOfflineStatus => status.toLowerCase() == 'offline' || status.toLowerCase() == 'inactive';
+  bool get isOfflineStatus {
+    final normalizedStatus = status.toLowerCase();
+    return normalizedStatus == 'offline' || normalizedStatus == 'inactive';
+  }
 
   String get vehicleInfo {
     if (vehicleType != null && vehicleNumber != null) {

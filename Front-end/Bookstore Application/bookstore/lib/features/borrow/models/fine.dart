@@ -31,12 +31,25 @@ class Fine {
     this.customerName,
   });
 
+  /// Parse double value from JSON - handles both string and numeric values
+  static double _parseDouble(dynamic value, {double defaultValue = 0.0}) {
+    if (value == null) return defaultValue;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) {
+      if (value.isEmpty) return defaultValue;
+      return double.tryParse(value) ?? defaultValue;
+    }
+    return double.tryParse(value.toString()) ?? defaultValue;
+  }
+
   factory Fine.fromJson(Map<String, dynamic> json) {
     return Fine(
       id: json['id'] ?? 0,
       bookTitle: json['book_title'] ?? json['book_name'] ?? '',
-      fineAmount: (json['fine_amount'] as num?)?.toDouble() ?? 
-                  (json['total_amount'] as num?)?.toDouble() ?? 0.0,
+      fineAmount: _parseDouble(json['fine_amount']) != 0.0
+          ? _parseDouble(json['fine_amount'])
+          : _parseDouble(json['total_amount']),
       fineStatus: json['fine_status'] ?? json['status'] ?? 'unpaid',
       paymentMethod: json['payment_method'],
       borrowPeriod: json['borrow_period'] ?? '',
@@ -128,9 +141,21 @@ class FineSummary {
     required this.canSubmitRequest,
   });
 
+  /// Parse double value from JSON - handles both string and numeric values
+  static double _parseDouble(dynamic value, {double defaultValue = 0.0}) {
+    if (value == null) return defaultValue;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) {
+      if (value.isEmpty) return defaultValue;
+      return double.tryParse(value) ?? defaultValue;
+    }
+    return double.tryParse(value.toString()) ?? defaultValue;
+  }
+
   factory FineSummary.fromJson(Map<String, dynamic> json) {
     return FineSummary(
-      totalUnpaid: (json['total_unpaid'] as num?)?.toDouble() ?? 0.0,
+      totalUnpaid: _parseDouble(json['total_unpaid']),
       totalFines: json['total_fines'] ?? 0,
       hasUnpaidFines: json['has_unpaid_fines'] ?? false,
       canSubmitRequest: json['can_submit_request'] ?? true,

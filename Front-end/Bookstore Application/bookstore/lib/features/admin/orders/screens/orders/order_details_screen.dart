@@ -98,9 +98,18 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text('Order #${_currentOrder?.id ?? widget.order.id}'),
+        title: Builder(
+          builder: (context) {
+            final order = _currentOrder ?? widget.order;
+            final orderNumber = order.orderNumber.isNotEmpty
+                ? order.orderNumber
+                : 'ORD-${order.id.toString().padLeft(4, '0')}';
+            return Text(localizations.orderNumberPrefix(orderNumber));
+          },
+        ),
         actions: [
           IconButton(
             onPressed: () => _showStatusUpdateDialog(),
@@ -861,13 +870,14 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
   Color _getStatusColor(String? status) {
     if (status == null) return Colors.grey;
 
-    switch (status) {
+    // Handle legacy 'busy' status by treating it as 'online'
+    final normalizedStatus = status.toLowerCase() == 'busy'
+        ? 'online'
+        : status.toLowerCase();
+
+    switch (normalizedStatus) {
       case 'online':
         return Colors.green;
-      case 'available':
-        return Colors.green;
-      case 'busy':
-        return Colors.orange;
       case 'offline':
         return Colors.red;
       default:

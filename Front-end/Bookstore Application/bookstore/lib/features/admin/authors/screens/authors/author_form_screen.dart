@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'dart:typed_data';
 import '../../../providers/library_manager/authors_provider.dart';
 import '../../../models/author.dart';
 import '../../../../../../core/localization/app_localizations.dart';
@@ -25,7 +27,8 @@ class _AuthorFormScreenState extends State<AuthorFormScreen> {
 
   DateTime? _birthDate;
   DateTime? _deathDate;
-  File? _selectedImage;
+  File? _selectedImage; // For mobile/desktop
+  Uint8List? _selectedImageBytes; // For web
   bool _isLoading = false;
 
   @override
@@ -98,8 +101,20 @@ class _AuthorFormScreenState extends State<AuthorFormScreen> {
 
     if (image != null) {
       setState(() {
-        _selectedImage = File(image.path);
-        _imageUrlController.clear(); // Clear URL when image is selected
+        if (kIsWeb) {
+          // For web, read bytes instead of using File
+          image.readAsBytes().then((bytes) {
+            if (mounted) {
+              setState(() {
+                _selectedImageBytes = bytes;
+                _imageUrlController.clear(); // Clear URL when image is selected
+              });
+            }
+          });
+        } else {
+          _selectedImage = File(image.path);
+          _imageUrlController.clear(); // Clear URL when image is selected
+        }
       });
     }
   }
@@ -115,8 +130,20 @@ class _AuthorFormScreenState extends State<AuthorFormScreen> {
 
     if (image != null) {
       setState(() {
-        _selectedImage = File(image.path);
-        _imageUrlController.clear(); // Clear URL when image is selected
+        if (kIsWeb) {
+          // For web, read bytes instead of using File
+          image.readAsBytes().then((bytes) {
+            if (mounted) {
+              setState(() {
+                _selectedImageBytes = bytes;
+                _imageUrlController.clear(); // Clear URL when image is selected
+              });
+            }
+          });
+        } else {
+          _selectedImage = File(image.path);
+          _imageUrlController.clear(); // Clear URL when image is selected
+        }
       });
     }
   }
@@ -157,11 +184,9 @@ class _AuthorFormScreenState extends State<AuthorFormScreen> {
         biography: _biographyController.text.trim().isEmpty
             ? null
             : _biographyController.text.trim(),
-        photo: _selectedImage != null
-            ? _selectedImage!.path
-            : (_imageUrlController.text.trim().isEmpty
-                  ? null
-                  : _imageUrlController.text.trim()),
+        photo: _imageUrlController.text.trim().isEmpty
+            ? null
+            : _imageUrlController.text.trim(),
         country: _nationalityController.text.trim().isEmpty
             ? null
             : _nationalityController.text.trim(),
@@ -174,7 +199,11 @@ class _AuthorFormScreenState extends State<AuthorFormScreen> {
 
       final localizations = AppLocalizations.of(context);
       if (widget.author == null) {
-        await provider.createAuthor(authorData);
+        await provider.createAuthor(
+          authorData,
+          photoFile: _selectedImage,
+          photoBytes: _selectedImageBytes,
+        );
         if (mounted) {
           scaffoldMessenger.showSnackBar(
             SnackBar(content: Text(localizations.authorCreatedSuccessfully)),
@@ -184,7 +213,11 @@ class _AuthorFormScreenState extends State<AuthorFormScreen> {
         debugPrint(
           'DEBUG: Author form - Updating author with data: ${authorData.toJson()}',
         );
-        final updatedAuthor = await provider.updateAuthor(authorData);
+        final updatedAuthor = await provider.updateAuthor(
+          authorData,
+          photoFile: _selectedImage,
+          photoBytes: _selectedImageBytes,
+        );
         if (mounted) {
           if (updatedAuthor != null) {
             debugPrint('DEBUG: Author form - Author updated successfully');
@@ -352,7 +385,7 @@ class _AuthorFormScreenState extends State<AuthorFormScreen> {
                                 const SizedBox(height: 8),
 
                                 // Image Preview
-                                if (_selectedImage != null) ...[
+                                if (_selectedImage != null || _selectedImageBytes != null) ...[
                                   Container(
                                     height: 120,
                                     width: 120,
@@ -362,10 +395,17 @@ class _AuthorFormScreenState extends State<AuthorFormScreen> {
                                     ),
                                     child: ClipRRect(
                                       borderRadius: BorderRadius.circular(8),
-                                      child: Image.file(
-                                        _selectedImage!,
-                                        fit: BoxFit.cover,
-                                      ),
+                                      child: _selectedImageBytes != null
+                                          ? Image.memory(
+                                              _selectedImageBytes!,
+                                              fit: BoxFit.cover,
+                                            )
+                                          : _selectedImage != null
+                                              ? Image.file(
+                                                  _selectedImage!,
+                                                  fit: BoxFit.cover,
+                                                )
+                                              : const Icon(Icons.person, size: 60),
                                     ),
                                   ),
                                   const SizedBox(height: 8),
@@ -405,8 +445,8 @@ class _AuthorFormScreenState extends State<AuthorFormScreen> {
                                   onChanged: (value) {
                                     if (value.isNotEmpty) {
                                       setState(() {
-                                        _selectedImage =
-                                            null; // Clear selected image when URL is entered
+                                        _selectedImage = null; // Clear selected image when URL is entered
+                                        _selectedImageBytes = null; // Clear bytes too
                                       });
                                     }
                                   },

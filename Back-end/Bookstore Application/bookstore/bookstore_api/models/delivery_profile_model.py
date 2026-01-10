@@ -15,7 +15,6 @@ class DeliveryProfile(models.Model):
     DELIVERY_STATUS_CHOICES = [
         ('online', 'Online - Available'),
         ('offline', 'Offline - Unavailable'),
-        ('busy', 'Busy - Currently Delivering'),
     ]
     
     # One-to-one relationship with User
@@ -33,7 +32,7 @@ class DeliveryProfile(models.Model):
         default='offline',
         null=True,  # Allow NULL as fallback for safety
         blank=True,
-        help_text="Current status of delivery manager (online/offline/busy)"
+        help_text="Delivery manager availability: online (available) or offline (unavailable)"
     )
     
     # Location fields
@@ -180,46 +179,9 @@ class DeliveryProfile(models.Model):
     def get_available_delivery_managers(cls):
         """
         Get all delivery managers who are available for delivery.
+        Only returns managers with 'online' status.
         """
         return cls.objects.filter(
-            delivery_status__in=['online', 'busy'],
+            delivery_status='online',
             is_tracking_active=True
         ).select_related('user')
-    
-    def can_change_status_manually(self):
-        """
-        Check if the delivery manager can manually change their status.
-        Returns False if currently busy (delivering), True otherwise.
-        """
-        return self.delivery_status != 'busy'
-    
-    def set_busy_for_delivery(self):
-        """
-        Automatically set status to busy when starting a delivery.
-        This should only be called by the system, not manually.
-        Sets status to busy if currently 'online' or 'offline' (but not if already 'busy').
-        """
-        if self.delivery_status in ['online', 'offline']:
-            self.delivery_status = 'busy'
-            self.save(update_fields=['delivery_status'])
-            return True
-        elif self.delivery_status == 'busy':
-            # Already busy, no change needed
-            return False
-        else:
-            # Unknown status, log warning but don't change
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning(f"Delivery profile {self.id} has unexpected status '{self.delivery_status}', not setting to busy")
-            return False
-    
-    def set_online_after_delivery(self):
-        """
-        Automatically set status to online when completing a delivery.
-        This should only be called by the system, not manually.
-        """
-        if self.delivery_status == 'busy':
-            self.delivery_status = 'online'
-            self.save(update_fields=['delivery_status'])
-            return True
-        return False

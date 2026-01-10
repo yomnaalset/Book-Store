@@ -79,7 +79,7 @@ def create_advertisement(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, IsLibraryAdmin])
+@permission_classes([AllowAny])  # Temporary: Allow public access to ads
 def list_advertisements(request):
     """
     List all advertisements with optional filtering

@@ -25,7 +25,10 @@ class _MostBorrowedSectionState extends State<MostBorrowedSection> {
   @override
   void initState() {
     super.initState();
-    _loadMostBorrowedBooks();
+    // Defer loading until after the build phase to avoid setState during build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadMostBorrowedBooks();
+    });
   }
 
   Future<void> _loadMostBorrowedBooks() async {

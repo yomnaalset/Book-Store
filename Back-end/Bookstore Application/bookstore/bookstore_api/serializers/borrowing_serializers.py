@@ -99,10 +99,11 @@ class BorrowRequestCreateSerializer(serializers.ModelSerializer):
 class BookBasicSerializer(serializers.ModelSerializer):
     """Basic book info for borrowing contexts"""
     author_name = serializers.CharField(source='author.name', read_only=True)
+    cover_image_url = serializers.CharField(source='get_primary_image_url', read_only=True)
     
     class Meta:
         model = Book
-        fields = ['id', 'name', 'author_name', 'category']
+        fields = ['id', 'name', 'author_name', 'category', 'cover_image_url']
 
 
 class CustomerBasicSerializer(serializers.ModelSerializer):
@@ -155,6 +156,8 @@ class BorrowRequestListSerializer(serializers.ModelSerializer):
     days_overdue = serializers.ReadOnlyField()
     can_extend = serializers.ReadOnlyField()
     can_rate = serializers.ReadOnlyField()
+    # Unified delivery status field - primary source of truth for order status
+    delivery_request_status = serializers.SerializerMethodField()
     
     class Meta:
         model = BorrowRequest
@@ -163,24 +166,199 @@ class BorrowRequestListSerializer(serializers.ModelSerializer):
             'borrow_period_days', 'delivery_address', 'additional_notes',
             'request_date', 'expected_return_date', 'final_return_date', 
             'delivery_date', 'actual_return_date', 'days_remaining', 
-            'days_overdue', 'can_extend', 'can_rate'
+            'days_overdue', 'can_extend', 'can_rate', 'delivery_request_status',
+            'fine_amount', 'fine_status'
         ]
+    
+    def get_delivery_request_status(self, obj):
+        """
+        Get the delivery request status if it exists.
+        This becomes the primary status source for customers and delivery managers.
+        Prioritizes return delivery requests over borrow delivery requests.
+        Special handling: If BorrowRequest status is 'returned', use that instead of 'completed' delivery status.
+        """
+        from ..models.delivery_model import DeliveryRequest
+        from ..models.return_model import ReturnRequest
+        from ..models.borrowing_model import BorrowStatusChoices
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        # If BorrowRequest status is already 'returned', return that directly
+        # This ensures we always show 'returned' for returned books, regardless of delivery status
+        if obj.status == BorrowStatusChoices.RETURNED:
+            logger.debug(f"BorrowRequest {obj.id}: Status is 'returned', returning 'returned' directly")
+            return 'returned'
+        
+        try:
+            # First check for return delivery request (takes priority when return request exists)
+            return_request = ReturnRequest.objects.filter(
+                borrowing=obj
+            ).order_by('-created_at').first()
+            
+            if return_request:
+                return_delivery_request = DeliveryRequest.objects.filter(
+                    return_request=return_request,
+                    delivery_type='return'
+                ).first()
+                
+                if return_delivery_request:
+                    logger.debug(f"BorrowRequest {obj.id}: Found return DeliveryRequest {return_delivery_request.id} with status '{return_delivery_request.status}'")
+                    return return_delivery_request.status
+                else:
+                    logger.debug(f"BorrowRequest {obj.id}: ReturnRequest {return_request.id} exists but no DeliveryRequest found")
+            else:
+                logger.debug(f"BorrowRequest {obj.id}: No ReturnRequest found")
+            
+            # Fallback to borrow delivery request if no return delivery request exists
+            # BUT: Don't use 'completed' status from borrow delivery - use actual borrow status instead
+            delivery_request = DeliveryRequest.objects.filter(
+                borrow_request=obj,
+                delivery_type='borrow'
+            ).first()
+            
+            if delivery_request:
+                logger.debug(f"BorrowRequest {obj.id}: Found borrow DeliveryRequest {delivery_request.id} with status '{delivery_request.status}'")
+                # If borrow delivery is 'completed', return None to use actual BorrowRequest status
+                # This allows showing 'active'/'delivered' status instead of 'completed'
+                if delivery_request.status == 'completed':
+                    logger.debug(f"BorrowRequest {obj.id}: Borrow delivery is completed, using BorrowRequest status instead")
+                    return None
+                return delivery_request.status
+        except Exception as e:
+            logger.error(f"Error getting delivery request status for borrow {obj.id}: {e}", exc_info=True)
+        
+        logger.debug(f"BorrowRequest {obj.id}: No delivery request status found, returning None")
+        return None
+    
+    def to_representation(self, instance):
+        """Override to use delivery_request_status if available, otherwise use BorrowRequest.status"""
+        data = super().to_representation(instance)
+        from ..models.borrowing_model import BorrowStatusChoices
+        
+        # Use delivery_request_status if available (unified delivery status approach)
+        # Special case: If BorrowRequest status is 'returned', always use 'returned' for status
+        if instance.status == BorrowStatusChoices.RETURNED:
+            data['status'] = 'returned'
+            data['status_display'] = BorrowStatusChoices.RETURNED.label
+        elif 'delivery_request_status' in data and data['delivery_request_status'] is not None:
+            data['status'] = data['delivery_request_status']
+            # Update status_display based on delivery_request_status
+            if data['delivery_request_status'] == 'returned':
+                data['status_display'] = BorrowStatusChoices.RETURNED.label
+            else:
+                # Try to get display for other statuses
+                data['status_display'] = data.get('status_display', instance.get_status_display())
+        else:
+            # Fallback to BorrowRequest.status
+            data['status'] = instance.status
+            data['status_display'] = instance.get_status_display()
+        return data
 
 
 class BorrowRequestDetailSerializer(BorrowRequestListSerializer):
     """
     Detailed serializer for borrow requests
+    Includes delivery_request for customers (via view logic)
     """
     approved_by = CustomerBasicSerializer(read_only=True)
     delivery_person = CustomerBasicSerializer(read_only=True)
     timeline = serializers.SerializerMethodField()
+    delivery_request = serializers.SerializerMethodField()  # For customer-facing views
     
     class Meta(BorrowRequestListSerializer.Meta):
         fields = BorrowRequestListSerializer.Meta.fields + [
             'approved_by', 'approved_date', 'rejection_reason',
             'pickup_date', 'delivery_person', 'delivery_notes',
-            'timeline'
+            'timeline', 'delivery_request'
         ]
+    
+    def get_delivery_request(self, obj):
+        """
+        Get delivery request for customer-facing views.
+        Returns None if no delivery request exists.
+        This is handled in the view logic for customer accounts using CustomerDeliveryRequestSerializer.
+        For admin accounts, AdminBorrowRequestSerializer overrides this.
+        """
+        # This will be populated by the view logic for customers
+        # Admin accounts use AdminBorrowRequestSerializer which has its own implementation
+        return None
+    
+    def get_delivery_request_status(self, obj):
+        """
+        Enhanced delivery request status for detail views.
+        Includes select_related optimization.
+        This is the primary status source for customers and delivery managers.
+        Prioritizes return delivery requests over borrow delivery requests.
+        Special handling: If BorrowRequest status is 'returned', use that instead of 'completed' delivery status.
+        """
+        from ..models.delivery_model import DeliveryRequest
+        from ..models.return_model import ReturnRequest
+        from ..models.borrowing_model import BorrowStatusChoices
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        # If BorrowRequest status is already 'returned', return that directly
+        # This ensures we always show 'returned' for returned books, regardless of delivery status
+        if obj.status == BorrowStatusChoices.RETURNED:
+            logger.debug(f"BorrowRequest {obj.id}: Status is 'returned', returning 'returned' directly")
+            return 'returned'
+        
+        try:
+            # First check for return delivery request (takes priority when return request exists)
+            return_request = ReturnRequest.objects.filter(
+                borrowing=obj
+            ).order_by('-created_at').first()
+            
+            if return_request:
+                return_delivery_request = DeliveryRequest.objects.select_related(
+                    'delivery_manager'
+                ).filter(
+                    return_request=return_request,
+                    delivery_type='return'
+                ).first()
+                
+                if return_delivery_request:
+                    logger.debug(f"BorrowRequest {obj.id}: Found return DeliveryRequest {return_delivery_request.id} with status '{return_delivery_request.status}'")
+                    return return_delivery_request.status
+                else:
+                    logger.debug(f"BorrowRequest {obj.id}: ReturnRequest {return_request.id} exists but no DeliveryRequest found")
+            else:
+                logger.debug(f"BorrowRequest {obj.id}: No ReturnRequest found")
+            
+            # Fallback to borrow delivery request if no return delivery request exists
+            # BUT: Don't use 'completed' status from borrow delivery - use actual borrow status instead
+            # Use select_related if available from queryset, otherwise query directly
+            if hasattr(obj, '_prefetched_objects_cache') and 'delivery_requests' in obj._prefetched_objects_cache:
+                # Delivery requests were prefetched
+                for delivery_request in obj.delivery_requests.all():
+                    if delivery_request.delivery_type == 'borrow':
+                        logger.debug(f"BorrowRequest {obj.id}: Found prefetched borrow DeliveryRequest with status '{delivery_request.status}'")
+                        # If borrow delivery is 'completed', return None to use actual BorrowRequest status
+                        if delivery_request.status == 'completed':
+                            logger.debug(f"BorrowRequest {obj.id}: Borrow delivery is completed, using BorrowRequest status instead")
+                            return None
+                        return delivery_request.status
+            else:
+                # Query directly with select_related
+                delivery_request = DeliveryRequest.objects.select_related(
+                    'delivery_manager'
+                ).filter(
+                    borrow_request=obj,
+                    delivery_type='borrow'
+                ).first()
+                
+                if delivery_request:
+                    logger.debug(f"BorrowRequest {obj.id}: Found borrow DeliveryRequest {delivery_request.id} with status '{delivery_request.status}'")
+                    # If borrow delivery is 'completed', return None to use actual BorrowRequest status
+                    if delivery_request.status == 'completed':
+                        logger.debug(f"BorrowRequest {obj.id}: Borrow delivery is completed, using BorrowRequest status instead")
+                        return None
+                    return delivery_request.status
+        except Exception as e:
+            logger.error(f"Error getting delivery request status for borrow {obj.id}: {e}", exc_info=True)
+        
+        logger.debug(f"BorrowRequest {obj.id}: No delivery request status found, returning None")
+        return None
     
     def get_timeline(self, obj):
         """Generate timeline of borrow request events"""
@@ -244,6 +422,85 @@ class BorrowRequestDetailSerializer(BorrowRequestListSerializer):
     def to_representation(self, instance):
         """Override to add custom representation"""
         data = super().to_representation(instance)
+        return data
+
+
+class AdminBorrowRequestSerializer(BorrowRequestDetailSerializer):
+    """
+    Admin-specific serializer for BorrowRequest.
+    Includes both borrow_status and delivery_status separately.
+    Includes delivery request information with location data for admins.
+    """
+    borrow_status = serializers.CharField(source='status', read_only=True)
+    borrow_status_display = serializers.CharField(source='get_status_display', read_only=True)
+    delivery_request = serializers.SerializerMethodField()
+    # Override delivery_request_status for admin with enhanced functionality
+    delivery_request_status = serializers.SerializerMethodField()
+    
+    class Meta(BorrowRequestDetailSerializer.Meta):
+        fields = BorrowRequestDetailSerializer.Meta.fields + [
+            'borrow_status',
+            'borrow_status_display',
+            'delivery_request',
+        ]
+    
+    def get_delivery_request(self, obj):
+        """
+        Get delivery request information with location data (for admins only).
+        Returns None if no delivery request exists.
+        """
+        from ..models.delivery_model import DeliveryRequest
+        from ..serializers.delivery_serializers import AdminDeliveryRequestSerializer
+        
+        delivery_request = DeliveryRequest.objects.filter(
+            borrow_request=obj,
+            delivery_type='borrow'
+        ).select_related(
+            'delivery_manager',
+            'delivery_manager__delivery_profile'
+        ).first()
+        
+        if delivery_request:
+            serializer = AdminDeliveryRequestSerializer(delivery_request)
+            return serializer.data
+        return None
+    
+    def get_delivery_request_status(self, obj):
+        """
+        Admin-enhanced delivery request status.
+        Same as parent but with better error handling and logging.
+        """
+        return super().get_delivery_request_status(obj)
+    
+    def to_representation(self, instance):
+        """Override to ensure borrow_status is always present and status uses delivery_request_status if available"""
+        data = super().to_representation(instance)
+        from ..models.borrowing_model import BorrowStatusChoices
+        
+        # Get the actual BorrowRequest status from the model instance
+        borrow_request_status = instance.status
+        
+        # For admin, always set borrow_status to the BorrowRequest.status
+        data['borrow_status'] = borrow_request_status
+        data['borrow_status_display'] = instance.get_status_display()
+        
+        # Special case: If BorrowRequest status is 'returned', always use 'returned' for status
+        if borrow_request_status == BorrowStatusChoices.RETURNED:
+            data['status'] = 'returned'
+            data['status_display'] = BorrowStatusChoices.RETURNED.label
+        # Use delivery_request_status for status field if available (unified delivery status approach)
+        elif 'delivery_request_status' in data and data['delivery_request_status'] is not None:
+            data['status'] = data['delivery_request_status']
+            # Update status_display based on delivery_request_status
+            if data['delivery_request_status'] == 'returned':
+                data['status_display'] = BorrowStatusChoices.RETURNED.label
+            else:
+                data['status_display'] = data.get('status_display', instance.get_status_display())
+        else:
+            # Fallback to BorrowRequest.status
+            data['status'] = borrow_request_status
+            data['status_display'] = instance.get_status_display()
+        
         return data
 
 
@@ -536,14 +793,17 @@ class DeliveryManagerSerializer(serializers.ModelSerializer):
                 
                 if status:
                     # Map status to capitalized format for Flutter compatibility
-                    # Flutter expects: "Online", "Busy", "Offline"
+                    # Flutter expects: "Online" or "Offline"
                     status_map = {
                         'online': 'Online',
-                        'busy': 'Busy',
                         'offline': 'Offline'
                     }
                     # Handle both lowercase and already capitalized values
                     status_lower = status.lower() if isinstance(status, str) else str(status).lower()
+                    # If status is 'busy' (legacy), map to 'Online' since busy is no longer used
+                    if status_lower == 'busy':
+                        logger.warning(f"User {obj.id}: Found legacy 'busy' status, mapping to 'Online'")
+                        return 'Online'
                     result = status_map.get(status_lower, 'Offline')
                     logger.info(f"User {obj.id}: Mapped status '{status}' -> '{result}'")
                     return result
@@ -581,13 +841,17 @@ class DeliveryManagerSerializer(serializers.ModelSerializer):
                 
                 if status:
                     # Return simple capitalized values for Flutter compatibility
-                    # Flutter expects: "Online", "Busy", "Offline"
+                    # Flutter expects: "Online" or "Offline"
                     status_map = {
                         'online': 'Online',
-                        'busy': 'Busy',
                         'offline': 'Offline'
                     }
-                    display = status_map.get(status.lower() if isinstance(status, str) else status, 'Offline')
+                    status_lower = status.lower() if isinstance(status, str) else str(status).lower()
+                    # If status is 'busy' (legacy), map to 'Online' since busy is no longer used
+                    if status_lower == 'busy':
+                        logger.warning(f"User {obj.id}: Found legacy 'busy' status in status_display, mapping to 'Online'")
+                        return 'Online'
+                    display = status_map.get(status_lower, 'Offline')
                     logger.debug(f"User {obj.id}: returning display='{display}'")
                     return display
                 else:
@@ -622,10 +886,11 @@ class DeliveryManagerSerializer(serializers.ModelSerializer):
                 status = obj.delivery_profile.delivery_status
                 if status == 'online':
                     return 'green'
-                elif status == 'busy':
-                    return 'orange'
                 elif status == 'offline':
                     return 'red'
+                elif status == 'busy':
+                    # Legacy 'busy' status - treat as 'online' (green)
+                    return 'green'
         except Exception:
             pass
         return 'gray'

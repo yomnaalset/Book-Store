@@ -12,6 +12,25 @@ from ..services.notification_services import NotificationService
 
 logger = logging.getLogger(__name__)
 
+"""
+CRITICAL DESIGN RULE: DeliveryRequest.status MUST be updated when delivery_manager is assigned or status changes.
+
+This is the single source of truth for delivery status in the frontend. The frontend relies on 
+delivery_request_status to determine UI state, menu visibility, and button availability.
+
+Status Transition Rules:
+1. When delivery_manager is assigned → DeliveryRequest.status MUST be 'assigned'
+2. When return request is accepted → DeliveryRequest.status MUST be 'accepted'
+3. When return process starts → DeliveryRequest.status MUST be 'in_delivery'
+4. When return is completed → DeliveryRequest.status MUST be 'completed'
+
+NEVER create or update DeliveryRequest with:
+- status='pending' + delivery_manager (invalid state)
+- delivery_manager set but status not updated (causes UI inconsistencies)
+
+All status updates must be atomic and happen within the same transaction as the ReturnRequest update.
+"""
+
 
 class ReturnService:
     """
@@ -24,11 +43,14 @@ class ReturnService:
         """
         Approve a return request
         Updates status to APPROVED
-        Idempotent: if already approved, returns without error
+        Idempotent: if already approved or past approval stage, returns without error
         """
-        # If already approved, return without error (idempotent operation)
-        if return_request.status == ReturnStatus.APPROVED:
-            logger.info(f"Return request {return_request.id} is already approved")
+        # If already approved or past approval stage, return without error (idempotent operation)
+        # This includes: APPROVED, ASSIGNED, ACCEPTED, IN_PROGRESS, COMPLETED
+        if return_request.status in [ReturnStatus.APPROVED, ReturnStatus.ASSIGNED, 
+                                      ReturnStatus.ACCEPTED, ReturnStatus.IN_PROGRESS, 
+                                      ReturnStatus.COMPLETED]:
+            logger.info(f"Return request {return_request.id} is already approved or past approval stage (status: {return_request.status})")
             return return_request
         
         # If not in PENDING status, raise error
@@ -42,6 +64,32 @@ class ReturnService:
         borrowing = return_request.borrowing
         borrowing.status = BorrowStatusChoices.RETURN_REQUESTED
         borrowing.save()
+        
+        # Create delivery request for return collection if it doesn't exist
+        # This ensures delivery_request_status is available for the frontend
+        from ..models.delivery_model import DeliveryRequest
+        
+        existing_delivery = DeliveryRequest.objects.filter(
+            return_request=return_request,
+            delivery_type='return'
+        ).first()
+        
+        if not existing_delivery:
+            # Create delivery request with status='pending' (no delivery_manager yet)
+            try:
+                delivery_request = DeliveryRequest.objects.create(
+                    delivery_type='return',
+                    customer=borrowing.customer,
+                    delivery_address=borrowing.delivery_address,
+                    delivery_city=getattr(borrowing, 'delivery_city', None),
+                    return_request=return_request,
+                    delivery_manager=None,  # Will be assigned later
+                    status='pending',
+                    created_at=return_request.created_at
+                )
+                logger.info(f"Created delivery request {delivery_request.id} for return request {return_request.id} with status='pending'")
+            except Exception as e:
+                logger.warning(f"Failed to create delivery request for return: {str(e)}")
         
         # Send notification to customer
         NotificationService.create_notification(
@@ -60,7 +108,18 @@ class ReturnService:
         """
         Assign a delivery manager to a return request
         Updates status to ASSIGNED
+        Idempotent: if already assigned or past assignment stage, returns without error
         """
+        logger.info("assign_delivery_manager called - ReturnRequest ID: %s, DeliveryManager ID: %s", 
+                   return_request.id, delivery_manager_id)
+        
+        # If already assigned or past assignment stage, return without error (idempotent operation)
+        # This includes: ASSIGNED, ACCEPTED, IN_PROGRESS, COMPLETED
+        if return_request.status in [ReturnStatus.ASSIGNED, ReturnStatus.ACCEPTED, 
+                                      ReturnStatus.IN_PROGRESS, ReturnStatus.COMPLETED]:
+            logger.info(f"Return request {return_request.id} is already assigned or past assignment stage (status: {return_request.status})")
+            return return_request
+        
         if return_request.status != ReturnStatus.APPROVED:
             raise ValueError(f"Return request must be in APPROVED status. Current status: {return_request.get_status_display()}")
         
@@ -73,6 +132,21 @@ class ReturnService:
         except User.DoesNotExist:
             raise ValueError("Delivery manager not found or inactive")
         
+        # Check if delivery manager is available - only 'online' (available) managers can be assigned
+        from ..models.delivery_profile_model import DeliveryProfile
+        delivery_profile, created = DeliveryProfile.objects.get_or_create(
+            user=delivery_manager,
+            defaults={'delivery_status': 'offline'}
+        )
+        
+        # Only allow assignment if manager is 'online' (available)
+        if delivery_profile.delivery_status != 'online':
+            status_display = delivery_profile.get_delivery_status_display() if delivery_profile.delivery_status else 'offline'
+            raise ValueError(
+                f"Cannot assign return request: Delivery manager is {status_display.lower()}. "
+                f"Only available (online) managers can be assigned new requests."
+            )
+        
         return_request.delivery_manager = delivery_manager
         return_request.status = ReturnStatus.ASSIGNED
         return_request.save()
@@ -82,23 +156,124 @@ class ReturnService:
         borrowing.status = BorrowStatusChoices.RETURN_ASSIGNED
         borrowing.save()
         
-        # Create return_collection order if it doesn't exist
-        from ..models import Order
-        from ..services.delivery_services import BorrowingDeliveryService
+        # CRITICAL: Update or create DeliveryRequest with status='assigned'
+        # Rule: When delivery_manager is assigned, DeliveryRequest.status MUST be 'assigned'
+        from ..models import DeliveryRequest
         
-        # Check if return_collection order already exists for this borrow_request
-        existing_order = Order.objects.filter(
-            order_type='return_collection',
-            borrow_request=borrowing
-        ).first()
+        # 🔍 DEBUG: Check for duplicate DeliveryRequests BEFORE assignment
+        all_deliveries = DeliveryRequest.objects.filter(
+            return_request=return_request,
+            delivery_type='return'
+        ).order_by('-id')
+        delivery_count = all_deliveries.count()
         
-        if not existing_order:
-            # Create return_collection order
-            collection_result = BorrowingDeliveryService.create_return_collection_order(borrowing)
-            if collection_result['success']:
-                logger.info(f"Created return_collection order for return request {return_request.id}")
-            else:
-                logger.warning(f"Failed to create return_collection order: {collection_result.get('message', 'Unknown error')}")
+        if delivery_count > 1:
+            logger.warning(
+                f"🔴 DUPLICATE DETECTED: ReturnRequest {return_request.id} has {delivery_count} DeliveryRequests! "
+                f"This is a serious bug. DeliveryRequest IDs: {list(all_deliveries.values_list('id', flat=True))}"
+            )
+            # Log all DeliveryRequests for debugging
+            for dr in all_deliveries:
+                logger.warning(
+                    f"  DeliveryRequest {dr.id}: status='{dr.status}', "
+                    f"delivery_manager_id={dr.delivery_manager_id}, created_at={dr.created_at}"
+                )
+        
+        # Find existing delivery request (should be created during approval)
+        existing_delivery = all_deliveries.first()
+        
+        if existing_delivery:
+            # Update existing delivery request
+            # CRITICAL: Always update status to 'assigned' when manager is assigned
+            logger.info(
+                f"BEFORE UPDATE: DeliveryRequest {existing_delivery.id} "
+                f"status='{existing_delivery.status}', delivery_manager_id={existing_delivery.delivery_manager_id}"
+            )
+            
+            # Explicitly set all fields to ensure update
+            existing_delivery.delivery_manager = delivery_manager
+            # CRITICAL: Change status from 'pending' to 'assigned' when manager is assigned
+            if existing_delivery.status == 'pending':
+                existing_delivery.status = 'assigned'
+            elif existing_delivery.status not in ['assigned', 'accepted', 'in_delivery', 'completed']:
+                # If status is somehow invalid, force it to 'assigned'
+                existing_delivery.status = 'assigned'
+            
+            if not existing_delivery.assigned_at:
+                existing_delivery.assigned_at = timezone.now()
+            
+            # CRITICAL: Use direct SQL update to ensure status is definitely changed
+            # This bypasses any ORM issues, signals, or caching
+            from django.db import connection
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE delivery_request 
+                    SET delivery_manager_id = %s, 
+                        status = 'assigned', 
+                        assigned_at = COALESCE(assigned_at, %s),
+                        updated_at = NOW()
+                    WHERE id = %s
+                    """,
+                    [delivery_manager.id, timezone.now(), existing_delivery.id]
+                )
+                updated_count = cursor.rowcount
+                logger.info(
+                    f"DIRECT SQL UPDATE: DeliveryRequest {existing_delivery.id} "
+                    f"updated {updated_count} row(s) with status='assigned', delivery_manager_id={delivery_manager.id}"
+                )
+                
+                if updated_count == 0:
+                    logger.error(f"CRITICAL: Direct SQL update failed for DeliveryRequest {existing_delivery.id}")
+                    raise ValueError("Failed to update delivery request status via direct SQL")
+                
+                # Immediately verify the update worked
+                cursor.execute(
+                    "SELECT status, delivery_manager_id FROM delivery_request WHERE id = %s",
+                    [existing_delivery.id]
+                )
+                verify_row = cursor.fetchone()
+                if verify_row:
+                    verify_status, verify_manager_id = verify_row
+                    if verify_status != 'assigned':
+                        logger.error(
+                            f"❌ CRITICAL: DeliveryRequest {existing_delivery.id} status is '{verify_status}', "
+                            f"expected 'assigned'!"
+                        )
+                        raise ValueError(f"DeliveryRequest status update verification failed - status is '{verify_status}'")
+                    logger.info(
+                        f"✅ VERIFIED: DeliveryRequest {existing_delivery.id} "
+                        f"status='{verify_status}', delivery_manager_id={verify_manager_id}"
+                    )
+            
+            # Also update via ORM for consistency (though SQL already did it)
+            existing_delivery.refresh_from_db()
+            logger.info(
+                f"AFTER REFRESH: DeliveryRequest {existing_delivery.id} "
+                f"status='{existing_delivery.status}', delivery_manager_id={existing_delivery.delivery_manager_id}"
+            )
+            
+            logger.info(
+                f"✅ Updated DeliveryRequest {existing_delivery.id} for ReturnRequest {return_request.id}: "
+                f"status='assigned', delivery_manager_id={delivery_manager.id}"
+            )
+        else:
+            # Create new delivery request with status='assigned' and delivery_manager
+            # CRITICAL: Never create with status='pending' + delivery_manager (invalid design)
+            delivery_request = DeliveryRequest.objects.create(
+                delivery_type='return',
+                customer=borrowing.customer,
+                delivery_address=borrowing.delivery_address,
+                delivery_city=getattr(borrowing, 'delivery_city', None),
+                return_request=return_request,
+                delivery_manager=delivery_manager,
+                status='assigned',
+                assigned_at=timezone.now()
+            )
+            logger.info(
+                f"Created DeliveryRequest {delivery_request.id} for ReturnRequest {return_request.id}: "
+                f"status='assigned', delivery_manager_id={delivery_manager.id}"
+            )
         
         # Send notification to delivery manager
         NotificationService.create_notification(
@@ -141,6 +316,33 @@ class ReturnService:
         if borrowing.status != BorrowStatusChoices.RETURN_ASSIGNED:
             borrowing.status = BorrowStatusChoices.RETURN_ASSIGNED
             borrowing.save()
+        
+        # CRITICAL: Update DeliveryRequest status to 'accepted'
+        # Rule: When return request is accepted, DeliveryRequest.status MUST be 'accepted'
+        from ..models.delivery_model import DeliveryRequest
+        delivery_request = DeliveryRequest.objects.filter(
+            return_request=return_request,
+            delivery_type='return'
+        ).first()
+        
+        if delivery_request:
+            if delivery_request.status != 'assigned':
+                logger.warning(
+                    f"DeliveryRequest {delivery_request.id} status is '{delivery_request.status}', "
+                    f"expected 'assigned' before accepting. Updating to 'accepted' anyway."
+                )
+            delivery_request.status = 'accepted'
+            delivery_request.accepted_at = timezone.now()
+            delivery_request.save(update_fields=['status', 'accepted_at', 'updated_at'])
+            logger.info(
+                f"Updated DeliveryRequest {delivery_request.id} status to 'accepted' "
+                f"for ReturnRequest {return_request.id}"
+            )
+        else:
+            logger.warning(
+                f"No DeliveryRequest found for ReturnRequest {return_request.id} when accepting. "
+                f"This should not happen."
+            )
         
         # Send notification to customer
         NotificationService.create_notification(
@@ -185,26 +387,36 @@ class ReturnService:
         borrowing.status = BorrowStatusChoices.OUT_FOR_RETURN_PICKUP
         borrowing.save()
         
-        # Automatically set delivery manager status to 'busy' when starting return
-        # Use centralized method that handles all delivery types consistently
-        if return_request.delivery_manager:
-            try:
-                from ..services.delivery_profile_services import DeliveryProfileService
-                
-                logger.info(f"Updating delivery manager {return_request.delivery_manager.id} status to busy for return request {return_request.id}")
-                
-                # Use centralized start_delivery_task method - this ensures consistent behavior
-                # across all delivery types (return, borrow, order)
-                success = DeliveryProfileService.start_delivery_task(return_request.delivery_manager)
-                
-                if success:
-                    logger.info(f"Delivery manager {return_request.delivery_manager.id} status successfully updated to busy")
-                else:
-                    logger.warning(f"Delivery manager {return_request.delivery_manager.id} status update returned False - may already be busy")
-                
-            except Exception as e:
-                logger.error(f"Failed to update delivery manager status to busy: {str(e)}", exc_info=True)
-                # Don't fail the return process if status update fails, just log the error
+        # CRITICAL: Update DeliveryRequest status to 'in_delivery'
+        # Rule: When return process starts, DeliveryRequest.status MUST be 'in_delivery'
+        from ..models.delivery_model import DeliveryRequest
+        delivery_request = DeliveryRequest.objects.filter(
+            return_request=return_request,
+            delivery_type='return'
+        ).first()
+        
+        if delivery_request:
+            # Validate state transition: should be 'accepted' or 'assigned' before starting
+            if delivery_request.status not in ['assigned', 'accepted']:
+                logger.warning(
+                    f"DeliveryRequest {delivery_request.id} status is '{delivery_request.status}', "
+                    f"expected 'assigned' or 'accepted' before starting. Updating to 'in_delivery' anyway."
+                )
+            delivery_request.status = 'in_delivery'
+            delivery_request.started_at = timezone.now()
+            delivery_request.save(update_fields=['status', 'started_at', 'updated_at'])
+            logger.info(
+                f"Updated DeliveryRequest {delivery_request.id} status to 'in_delivery' "
+                f"for ReturnRequest {return_request.id}"
+            )
+        else:
+            logger.warning(
+                f"No DeliveryRequest found for ReturnRequest {return_request.id} when starting return. "
+                f"This should not happen."
+            )
+        
+        # Note: Delivery manager availability remains unchanged when starting return process
+        # Only 'online' (available) managers can start returns, and they stay 'online'
         
         # Send notification to customer
         NotificationService.create_notification(
@@ -224,21 +436,98 @@ class ReturnService:
         Complete the return request
         Updates status to COMPLETED (returned)
         Increments book available copies
+        Checks for late return and creates fine if needed
         Automatically sets delivery manager status back to 'online'
         """
         if return_request.status != ReturnStatus.IN_PROGRESS:
             raise ValueError(f"Return request must be in IN_PROGRESS status. Current status: {return_request.get_status_display()}")
         
+        borrowing = return_request.borrowing
+        return_date = timezone.now()
+        
+        # Check if the return is late BEFORE updating status
+        # We need to check against expected_return_date while the book is still considered "active"
+        is_late = borrowing.expected_return_date and return_date > borrowing.expected_return_date
+        
+        # CRITICAL: Update DeliveryRequest status to 'completed' FIRST
+        # Rule: When return is completed, DeliveryRequest.status MUST be 'completed'
+        from ..models.delivery_model import DeliveryRequest
+        delivery_request = DeliveryRequest.objects.filter(
+            return_request=return_request,
+            delivery_type='return'
+        ).first()
+        
+        if delivery_request:
+            if delivery_request.status != 'in_delivery':
+                logger.warning(
+                    f"DeliveryRequest {delivery_request.id} status is '{delivery_request.status}', "
+                    f"expected 'in_delivery' before completing. Updating to 'completed' anyway."
+                )
+            delivery_request.status = 'completed'
+            delivery_request.completed_at = return_date
+            delivery_request.save(update_fields=['status', 'completed_at', 'updated_at'])
+            logger.info(
+                f"Updated DeliveryRequest {delivery_request.id} status to 'completed' "
+                f"for ReturnRequest {return_request.id}"
+            )
+        else:
+            logger.warning(
+                f"No DeliveryRequest found for ReturnRequest {return_request.id} when completing return. "
+                f"This should not happen."
+            )
+        
         # Update return request status to COMPLETED (returned)
         return_request.status = ReturnStatus.COMPLETED
-        return_request.completed_at = timezone.now()
+        return_request.completed_at = return_date
         return_request.save()
         
         # Update borrowing status
-        borrowing = return_request.borrowing
-        borrowing.status = BorrowStatusChoices.RETURNED
-        borrowing.actual_return_date = timezone.now()
+        if is_late:
+            borrowing.status = BorrowStatusChoices.RETURNED_AFTER_DELAY
+        else:
+            borrowing.status = BorrowStatusChoices.RETURNED
+        borrowing.actual_return_date = return_date
+        borrowing.final_return_date = return_date  # Set final_return_date for frontend display
         borrowing.save()
+        
+        # Check and create fine if the return is late (more than 1 hour after due time)
+        if is_late:
+            # Calculate hours late
+            delta = return_date - borrowing.expected_return_date
+            total_seconds = delta.total_seconds()
+            hours_late = int(total_seconds / 3600)  # Convert to hours
+            
+            # Only impose fine if more than 1 hour late
+            if hours_late > 0:
+                # Create fine for late return
+                fine = ReturnService.get_or_create_return_fine(
+                    return_request=return_request,
+                    late_return=True,
+                    damaged=False,
+                    lost=False
+                )
+                
+                if fine:
+                    # Format time display
+                    if hours_late < 24:
+                        time_display = f"{hours_late} hour(s)"
+                    else:
+                        days = hours_late // 24
+                        remaining_hours = hours_late % 24
+                        if remaining_hours > 0:
+                            time_display = f"{days} day(s) and {remaining_hours} hour(s)"
+                        else:
+                            time_display = f"{days} day(s)"
+                    
+                    # Send notification to customer about fine
+                    NotificationService.create_notification(
+                        user_id=borrowing.customer.id,
+                        title="Late Return Fine Applied",
+                        message=f"A fine of ${fine.fine_amount} has been applied for late return of '{borrowing.book.name}'. The book was due at {borrowing.expected_return_date.strftime('%Y-%m-%d %H:%M')} but was returned at {return_date.strftime('%Y-%m-%d %H:%M')} ({time_display} late). Please pay the fine.",
+                        notification_type="return_fine_applied"
+                    )
+                    
+                    logger.info(f"Late return fine created for return request {return_request.id}: ${fine.fine_amount} ({hours_late} hours late)")
         
         # Automatically set delivery manager status back to 'online' when completing return
         if return_request.delivery_manager:
@@ -347,70 +636,91 @@ class ReturnService:
         
         borrow_request = return_request.borrowing
         
-        # Check if a fine already exists
-        # Use defer() to exclude fields that might not exist in the database
+        # Check if a fine already exists using raw SQL to avoid column issues
+        from django.db import connection
+        return_fine = None
         try:
-            return_fine = ReturnFine.objects.defer(
-                'late_return', 'damaged', 'lost'
-            ).get(return_request=return_request)
-        except ReturnFine.DoesNotExist:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT id, return_request_id, fine_amount, fine_reason, 
+                           days_late, is_paid, payment_method, is_finalized, paid_at, transaction_id
+                    FROM return_fine 
+                    WHERE return_request_id = %s
+                    """,
+                    [return_request.id]
+                )
+                row = cursor.fetchone()
+                if row:
+                    # Create a minimal ReturnFine-like object with only available fields
+                    return_fine = type('ReturnFine', (), {
+                        'id': row[0],
+                        'return_request_id': row[1],
+                        'return_request': return_request,
+                        'fine_amount': row[2],
+                        'fine_reason': row[3],
+                        'days_late': row[4] if row[4] else 0,
+                        'is_paid': bool(row[5]),
+                        'payment_method': row[6],
+                        'is_finalized': bool(row[7]) if row[7] is not None else False,
+                        'paid_at': row[8],
+                        'transaction_id': row[9],
+                        # Set boolean fields based on fine_reason
+                        'late_return': row[3] == 'late' if row[3] else False,
+                        'damaged': row[3] == 'damage' if row[3] else False,
+                        'lost': row[3] == 'lost' if row[3] else False,
+                    })()
+        except Exception as sql_error:
+            logger.error(f"Error querying return_fine with raw SQL: {str(sql_error)}")
             return_fine = None
-        except Exception as e:
-            # If there's a database error (e.g., column doesn't exist), try without defer
-            error_msg = str(e).lower()
-            if 'late_return' in error_msg or '1054' in error_msg:
-                # Column doesn't exist, try to query without those fields using raw SQL
-                from django.db import connection
-                try:
-                    with connection.cursor() as cursor:
-                        cursor.execute(
-                            """
-                            SELECT id, return_request_id, fine_amount, fine_reason, 
-                                   days_late, is_paid, payment_method, is_finalized
-                            FROM return_fine 
-                            WHERE return_request_id = %s
-                            """,
-                            [return_request.id]
-                        )
-                        row = cursor.fetchone()
-                        if row:
-                            # Create a minimal ReturnFine object with only available fields
-                            return_fine = ReturnFine()
-                            return_fine.id = row[0]
-                            return_fine.return_request_id = row[1]
-                            return_fine.fine_amount = row[2]
-                            return_fine.fine_reason = row[3]
-                            return_fine.days_late = row[4] if row[4] else 0
-                            return_fine.is_paid = bool(row[5])
-                            return_fine.payment_method = row[6]
-                            return_fine.is_finalized = bool(row[7]) if len(row) > 7 else False
-                            # Set boolean fields based on fine_reason
-                            return_fine.late_return = return_fine.fine_reason == 'late_return' if return_fine.fine_reason else False
-                            return_fine.damaged = return_fine.fine_reason == 'damaged' if return_fine.fine_reason else False
-                            return_fine.lost = return_fine.fine_reason == 'lost' if return_fine.fine_reason else False
-                        else:
-                            return_fine = None
-                except Exception as sql_error:
-                    logger.error(f"Error querying return_fine with raw SQL: {str(sql_error)}")
-                    return_fine = None
-            else:
-                # Different error, re-raise
-                raise e
+        
+        # If fine already exists, return it without recalculating
+        # This preserves manually adjusted fine amounts (e.g., from increase-fine)
+        # Fine amounts should only be recalculated when explicitly creating a new fine
+        if return_fine:
+            # Sync the existing fine amount to borrow request
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute("""
+                        UPDATE borrow_request SET fine_amount = %s WHERE id = %s
+                    """, [str(return_fine.fine_amount), borrow_request.id])
+            except Exception as sync_error:
+                logger.warning(f"Could not sync fine amount to borrow request: {str(sync_error)}")
+            return return_fine
         
         # Calculate fine amount if needed
         days_late = 0
         fine_amount = Decimal('0.00')
         
+        # Auto-detect if book is overdue when no reason flags are provided
+        if not (late_return or damaged or lost):
+            # Check if the borrowing is overdue
+            if borrow_request.expected_return_date:
+                from django.utils import timezone
+                current_datetime = timezone.now()
+                expected_datetime = borrow_request.expected_return_date
+                if current_datetime > expected_datetime:
+                    late_return = True  # Auto-set late_return flag
+        
         if late_return and borrow_request.expected_return_date:
-            # Calculate days late
-            current_date = timezone.now().date()
-            expected_date = borrow_request.expected_return_date.date() if hasattr(borrow_request.expected_return_date, 'date') else borrow_request.expected_return_date
+            # Calculate hours late (fine imposed after 1 hour)
+            current_datetime = timezone.now()
+            expected_datetime = borrow_request.expected_return_date
             
-            if current_date > expected_date:
-                delta = current_date - expected_date
-                days_late = delta.days
-                daily_rate = Decimal('1.00')  # $1 per day
-                fine_amount = daily_rate * days_late
+            if current_datetime > expected_datetime:
+                delta = current_datetime - expected_datetime
+                total_seconds = delta.total_seconds()
+                hours_late = int(total_seconds / 3600)  # Convert to hours
+                
+                # Only impose fine if more than 1 hour late
+                if hours_late > 0:
+                    # Fine rate: $0.10 per hour
+                    hour_rate = Decimal('0.10')
+                    fine_amount = hour_rate * hours_late
+                    # Round to 2 decimal places
+                    fine_amount = fine_amount.quantize(Decimal('0.01'))
+                    # Store hours_late for display purposes (convert to days for days_late field)
+                    days_late = hours_late
         
         # Add damage/loss penalties if applicable
         if damaged:
@@ -426,8 +736,9 @@ class ReturnService:
         # Business Rule: No fine record if fine_amount = 0
         if fine_amount <= 0:
             # Delete existing fine if it exists and has zero amount
-            if return_fine:
-                return_fine.delete()
+            if return_fine and return_fine.id:
+                with connection.cursor() as cursor:
+                    cursor.execute("DELETE FROM return_fine WHERE id = %s", [return_fine.id])
             return None
         
         # Create or update fine
@@ -447,33 +758,79 @@ class ReturnService:
             # If we can't check, assume fields don't exist to be safe
             has_boolean_fields = False
         
-        if return_fine:
-            # Only update if not finalized
-            if not return_fine.is_finalized:
-                return_fine.fine_amount = fine_amount
-                return_fine.fine_reason = ReturnService._build_fine_reason(late_return, damaged, lost, days_late)
-                if has_boolean_fields:
+        fine_reason = ReturnService._build_fine_reason(late_return, damaged, lost, days_late)
+        
+        if has_boolean_fields:
+            # Database has boolean fields - use normal Django ORM
+            if return_fine:
+                # Only update if not finalized
+                if not return_fine.is_finalized:
+                    return_fine.fine_amount = fine_amount
+                    return_fine.fine_reason = fine_reason
                     return_fine.late_return = late_return
                     return_fine.damaged = damaged
                     return_fine.lost = lost
-                return_fine.days_late = days_late if late_return else 0
-                return_fine.save()
+                    return_fine.days_late = days_late if late_return else 0
+                    return_fine.save()
+            else:
+                # Create new fine with boolean fields
+                return_fine = ReturnFine.objects.create(
+                    return_request=return_request,
+                    fine_amount=fine_amount,
+                    fine_reason=fine_reason,
+                    days_late=days_late if late_return else 0,
+                    is_paid=False,
+                    late_return=late_return,
+                    damaged=damaged,
+                    lost=lost
+                )
         else:
-            # Create new fine
-            create_kwargs = {
-                'return_request': return_request,
-                'fine_amount': fine_amount,
-                'fine_reason': ReturnService._build_fine_reason(late_return, damaged, lost, days_late),
-                'days_late': days_late if late_return else 0,
-                'is_paid': False
-            }
-            # Only include boolean fields if they exist in the database
-            if has_boolean_fields:
-                create_kwargs['late_return'] = late_return
-                create_kwargs['damaged'] = damaged
-                create_kwargs['lost'] = lost
-            
-            return_fine = ReturnFine.objects.create(**create_kwargs)
+            # Database doesn't have boolean fields - use raw SQL
+            if return_fine:
+                # Update existing fine using raw SQL
+                if not return_fine.is_finalized:
+                    days_late_val = days_late if late_return else 0
+                    with connection.cursor() as cursor:
+                        cursor.execute("""
+                            UPDATE return_fine 
+                            SET fine_amount = %s, fine_reason = %s, days_late = %s
+                            WHERE id = %s
+                        """, [str(fine_amount), fine_reason, days_late_val, return_fine.id])
+                    # Update the minimal object with new values
+                    return_fine.fine_amount = fine_amount
+                    return_fine.fine_reason = fine_reason
+                    return_fine.days_late = days_late_val
+            else:
+                # Create new fine using raw SQL (without boolean fields)
+                # Include all columns that exist in the database without default values
+                # Note: payment_status doesn't exist - payment status is derived from is_paid
+                days_late_val = days_late if late_return else 0
+                fine_type = 'late' if late_return else ('damage' if damaged else ('lost' if lost else 'late'))
+                with connection.cursor() as cursor:
+                    cursor.execute("""
+                        INSERT INTO return_fine (return_request_id, fine_amount, fine_reason, fine_type, days_late, days_overdue, is_paid, is_finalized, daily_rate, created_at, updated_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+                    """, [return_request.id, str(fine_amount), fine_reason, fine_type, days_late_val, days_late_val, False, False, '1.00'])
+                    fine_id = cursor.lastrowid
+                
+                # Create a minimal object with the data we just inserted
+                # Don't use ORM as it tries to access columns that don't exist
+                return_fine = type('ReturnFine', (), {
+                    'id': fine_id,
+                    'return_request': return_request,
+                    'return_request_id': return_request.id,
+                    'fine_amount': fine_amount,
+                    'fine_reason': fine_reason,
+                    'days_late': days_late_val,
+                    'is_paid': False,
+                    'is_finalized': False,
+                    'payment_method': None,
+                    'paid_at': None,
+                    'transaction_id': None,
+                    'late_return': late_return,
+                    'damaged': damaged,
+                    'lost': lost
+                })()
         
         return return_fine
 
@@ -543,6 +900,82 @@ class ReturnService:
         return fine
     
     @staticmethod
+    def check_and_apply_fines_for_completed_returns() -> Dict[str, Any]:
+        """
+        Check all completed returns and apply fines retroactively if they were late.
+        This is useful for applying fines to returns that were completed before the fine system was implemented.
+        """
+        from ..models.return_model import ReturnFine
+        
+        # Get all completed return requests
+        completed_returns = ReturnRequest.objects.filter(
+            status=ReturnStatus.COMPLETED
+        ).select_related('borrowing', 'borrowing__book', 'borrowing__customer')
+        
+        fines_created = 0
+        fines_updated = 0
+        returns_checked = 0
+        
+        for return_request in completed_returns:
+            returns_checked += 1
+            borrow_request = return_request.borrowing
+            
+            # Check if fine already exists (defer fields that may not exist in DB)
+            try:
+                existing_fine = ReturnFine.objects.defer(
+                    'late_return', 'damaged', 'lost'
+                ).get(return_request=return_request)
+                has_fine = True
+            except ReturnFine.DoesNotExist:
+                has_fine = False
+            except Exception:
+                # If there's any other error, assume no fine exists
+                has_fine = False
+            
+            # Check if the return was late by comparing actual return date with expected return date
+            if borrow_request.actual_return_date and borrow_request.expected_return_date:
+                is_late = borrow_request.actual_return_date > borrow_request.expected_return_date
+                
+                if is_late:
+                    # Calculate hours late
+                    delta = borrow_request.actual_return_date - borrow_request.expected_return_date
+                    total_seconds = delta.total_seconds()
+                    hours_late = int(total_seconds / 3600)  # Convert to hours
+                    
+                    if hours_late > 0:
+                        # Create or update fine
+                        fine = ReturnService.get_or_create_return_fine(
+                            return_request=return_request,
+                            late_return=True,
+                            damaged=False,
+                            lost=False
+                        )
+                        
+                        if fine:
+                            if has_fine:
+                                fines_updated += 1
+                                logger.info(f"Updated fine for return request {return_request.id}: ${fine.fine_amount} ({hours_late} hours late)")
+                            else:
+                                fines_created += 1
+                                logger.info(f"Created fine for return request {return_request.id}: ${fine.fine_amount} ({hours_late} hours late)")
+                                
+                                # Send notification to customer
+                                NotificationService.create_notification(
+                                    user_id=borrow_request.customer.id,
+                                    title="Late Return Fine Applied",
+                                    message=f"A fine of ${fine.fine_amount} has been applied for late return of '{borrow_request.book.name}'. Please pay the fine.",
+                                    notification_type="return_fine_applied"
+                                )
+        
+        return {
+            'success': True,
+            'returns_checked': returns_checked,
+            'fines_created': fines_created,
+            'fines_updated': fines_updated,
+            'message': f'Checked {returns_checked} completed returns. Created {fines_created} new fines, updated {fines_updated} existing fines.'
+        }
+    
+    @staticmethod
     @transaction.atomic
     def process_return_with_fine(return_request: ReturnRequest, delivery_manager: User) -> Dict[str, Any]:
         """
@@ -565,7 +998,9 @@ class ReturnService:
         return_request.save()
         
         # Update borrowing status
-        borrow_request.actual_return_date = timezone.now()
+        return_date = timezone.now()
+        borrow_request.actual_return_date = return_date
+        borrow_request.final_return_date = return_date  # Set final_return_date for frontend display
         if fine:
             borrow_request.status = BorrowStatusChoices.RETURNED_AFTER_DELAY
         else:

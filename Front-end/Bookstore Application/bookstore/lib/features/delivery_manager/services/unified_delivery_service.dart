@@ -58,10 +58,29 @@ class UnifiedDeliveryService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        return {
-          'success': true,
-          'data': data['results'] ?? (data is List ? data : []),
-        };
+
+        // Handle different response formats
+        List<dynamic> deliveriesList;
+        if (data is List) {
+          deliveriesList = data;
+        } else if (data is Map<String, dynamic>) {
+          // Check for paginated response
+          final results = data['results'];
+          if (results is List) {
+            deliveriesList = results;
+          } else if (results is Map<String, dynamic> &&
+              results['results'] is List) {
+            // Nested paginated response
+            deliveriesList = results['results'] as List;
+          } else {
+            // Check for other possible keys
+            deliveriesList = data['data'] is List ? data['data'] as List : [];
+          }
+        } else {
+          deliveriesList = [];
+        }
+
+        return {'success': true, 'data': deliveriesList};
       } else {
         final errorData = jsonDecode(response.body);
         return {
@@ -330,10 +349,7 @@ class UnifiedDeliveryService {
       final response = await http.post(
         uri,
         headers: _getHeaders(),
-        body: jsonEncode({
-          'latitude': latitude,
-          'longitude': longitude,
-        }),
+        body: jsonEncode({'latitude': latitude, 'longitude': longitude}),
       );
 
       debugPrint(
@@ -422,6 +438,72 @@ class UnifiedDeliveryService {
       }
     } catch (e) {
       debugPrint('UnifiedDeliveryService: Error completing delivery: $e');
+      return {
+        'success': false,
+        'message': 'Network error: ${e.toString()}',
+        'error_code': 'NETWORK_ERROR',
+      };
+    }
+  }
+
+  /// Update payment status for completed deliveries
+  static Future<Map<String, dynamic>> updatePaymentStatus(
+    int deliveryId, {
+    bool? depositPaid,
+    String? fineStatus,
+    bool? fineIsPaid,
+  }) async {
+    if (_authToken == null) {
+      return {
+        'success': false,
+        'message': 'No authentication token available',
+        'error_code': 'NO_TOKEN',
+      };
+    }
+
+    try {
+      final uri = Uri.parse(
+        '${ApiService.baseUrl}/delivery/delivery-requests/$deliveryId/update-payment-status/',
+      );
+
+      debugPrint('UnifiedDeliveryService: Updating payment status at $uri');
+
+      final body = <String, dynamic>{};
+      if (depositPaid != null) body['deposit_paid'] = depositPaid;
+      if (fineStatus != null) body['fine_status'] = fineStatus;
+      if (fineIsPaid != null) body['fine_is_paid'] = fineIsPaid;
+
+      final response = await http.patch(
+        uri,
+        headers: _getHeaders(),
+        body: jsonEncode(body),
+      );
+
+      debugPrint(
+        'UnifiedDeliveryService: Response status: ${response.statusCode}',
+      );
+      debugPrint('UnifiedDeliveryService: Response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return {
+          'success': true,
+          'message': 'Payment status updated successfully',
+          'data': data,
+        };
+      } else {
+        final errorData = jsonDecode(response.body);
+        return {
+          'success': false,
+          'message':
+              errorData['error'] ??
+              errorData['message'] ??
+              'Failed to update payment status',
+          'error_code': 'UPDATE_FAILED',
+        };
+      }
+    } catch (e) {
+      debugPrint('UnifiedDeliveryService: Error updating payment status: $e');
       return {
         'success': false,
         'message': 'Network error: ${e.toString()}',

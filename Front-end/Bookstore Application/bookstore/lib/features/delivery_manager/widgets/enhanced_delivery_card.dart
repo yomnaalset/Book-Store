@@ -17,12 +17,23 @@ class EnhancedDeliveryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    final theme = Theme.of(context);
+    return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+            spreadRadius: 0,
+          ),
+        ],
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -32,10 +43,11 @@ class EnhancedDeliveryCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     'Task #${task.taskNumber}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF2C3E50),
+                      color: theme.colorScheme.onSurface,
+                      letterSpacing: 0.3,
                     ),
                   ),
                 ),
@@ -47,73 +59,77 @@ class EnhancedDeliveryCard extends StatelessWidget {
 
             // Task Information
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: const Color(0xFFF8F9FA),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFFE9ECEF), width: 1),
+                color: theme.colorScheme.surfaceContainerHighest.withValues(
+                  alpha: 0.3,
+                ),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: Column(
                 children: [
                   // Customer Information
                   Row(
                     children: [
-                      const Icon(
-                        Icons.person,
-                        size: 20,
-                        color: Color(0xFF6C757D),
+                      Icon(
+                        Icons.person_outline,
+                        size: 18,
+                        color: theme.colorScheme.onSurfaceVariant,
                       ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'Customer: ${task.customerName}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.w500,
-                            color: Color(0xFF495057),
+                            color: theme.colorScheme.onSurface,
+                            fontSize: 14,
                           ),
                         ),
                       ),
                     ],
                   ),
 
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
 
                   // Delivery Address
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(
-                        Icons.location_on,
-                        size: 20,
-                        color: Color(0xFF6C757D),
+                      Icon(
+                        Icons.location_on_outlined,
+                        size: 18,
+                        color: theme.colorScheme.onSurfaceVariant,
                       ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'Address: ${task.deliveryAddress}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.w500,
-                            color: Color(0xFF495057),
+                            color: theme.colorScheme.onSurface,
+                            fontSize: 14,
                           ),
                         ),
                       ),
                     ],
                   ),
 
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
 
                   // Task Type
                   Row(
                     children: [
-                      const Icon(
-                        Icons.category,
-                        size: 20,
-                        color: Color(0xFF6C757D),
+                      Icon(
+                        Icons.category_outlined,
+                        size: 18,
+                        color: theme.colorScheme.onSurfaceVariant,
                       ),
                       const SizedBox(width: 8),
                       Text(
                         'Type: ${_getTaskTypeDisplay(task.taskType)}',
-                        style: const TextStyle(
-                          color: Color(0xFF6C757D),
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurfaceVariant,
                           fontSize: 14,
                         ),
                       ),
@@ -121,20 +137,21 @@ class EnhancedDeliveryCard extends StatelessWidget {
                   ),
 
                   if (task.notes != null && task.notes!.isNotEmpty) ...[
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 12),
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(
-                          Icons.note,
-                          size: 20,
-                          color: Color(0xFF6C757D),
+                        Icon(
+                          Icons.note_outlined,
+                          size: 18,
+                          color: theme.colorScheme.onSurfaceVariant,
                         ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             'Notes: ${task.notes}',
-                            style: const TextStyle(
-                              color: Color(0xFF6C757D),
+                            style: TextStyle(
+                              color: theme.colorScheme.onSurfaceVariant,
                               fontSize: 14,
                             ),
                           ),
@@ -149,7 +166,7 @@ class EnhancedDeliveryCard extends StatelessWidget {
             const SizedBox(height: 16),
 
             // Action Buttons
-            _buildActionButtons(),
+            _buildActionButtons(context),
           ],
         ),
       ),
@@ -157,48 +174,39 @@ class EnhancedDeliveryCard extends StatelessWidget {
   }
 
   Widget _buildStatusChip() {
-    Color backgroundColor;
     Color textColor;
     String statusText;
 
     switch (task.status.toLowerCase()) {
       case 'pending':
-        backgroundColor = Colors.orange.withValues(alpha: 0.1);
         textColor = Colors.orange;
         statusText = 'Pending';
         break;
       case 'assigned':
-        backgroundColor = Colors.blue.withValues(alpha: 0.1);
         textColor = Colors.blue;
         statusText = 'Assigned';
         break;
       case 'accepted':
-        backgroundColor = Colors.cyan.withValues(alpha: 0.1);
         textColor = Colors.cyan;
         statusText = 'Accepted';
         break;
       case 'in_progress':
-        backgroundColor = Colors.purple.withValues(alpha: 0.1);
         textColor = Colors.purple;
         statusText = 'In Progress';
         break;
       case 'delivered':
-        backgroundColor = Colors.green.withValues(alpha: 0.1);
         textColor = Colors.green;
         statusText = 'Delivered';
         break;
       case 'completed':
-        backgroundColor = Colors.green.withValues(alpha: 0.1);
         textColor = Colors.green;
         statusText = 'Completed';
         break;
       case 'failed':
-        backgroundColor = Colors.red.withValues(alpha: 0.1);
         textColor = Colors.red;
         statusText = 'Failed';
         break;
       default:
-        backgroundColor = Colors.grey.withValues(alpha: 0.1);
         textColor = Colors.grey;
         statusText = task.status;
     }
@@ -206,22 +214,22 @@ class EnhancedDeliveryCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: textColor.withValues(alpha: 0.3)),
+        color: textColor.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
         statusText,
         style: TextStyle(
           color: textColor,
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 0.5,
         ),
       ),
     );
   }
 
-  Widget _buildActionButtons() {
+  Widget _buildActionButtons(BuildContext context) {
     switch (task.status.toLowerCase()) {
       case 'assigned':
         return Row(
@@ -234,9 +242,9 @@ class EnhancedDeliveryCard extends StatelessWidget {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF28A745),
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                 ),
               ),
@@ -254,9 +262,9 @@ class EnhancedDeliveryCard extends StatelessWidget {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF007BFF),
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                 ),
               ),
@@ -266,65 +274,55 @@ class EnhancedDeliveryCard extends StatelessWidget {
       case 'delivered':
         return Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          padding: const EdgeInsets.symmetric(vertical: 14),
           decoration: BoxDecoration(
-            color: const Color(0xFFD4EDDA),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0xFFC3E6CB)),
+            color: Colors.green.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(12),
           ),
           child: const Text(
             '✓ Delivery Completed',
             textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Color(0xFF155724),
-              fontWeight: FontWeight.w500,
-            ),
+            style: TextStyle(color: Colors.green, fontWeight: FontWeight.w500),
           ),
         );
       case 'completed':
         return Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          padding: const EdgeInsets.symmetric(vertical: 14),
           decoration: BoxDecoration(
-            color: const Color(0xFFD4EDDA),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0xFFC3E6CB)),
+            color: Colors.green.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(12),
           ),
           child: const Text(
             '✓ Task Completed',
             textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Color(0xFF155724),
-              fontWeight: FontWeight.w500,
-            ),
+            style: TextStyle(color: Colors.green, fontWeight: FontWeight.w500),
           ),
         );
       case 'failed':
         return Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          padding: const EdgeInsets.symmetric(vertical: 14),
           decoration: BoxDecoration(
-            color: const Color(0xFFF8D7DA),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0xFFF5C6CB)),
+            color: Colors.red.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(12),
           ),
           child: const Text(
             '✗ Delivery Failed',
             textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Color(0xFF721C24),
-              fontWeight: FontWeight.w500,
-            ),
+            style: TextStyle(color: Colors.red, fontWeight: FontWeight.w500),
           ),
         );
       default:
+        final theme = Theme.of(context);
         return Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          padding: const EdgeInsets.symmetric(vertical: 14),
           decoration: BoxDecoration(
-            color: const Color(0xFFE2E3E5),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0xFFD6D8DB)),
+            color: theme.colorScheme.surfaceContainerHighest.withValues(
+              alpha: 0.3,
+            ),
+            borderRadius: BorderRadius.circular(12),
           ),
           child: Text(
             'Status: ${task.status}',

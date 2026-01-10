@@ -112,6 +112,9 @@ class _BookstoreAppState extends State<BookstoreApp>
       overlays: [SystemUiOverlay.top, SystemUiOverlay.bottom],
     );
 
+    // Initialize API config with stored IP address
+    await ApiConfig.initialize();
+
     // Load theme preference from storage (allows dark mode)
     await _themeService.loadThemePreference();
 
@@ -140,9 +143,8 @@ class _BookstoreAppState extends State<BookstoreApp>
 
         // Profile Provider
         ChangeNotifierProvider(
-          create: (_) => ProfileProvider(
-            ProfileService(baseUrl: ApiConfig.getAndroidEmulatorUrl()),
-          ),
+          create: (_) =>
+              ProfileProvider(ProfileService(baseUrl: ApiConfig.getBaseUrl())),
         ),
 
         // Language Preference Provider

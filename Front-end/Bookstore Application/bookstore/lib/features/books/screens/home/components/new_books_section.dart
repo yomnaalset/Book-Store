@@ -22,7 +22,10 @@ class _NewBooksSectionState extends State<NewBooksSection> {
   @override
   void initState() {
     super.initState();
-    _loadNewBooks();
+    // Defer loading until after the build phase to avoid setState during build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadNewBooks();
+    });
   }
 
   Future<void> _loadNewBooks() async {

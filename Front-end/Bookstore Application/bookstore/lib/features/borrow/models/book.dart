@@ -1,3 +1,5 @@
+import '../../../core/services/api_config.dart';
+
 class Book {
   final int id;
   final String title;
@@ -37,19 +39,43 @@ class Book {
     this.borrowCount,
   });
 
+  /// Parse double value from JSON - handles both string and numeric values
+  static double? _parseDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) {
+      if (value.isEmpty) return null;
+      return double.tryParse(value);
+    }
+    return double.tryParse(value.toString());
+  }
+
   factory Book.fromJson(Map<String, dynamic> json) {
+    // Get the raw image URL from various possible field names
+    final rawImageUrl =
+        json['cover_image_url'] ??
+        json['cover_image'] ??
+        json['primary_image_url'] ??
+        json['image_url'];
+
+    // Build full URL from relative path if needed
+    final coverImageUrl = rawImageUrl != null
+        ? ApiConfig.buildImageUrl(rawImageUrl) ?? rawImageUrl
+        : null;
+
     return Book(
       id: json['id'] ?? 0,
-      title: json['title'] ?? '',
+      title: json['title'] ?? json['name'] ?? '',
       author: json['author']?['name'] ?? json['author'],
       authors: json['authors'] != null
           ? List<String>.from(
               json['authors'].map((a) => a['name'] ?? a.toString()),
             )
           : null,
-      coverImageUrl: json['cover_image_url'] ?? json['cover_image'],
+      coverImageUrl: coverImageUrl,
       description: json['description'],
-      price: json['price']?.toDouble(),
+      price: _parseDouble(json['price']),
       totalCopies: json['total_copies'],
       availableCopies: json['available_copies'],
       isbn: json['isbn'],
@@ -60,7 +86,7 @@ class Book {
       genre: json['genre'],
       language: json['language'],
       pages: json['pages'],
-      rating: json['rating']?.toDouble(),
+      rating: _parseDouble(json['rating']),
       borrowCount: json['borrow_count'],
     );
   }

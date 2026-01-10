@@ -17,7 +17,10 @@ class _CategoriesSectionState extends State<CategoriesSection> {
   @override
   void initState() {
     super.initState();
-    _loadCategories();
+    // Defer loading until after the build phase to avoid setState during build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadCategories();
+    });
   }
 
   Future<void> _loadCategories() async {
@@ -238,12 +241,14 @@ class _CategoriesSectionState extends State<CategoriesSection> {
               overflow: TextOverflow.ellipsis,
             ),
 
-            // Book Count
+            // Book Count (use availableBooksCount to match what's actually displayed)
             Builder(
               builder: (context) {
                 final localizations = AppLocalizations.of(context);
                 return Text(
-                  localizations.booksCount(category.booksCount ?? 0),
+                  localizations.booksCount(
+                    category.availableBooksCount ?? category.booksCount ?? 0,
+                  ),
                   style: TextStyle(
                     fontSize: 10,
                     color: Theme.of(context).textTheme.bodySmall?.color,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../orders/models/order.dart';
 import '../../../../core/localization/app_localizations.dart';
+import '../../../../core/services/api_config.dart';
 
 class CleanOrderItemCard extends StatelessWidget {
   final OrderItem item;
@@ -10,13 +11,20 @@ class CleanOrderItemCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final localizations = AppLocalizations.of(context);
-    // Get book image URL
+    // Get book image URL and build full URL
     final String? imageUrl = item.bookImage;
+    final String? fullImageUrl = imageUrl != null && imageUrl.isNotEmpty
+        ? ApiConfig.buildImageUrl(imageUrl) ?? imageUrl
+        : null;
     final String bookTitle = item.bookTitle;
     final String? authorName = item.bookAuthor;
 
+    debugPrint(
+      'CleanOrderItemCard: Book "$bookTitle" - imageUrl: $imageUrl, fullImageUrl: $fullImageUrl',
+    );
+
     return Material(
-      color: Colors.white,
+      color: Theme.of(context).cardColor,
       borderRadius: BorderRadius.circular(8),
       elevation: 1,
       child: Padding(
@@ -29,21 +37,26 @@ class CleanOrderItemCard extends StatelessWidget {
               width: 60,
               height: 80,
               decoration: BoxDecoration(
-                color: Colors.grey[200],
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: imageUrl != null && imageUrl.isNotEmpty
+              child: fullImageUrl != null && fullImageUrl.isNotEmpty
                   ? ClipRRect(
                       borderRadius: BorderRadius.circular(8),
                       child: Image.network(
-                        imageUrl,
+                        fullImageUrl,
                         width: 60,
                         height: 80,
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) {
-                          return const Icon(
+                          debugPrint(
+                            'CleanOrderItemCard: Error loading book image for "$bookTitle": $error',
+                          );
+                          return Icon(
                             Icons.book,
-                            color: Colors.grey,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
                             size: 30,
                           );
                         },
@@ -55,7 +68,11 @@ class CleanOrderItemCard extends StatelessWidget {
                         },
                       ),
                     )
-                  : const Icon(Icons.book, color: Colors.grey, size: 30),
+                  : Icon(
+                      Icons.book,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      size: 30,
+                    ),
             ),
             const SizedBox(width: 16),
             // Book details
@@ -65,9 +82,10 @@ class CleanOrderItemCard extends StatelessWidget {
                 children: [
                   Text(
                     bookTitle,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.onSurface,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -76,7 +94,10 @@ class CleanOrderItemCard extends StatelessWidget {
                   if (authorName != null && authorName.isNotEmpty) ...[
                     Text(
                       '${localizations.by} $authorName',
-                      style: const TextStyle(fontSize: 14, color: Colors.grey),
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
                     const SizedBox(height: 4),
                   ],
@@ -87,23 +108,27 @@ class CleanOrderItemCard extends StatelessWidget {
                     children: [
                       Text(
                         '${localizations.qty}: ${item.quantity}',
-                        style: const TextStyle(fontSize: 12),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                       ),
                       const SizedBox(width: 14),
                       Text(
                         '${localizations.price}: \$${item.price.toStringAsFixed(2)}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                       ),
                       const Spacer(),
                       Text(
                         '${localizations.total}: \$${item.totalPrice.toStringAsFixed(2)}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
-                          color: Colors.green,
+                          color: Theme.of(context).colorScheme.primary,
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),

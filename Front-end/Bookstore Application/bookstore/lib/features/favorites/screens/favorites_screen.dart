@@ -23,7 +23,10 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
   @override
   void initState() {
     super.initState();
-    _loadFavoritesFromServer();
+    // Use addPostFrameCallback to avoid calling setState during build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadFavoritesFromServer();
+    });
   }
 
   @override
@@ -51,28 +54,60 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final localizations = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text(localizations.myFavorites),
+        title: Text(
+          localizations.myFavorites,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+            letterSpacing: 0.5,
+          ),
+        ),
+        backgroundColor: theme.colorScheme.primary,
+        foregroundColor: theme.colorScheme.onPrimary,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                theme.colorScheme.primary,
+                theme.colorScheme.primary.withValues(alpha: 204),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
         actions: [
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              Provider.of<FavoritesProvider>(
-                context,
-                listen: false,
-              ).sortFavorites(value); //
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'date_added',
-                child: Text('Date Added'),
-              ),
-              const PopupMenuItem(value: 'title', child: Text('Title')),
-              const PopupMenuItem(value: 'author', child: Text('Author')),
-              const PopupMenuItem(value: 'price', child: Text('Price')),
-            ],
-            icon: const Icon(Icons.sort),
+          Container(
+            margin: const EdgeInsets.only(right: 8, top: 8, bottom: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              shape: BoxShape.circle,
+            ),
+            child: PopupMenuButton<String>(
+              onSelected: (value) {
+                Provider.of<FavoritesProvider>(
+                  context,
+                  listen: false,
+                ).sortFavorites(value);
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'date_added',
+                  child: Text('Date Added'),
+                ),
+                const PopupMenuItem(value: 'title', child: Text('Title')),
+                const PopupMenuItem(value: 'author', child: Text('Author')),
+                const PopupMenuItem(value: 'price', child: Text('Price')),
+              ],
+              icon: const Icon(Icons.sort),
+              color: Colors.white,
+            ),
           ),
         ],
       ),
@@ -139,6 +174,18 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
             const SizedBox(height: AppDimensions.spacingXL),
             ElevatedButton(
               onPressed: () => Navigator.pushNamed(context, '/home'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 16,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 2,
+              ),
               child: const Text('Browse Books'),
             ),
           ],
@@ -253,166 +300,180 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
   Widget _buildFavoriteItem(Book book, FavoritesProvider favoritesProvider) {
     return Card(
       margin: const EdgeInsets.only(bottom: AppDimensions.spacingM),
-      child: InkWell(
-        onTap: () => _navigateToBookDetail(book),
-        borderRadius: BorderRadius.circular(AppDimensions.radiusM),
-        child: Padding(
-          padding: const EdgeInsets.all(AppDimensions.paddingM),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Book Cover
-              Container(
-                width: 80,
-                height: 100,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(AppDimensions.radiusS),
-                  color: context.surfaceColor,
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(AppDimensions.radiusS),
-                  child: book.primaryImageUrl != null
-                      ? Image.network(
-                          book.primaryImageUrl!,
-                          fit: BoxFit.cover,
-                          loadingBuilder: (context, child, loadingProgress) {
-                            if (loadingProgress == null) return child;
-                            return Container(
-                              color: context.surfaceColor,
-                              child: const Center(
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    AppColors.primary,
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: InkWell(
+          onTap: () => _navigateToBookDetail(book),
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(AppDimensions.paddingM),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Book Cover
+                Container(
+                  width: 80,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(AppDimensions.radiusS),
+                    color: context.surfaceColor,
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(AppDimensions.radiusS),
+                    child: book.primaryImageUrl != null
+                        ? Image.network(
+                            book.primaryImageUrl!,
+                            fit: BoxFit.cover,
+                            loadingBuilder: (context, child, loadingProgress) {
+                              if (loadingProgress == null) return child;
+                              return Container(
+                                color: context.surfaceColor,
+                                child: const Center(
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      AppColors.primary,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            );
-                          },
-                          errorBuilder: (context, error, stackTrace) =>
-                              _buildDefaultBookCover(),
-                        )
-                      : _buildDefaultBookCover(),
+                              );
+                            },
+                            errorBuilder: (context, error, stackTrace) =>
+                                _buildDefaultBookCover(),
+                          )
+                        : _buildDefaultBookCover(),
+                  ),
                 ),
-              ),
-              const SizedBox(width: AppDimensions.spacingM),
+                const SizedBox(width: AppDimensions.spacingM),
 
-              // Book Details
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      book.title,
-                      style: TextStyle(
-                        fontSize: AppDimensions.fontSizeM,
-                        fontWeight: FontWeight.w600,
-                        color: context.textColor,
+                // Book Details
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        book.title,
+                        style: TextStyle(
+                          fontSize: AppDimensions.fontSizeM,
+                          fontWeight: FontWeight.w600,
+                          color: context.textColor,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: AppDimensions.spacingS),
-                    Text(
-                      'by ${book.author?.name ?? 'Unknown Author'}',
-                      style: TextStyle(
-                        fontSize: AppDimensions.fontSizeS,
-                        color: context.secondaryTextColor,
+                      const SizedBox(height: AppDimensions.spacingS),
+                      Text(
+                        'by ${book.author?.name ?? 'Unknown Author'}',
+                        style: TextStyle(
+                          fontSize: AppDimensions.fontSizeS,
+                          color: context.secondaryTextColor,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: AppDimensions.spacingS),
+                      const SizedBox(height: AppDimensions.spacingS),
 
-                    // Rating
-                    if (book.averageRating != null)
+                      // Rating
+                      if (book.averageRating != null)
+                        Row(
+                          children: [
+                            ...List.generate(5, (index) {
+                              return Icon(
+                                index < (book.averageRating ?? 0).floor()
+                                    ? Icons.star
+                                    : index < (book.averageRating ?? 0)
+                                    ? Icons.star_half
+                                    : Icons.star_border,
+                                color: AppColors.warning,
+                                size: 16,
+                              );
+                            }),
+                            const SizedBox(width: AppDimensions.spacingS),
+                            Text(
+                              book.averageRating?.toStringAsFixed(1) ?? '0.0',
+                              style: TextStyle(
+                                fontSize: AppDimensions.fontSizeS,
+                                color: context.secondaryTextColor,
+                              ),
+                            ),
+                          ],
+                        ),
+
+                      const SizedBox(height: AppDimensions.spacingS),
+
+                      // Price
                       Row(
                         children: [
-                          ...List.generate(5, (index) {
-                            return Icon(
-                              index < (book.averageRating ?? 0).floor()
-                                  ? Icons.star
-                                  : index < (book.averageRating ?? 0)
-                                  ? Icons.star_half
-                                  : Icons.star_border,
-                              color: AppColors.warning,
-                              size: 16,
-                            );
-                          }),
-                          const SizedBox(width: AppDimensions.spacingS),
-                          Text(
-                            book.averageRating?.toStringAsFixed(1) ?? '0.0',
-                            style: TextStyle(
-                              fontSize: AppDimensions.fontSizeS,
-                              color: context.secondaryTextColor,
+                          if (book.discountPrice != null &&
+                              book.discountPrice! < book.priceAsDouble) ...[
+                            Text(
+                              '\$${book.priceAsDouble.toStringAsFixed(2)}',
+                              style: TextStyle(
+                                fontSize: AppDimensions.fontSizeS,
+                                color: context.secondaryTextColor,
+                                decoration: TextDecoration.lineThrough,
+                              ),
                             ),
-                          ),
+                            const SizedBox(width: AppDimensions.spacingS),
+                            Text(
+                              '\$${book.discountPrice!.toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                fontSize: AppDimensions.fontSizeM,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ] else ...[
+                            Text(
+                              '\$${book.priceAsDouble.toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                fontSize: AppDimensions.fontSizeM,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
+                    ],
+                  ),
+                ),
 
-                    const SizedBox(height: AppDimensions.spacingS),
-
-                    // Price
-                    Row(
-                      children: [
-                        if (book.discountPrice != null &&
-                            book.discountPrice! < book.priceAsDouble) ...[
-                          Text(
-                            '\$${book.priceAsDouble.toStringAsFixed(2)}',
-                            style: TextStyle(
-                              fontSize: AppDimensions.fontSizeS,
-                              color: context.secondaryTextColor,
-                              decoration: TextDecoration.lineThrough,
-                            ),
+                // Actions
+                Column(
+                  children: [
+                    IconButton(
+                      onPressed: () =>
+                          _removeFromFavorites(book, favoritesProvider),
+                      icon: const Icon(Icons.favorite, color: AppColors.error),
+                      tooltip: 'Remove from favorites',
+                    ),
+                    Builder(
+                      builder: (context) {
+                        final localizations = AppLocalizations.of(context);
+                        return IconButton(
+                          onPressed: () => _addToCart(book),
+                          icon: const Icon(
+                            Icons.add_shopping_cart,
+                            color: AppColors.primary,
                           ),
-                          const SizedBox(width: AppDimensions.spacingS),
-                          Text(
-                            '\$${book.discountPrice!.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              fontSize: AppDimensions.fontSizeM,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.primary,
-                            ),
-                          ),
-                        ] else ...[
-                          Text(
-                            '\$${book.priceAsDouble.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              fontSize: AppDimensions.fontSizeM,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.primary,
-                            ),
-                          ),
-                        ],
-                      ],
+                          tooltip: localizations.addToCartButton,
+                        );
+                      },
                     ),
                   ],
                 ),
-              ),
-
-              // Actions
-              Column(
-                children: [
-                  IconButton(
-                    onPressed: () =>
-                        _removeFromFavorites(book, favoritesProvider),
-                    icon: const Icon(Icons.favorite, color: AppColors.error),
-                    tooltip: 'Remove from favorites',
-                  ),
-                  Builder(
-                    builder: (context) {
-                      final localizations = AppLocalizations.of(context);
-                      return IconButton(
-                        onPressed: () => _addToCart(book),
-                        icon: const Icon(
-                          Icons.add_shopping_cart,
-                          color: AppColors.primary,
-                        ),
-                        tooltip: localizations.addToCartButton,
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

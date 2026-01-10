@@ -114,6 +114,9 @@ class _ReviewsListState extends State<ReviewsList> {
             ListView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).padding.bottom,
+              ),
               itemCount: reviewsProvider.reviews.length,
               itemBuilder: (context, index) {
                 final review = reviewsProvider.reviews[index];

@@ -72,21 +72,49 @@ class _WriterBooksScreenState extends State<WriterBooksScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.writerName ?? 'Writer Books'),
-        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
-        foregroundColor: Theme.of(context).appBarTheme.foregroundColor,
+        title: Text(
+          widget.writerName ?? 'Writer Books',
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+            letterSpacing: 0.5,
+          ),
+        ),
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Theme.of(context).colorScheme.onPrimary,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Theme.of(context).colorScheme.primary,
+                Theme.of(context).colorScheme.primary.withValues(alpha: 204),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
         actions: [
-          Builder(
-            builder: (context) {
-              final localizations = AppLocalizations.of(context);
-              return IconButton(
-                onPressed: () {
-                  _loadWriterBooks();
-                },
-                icon: const Icon(Icons.refresh),
-                tooltip: localizations.refresh,
-              );
-            },
+          Container(
+            margin: const EdgeInsets.only(right: 8, top: 8, bottom: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              shape: BoxShape.circle,
+            ),
+            child: Builder(
+              builder: (context) {
+                final localizations = AppLocalizations.of(context);
+                return IconButton(
+                  onPressed: () {
+                    _loadWriterBooks();
+                  },
+                  icon: const Icon(Icons.refresh),
+                  tooltip: localizations.refresh,
+                );
+              },
+            ),
           ),
         ],
       ),

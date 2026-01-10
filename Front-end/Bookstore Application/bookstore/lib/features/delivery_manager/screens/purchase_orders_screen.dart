@@ -43,10 +43,43 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
       );
 
       if (result['success'] == true) {
-        final data = result['data'] as List;
+        // Handle different response formats
+        List<dynamic> dataList;
+        final data = result['data'];
+
+        if (data is List) {
+          dataList = data;
+        } else if (data is Map<String, dynamic>) {
+          // Handle paginated response or nested structure
+          final results = data['results'];
+          if (results is List) {
+            dataList = results;
+          } else if (results is Map<String, dynamic> &&
+              results['results'] is List) {
+            // Nested paginated response
+            dataList = results['results'] as List;
+          } else {
+            dataList = [];
+          }
+        } else {
+          dataList = [];
+        }
+
         setState(() {
-          _deliveries = data
-              .map((json) => UnifiedDelivery.fromJson(json))
+          _deliveries = dataList
+              .map((json) {
+                try {
+                  if (json is Map<String, dynamic>) {
+                    return UnifiedDelivery.fromJson(json);
+                  } else {
+                    return null;
+                  }
+                } catch (e) {
+                  debugPrint('Error parsing delivery item: $e');
+                  return null;
+                }
+              })
+              .whereType<UnifiedDelivery>()
               .toList();
           _isLoading = false;
         });
@@ -64,17 +97,48 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
     }
   }
 
-
   @override
   Widget build(BuildContext context) {
     final localizations = AppLocalizations.of(context);
+    final theme = Theme.of(context);
     return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: Text(localizations.purchaseOrders),
+        title: Text(
+          localizations.purchaseOrders,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+            letterSpacing: 0.5,
+          ),
+        ),
+        backgroundColor: theme.colorScheme.primary,
+        foregroundColor: theme.colorScheme.onPrimary,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                theme.colorScheme.primary,
+                theme.colorScheme.primary.withValues(alpha: 204),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadDeliveries,
+          Container(
+            margin: const EdgeInsets.only(right: 8, top: 8, bottom: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              shape: BoxShape.circle,
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _loadDeliveries,
+            ),
           ),
         ],
       ),
@@ -85,10 +149,33 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(_errorMessage!),
+                  Icon(
+                    Icons.error_outline,
+                    size: 64,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    _errorMessage!,
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
                   const SizedBox(height: 16),
                   ElevatedButton(
                     onPressed: _loadDeliveries,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: theme.colorScheme.primary,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
                     child: const Text('Retry'),
                   ),
                 ],
@@ -96,9 +183,24 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
             )
           : _deliveries.isEmpty
           ? Center(
-              child: Text(
-                'No purchase delivery requests',
-                style: Theme.of(context).textTheme.bodyLarge,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.shopping_cart_outlined,
+                    size: 64,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No purchase delivery requests',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
               ),
             )
           : RefreshIndicator(
@@ -116,52 +218,124 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
   }
 
   Widget _buildDeliveryCard(UnifiedDelivery delivery) {
-    return Card(
+    final theme = Theme.of(context);
+    return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      child: InkWell(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) =>
-                  DeliveryRequestDetailScreen(delivery: delivery),
-            ),
-          );
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Order #${delivery.orderNumber ?? delivery.id}',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+            spreadRadius: 0,
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) =>
+                    DeliveryRequestDetailScreen(delivery: delivery),
+              ),
+            );
+          },
+          borderRadius: BorderRadius.circular(18),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Order #${delivery.orderNumber ?? delivery.id}',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.onSurface,
+                          letterSpacing: 0.3,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
                       ),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
                     ),
+                    const SizedBox(width: 8),
+                    _buildStatusChip(delivery.deliveryStatus),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.person_outline,
+                      size: 18,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Customer: ${delivery.customerName ?? "N/A"}',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.location_on_outlined,
+                      size: 18,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        delivery.deliveryAddress.isNotEmpty
+                            ? delivery.deliveryAddress
+                            : 'Not provided',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (delivery.deliveryCity != null) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.location_city_outlined,
+                        size: 18,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'City: ${delivery.deliveryCity}',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  _buildStatusChip(delivery.deliveryStatus),
                 ],
-              ),
-              const SizedBox(height: 12),
-              Text('Customer: ${delivery.customerName ?? "N/A"}'),
-              const SizedBox(height: 8),
-              Text(
-                'Address: ${delivery.deliveryAddress.isNotEmpty ? delivery.deliveryAddress : "Not provided"}',
-              ),
-              if (delivery.deliveryCity != null) ...[
-                const SizedBox(height: 4),
-                Text('City: ${delivery.deliveryCity}'),
               ],
-            ],
+            ),
           ),
         ),
       ),
@@ -192,11 +366,21 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
       default:
         color = Colors.grey;
     }
-    return Chip(
-      label: Text(status.toUpperCase()),
-      backgroundColor: color.withValues(alpha: 0.2),
-      labelStyle: TextStyle(color: color, fontWeight: FontWeight.bold),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        status.toUpperCase(),
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.bold,
+          fontSize: 11,
+          letterSpacing: 0.5,
+        ),
+      ),
     );
   }
-
 }

@@ -69,7 +69,7 @@ class DeliveryTasksProvider extends ChangeNotifier {
           'DeliveryTasksProvider: Completed tasks count: $completedTasksCount',
         );
         debugPrint(
-          'DeliveryTasksProvider: In progress tasks count: $inTransitTasksCount',
+          'DeliveryTasksProvider: In delivery tasks count: $inDeliveryTasksCount',
         );
       }
     } catch (e, stackTrace) {
@@ -653,19 +653,18 @@ class DeliveryTasksProvider extends ChangeNotifier {
   }
 
   int get assignedTasksCount {
+    // Assigned: Tasks that are assigned but not yet started
     return _tasks
         .where(
           (task) =>
               task.status == DeliveryTask.statusAssigned ||
-              task.status == DeliveryTask.statusAccepted ||
-              task.status == DeliveryTask.statusInProgress ||
-              task.status == DeliveryTask.statusInTransit ||
-              task.status == DeliveryTask.statusPickedUp,
+              task.status == DeliveryTask.statusAccepted,
         )
         .length;
   }
 
   int get completedTasksCount {
+    // Completed: Tasks that are done
     return _tasks
         .where(
           (task) =>
@@ -676,10 +675,16 @@ class DeliveryTasksProvider extends ChangeNotifier {
   }
 
   int get inTransitTasksCount {
+    // Legacy getter - kept for backward compatibility
+    return inDeliveryTasksCount;
+  }
+
+  int get inDeliveryTasksCount {
+    // In Delivery: Tasks that are actively being delivered (excludes processing)
+    // Only count tasks that are in transit or picked up, not in progress (processing)
     return _tasks
         .where(
           (task) =>
-              task.status == DeliveryTask.statusInProgress ||
               task.status == DeliveryTask.statusInTransit ||
               task.status == DeliveryTask.statusPickedUp,
         )

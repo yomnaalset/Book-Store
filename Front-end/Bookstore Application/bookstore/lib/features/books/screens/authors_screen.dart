@@ -97,25 +97,47 @@ class _AuthorsScreenState extends State<AuthorsScreen> {
                   ? localizations.booksByAuthor(_selectedAuthor!.name)
                   : localizations.browseByAuthor,
               style: const TextStyle(
-                color: AppColors.white,
                 fontWeight: FontWeight.bold,
+                fontSize: 20,
+                letterSpacing: 0.5,
               ),
             );
           },
         ),
-        backgroundColor: AppColors.primary,
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Theme.of(context).colorScheme.onPrimary,
         elevation: 0,
+        shadowColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Theme.of(context).colorScheme.primary,
+                Theme.of(context).colorScheme.primary.withValues(alpha: 204),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
         leading: _selectedAuthor != null
             ? IconButton(
-                icon: const Icon(Icons.arrow_back, color: AppColors.white),
+                icon: const Icon(Icons.arrow_back),
                 onPressed: _clearSelection,
               )
             : null,
         actions: [
           if (_selectedAuthor != null)
-            IconButton(
-              icon: const Icon(Icons.search, color: AppColors.white),
-              onPressed: () => _showSearchDialog(),
+            Container(
+              margin: const EdgeInsets.only(right: 8, top: 8, bottom: 8),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.2),
+                shape: BoxShape.circle,
+              ),
+              child: IconButton(
+                icon: const Icon(Icons.search),
+                onPressed: () => _showSearchDialog(),
+              ),
             ),
         ],
       ),

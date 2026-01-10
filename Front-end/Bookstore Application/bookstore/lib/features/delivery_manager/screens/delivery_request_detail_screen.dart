@@ -22,6 +22,7 @@ class _DeliveryRequestDetailScreenState
   UnifiedDelivery? _delivery;
   bool _isLoading = false;
   String? _errorMessage;
+  Map<String, dynamic>? _relatedEntity; // Store related_entity from API
 
   @override
   void initState() {
@@ -58,6 +59,9 @@ class _DeliveryRequestDetailScreenState
           final deliveryData = result['data'] ?? result;
           try {
             _delivery = UnifiedDelivery.fromJson(deliveryData);
+            // Store related_entity for borrow/return deliveries
+            _relatedEntity =
+                deliveryData['related_entity'] as Map<String, dynamic>?;
             _isLoading = false;
             _errorMessage = null;
           } catch (parseError) {
@@ -118,7 +122,7 @@ class _DeliveryRequestDetailScreenState
         _loadDeliveryDetails();
 
         // Refresh delivery manager status from server
-        // Backend sets status to 'busy' when delivery is accepted
+        // Note: Manager availability remains unchanged when accepting delivery
         try {
           final statusProvider = Provider.of<DeliveryStatusProvider>(
             context,
@@ -368,6 +372,23 @@ class _DeliveryRequestDetailScreenState
           context,
         ).showSnackBar(const SnackBar(content: Text('Delivery completed')));
         _loadDeliveryDetails();
+
+        // Refresh delivery manager status from server
+        // Backend sets status to 'online' when delivery completes (if no other active deliveries)
+        try {
+          final statusProvider = Provider.of<DeliveryStatusProvider>(
+            context,
+            listen: false,
+          );
+          await statusProvider.loadCurrentStatus();
+          debugPrint(
+            'DeliveryRequestDetailScreen: Refreshed delivery manager status after completing delivery',
+          );
+        } catch (e) {
+          debugPrint(
+            'DeliveryRequestDetailScreen: Error refreshing delivery status: $e',
+          );
+        }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(result['message'] ?? 'Failed to complete')),
@@ -378,6 +399,138 @@ class _DeliveryRequestDetailScreenState
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
+  }
+
+  Future<void> _updateDepositStatus(bool paid) async {
+    if (_delivery == null) return;
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final result = await UnifiedDeliveryService.updatePaymentStatus(
+        _delivery!.id,
+        depositPaid: paid,
+      );
+      if (!mounted) return;
+      if (result['success'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              paid ? 'Deposit marked as paid' : 'Deposit marked as unpaid',
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+        _loadDeliveryDetails();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              result['message'] ?? 'Failed to update deposit status',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _updateFineStatus(String status) async {
+    if (_delivery == null) return;
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final result = await UnifiedDeliveryService.updatePaymentStatus(
+        _delivery!.id,
+        fineStatus: status,
+      );
+      if (!mounted) return;
+      if (result['success'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Fine status updated to $status'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        _loadDeliveryDetails();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['message'] ?? 'Failed to update fine status'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _updateFineStatusForReturn(bool isPaid) async {
+    if (_delivery == null) return;
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final result = await UnifiedDeliveryService.updatePaymentStatus(
+        _delivery!.id,
+        fineIsPaid: isPaid,
+      );
+      if (!mounted) return;
+      if (result['success'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              isPaid ? 'Fine marked as paid' : 'Fine marked as unpaid',
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+        _loadDeliveryDetails();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['message'] ?? 'Failed to update fine status'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -418,9 +571,34 @@ class _DeliveryRequestDetailScreenState
       );
     }
 
+    final theme = Theme.of(context);
     return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: Text(_getTitle(delivery)),
+        title: Text(
+          _getTitle(delivery),
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+            letterSpacing: 0.5,
+          ),
+        ),
+        backgroundColor: theme.colorScheme.primary,
+        foregroundColor: theme.colorScheme.onPrimary,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                theme.colorScheme.primary,
+                theme.colorScheme.primary.withValues(alpha: 204),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
         actions: [
           if (_isLoading)
             const Padding(
@@ -435,10 +613,17 @@ class _DeliveryRequestDetailScreenState
               ),
             )
           else
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              onPressed: _isLoading ? null : _loadDeliveryDetails,
-              tooltip: 'Refresh',
+            Container(
+              margin: const EdgeInsets.only(right: 8, top: 8, bottom: 8),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.2),
+                shape: BoxShape.circle,
+              ),
+              child: IconButton(
+                icon: const Icon(Icons.refresh),
+                onPressed: _isLoading ? null : _loadDeliveryDetails,
+                tooltip: 'Refresh',
+              ),
             ),
         ],
       ),
@@ -456,6 +641,8 @@ class _DeliveryRequestDetailScreenState
                 const SizedBox(height: 16),
                 _buildOrderInfoCard(delivery),
               ],
+              const SizedBox(height: 16),
+              _buildPaymentInfoCard(delivery),
               const SizedBox(height: 16),
               _buildActionButtons(delivery),
             ],
@@ -479,9 +666,22 @@ class _DeliveryRequestDetailScreenState
   }
 
   Widget _buildHeaderCard(UnifiedDelivery delivery) {
-    return Card(
+    final theme = Theme.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+            spreadRadius: 0,
+          ),
+        ],
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -503,15 +703,41 @@ class _DeliveryRequestDetailScreenState
                 _buildStatusChip(delivery.deliveryStatus),
               ],
             ),
-            const SizedBox(height: 12),
-            Text(
-              'Type: ${delivery.deliveryTypeDisplay}',
-              style: TextStyle(color: Colors.grey[600], fontSize: 14),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Icon(
+                  Icons.category_outlined,
+                  size: 18,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Type: ${delivery.deliveryTypeDisplay}',
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Status: ${delivery.deliveryStatusDisplay}',
-              style: TextStyle(color: Colors.grey[600], fontSize: 14),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Icon(
+                  Icons.info_outline,
+                  size: 18,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Status: ${delivery.deliveryStatusDisplay}',
+                  style: TextStyle(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -520,18 +746,52 @@ class _DeliveryRequestDetailScreenState
   }
 
   Widget _buildCustomerInfoCard(UnifiedDelivery delivery) {
-    return Card(
+    final theme = Theme.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+            spreadRadius: 0,
+          ),
+        ],
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Customer Information',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    Icons.person_outline,
+                    color: AppColors.primary,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  'Customer Information',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.onSurface,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ],
             ),
-            const Divider(),
-            const SizedBox(height: 8),
+            const SizedBox(height: 20),
             _buildInfoRow('Name', delivery.customerName ?? 'N/A'),
             if (delivery.customerEmail != null)
               _buildInfoRow('Email', delivery.customerEmail!),
@@ -546,19 +806,53 @@ class _DeliveryRequestDetailScreenState
   Widget _buildOrderInfoCard(UnifiedDelivery delivery) {
     if (delivery.order == null) return const SizedBox.shrink();
 
+    final theme = Theme.of(context);
     final order = delivery.order!;
-    return Card(
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+            spreadRadius: 0,
+          ),
+        ],
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Order Information',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.info.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    Icons.shopping_bag_outlined,
+                    color: AppColors.info,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  'Order Information',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.onSurface,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ],
             ),
-            const Divider(),
-            const SizedBox(height: 8),
+            const SizedBox(height: 20),
             if (order['order_number'] != null)
               _buildInfoRow('Order Number', order['order_number'].toString()),
             if (order['total_amount'] != null)
@@ -569,9 +863,256 @@ class _DeliveryRequestDetailScreenState
     );
   }
 
+  Widget _buildPaymentInfoCard(UnifiedDelivery delivery) {
+    final theme = Theme.of(context);
+
+    // Extract payment information based on delivery type
+    String? paymentMethod;
+    String? paymentStatus;
+    String? fineAmount;
+    String? fineStatus;
+    String? depositAmount;
+    bool? depositPaid;
+    String? refundAmount;
+    bool hasPaymentInfo = false;
+
+    if (delivery.deliveryType == 'purchase' && delivery.order != null) {
+      // Purchase delivery - get from order
+      final order = delivery.order!;
+      paymentMethod = order['payment_method']?.toString();
+      paymentStatus = order['payment_status']?.toString();
+      hasPaymentInfo = paymentMethod != null || paymentStatus != null;
+    } else if (delivery.deliveryType == 'borrow' && _relatedEntity != null) {
+      // Borrow delivery - get from related_entity
+      paymentMethod = _relatedEntity!['payment_method']?.toString();
+      paymentStatus = _relatedEntity!['payment_status']?.toString();
+      fineAmount = _relatedEntity!['fine_amount']?.toString();
+      fineStatus = _relatedEntity!['fine_status']?.toString();
+      depositAmount = _relatedEntity!['deposit_amount']?.toString();
+      depositPaid = _relatedEntity!['deposit_paid'] as bool?;
+      refundAmount = _relatedEntity!['refund_amount']?.toString();
+      hasPaymentInfo =
+          paymentMethod != null ||
+          paymentStatus != null ||
+          (fineAmount != null && (double.tryParse(fineAmount) ?? 0) > 0) ||
+          (depositAmount != null &&
+              (double.tryParse(depositAmount) ?? 0) > 0) ||
+          (refundAmount != null && (double.tryParse(refundAmount) ?? 0) > 0) ||
+          depositPaid != null;
+    } else if (delivery.deliveryType == 'return') {
+      // Return delivery - get from related_entity if available
+      if (_relatedEntity != null) {
+        fineAmount = _relatedEntity!['fine_amount']?.toString();
+        fineStatus = _relatedEntity!['fine_status']?.toString();
+        paymentMethod = _relatedEntity!['fine_payment_method']?.toString();
+      }
+      // Always show payment info section for return deliveries
+      // (to display fine information or indicate no fine)
+      hasPaymentInfo = true;
+    }
+
+    // If no payment information available, don't show the card
+    if (!hasPaymentInfo) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+            spreadRadius: 0,
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.success.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    Icons.payment,
+                    color: AppColors.success,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  'Payment Information',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.onSurface,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            // Payment Method (for purchase, borrow, and return)
+            if (paymentMethod != null)
+              _buildInfoRow(
+                'Payment Method',
+                _formatPaymentMethod(paymentMethod),
+              ),
+            // Payment Status (for purchase and borrow)
+            if (paymentStatus != null)
+              _buildInfoRow(
+                'Payment Status',
+                _formatPaymentStatus(paymentStatus),
+              ),
+            // Fine Amount (for return only)
+            if (delivery.deliveryType == 'return')
+              if (fineAmount != null && (double.tryParse(fineAmount) ?? 0) > 0)
+                _buildInfoRow('Fine Amount', '\$$fineAmount')
+              else
+                _buildInfoRow('Fine Amount', 'No fine'),
+            // Fine Status (for return only)
+            if (delivery.deliveryType == 'return')
+              if (fineStatus != null)
+                _buildInfoRow('Fine Status', _formatPaymentStatus(fineStatus))
+              else
+                _buildInfoRow('Fine Status', 'No fine'),
+            // Deposit Amount (for borrow - informational only, no status)
+            if (delivery.deliveryType == 'borrow' &&
+                depositAmount != null &&
+                (double.tryParse(depositAmount) ?? 0) > 0)
+              _buildInfoRow('Deposit Amount', '\$$depositAmount'),
+            // Refund Amount (for borrow)
+            if (refundAmount != null &&
+                (double.tryParse(refundAmount) ?? 0) > 0)
+              _buildInfoRow('Refund Amount', '\$$refundAmount'),
+
+            // Update payment status buttons (only for completed deliveries)
+            if (delivery.deliveryStatus == 'completed') ...[
+              const SizedBox(height: 16),
+              const Divider(),
+              const SizedBox(height: 16),
+              // Update Deposit Status button (for borrow)
+              if (delivery.deliveryType == 'borrow' &&
+                  depositPaid != null &&
+                  !depositPaid &&
+                  depositAmount != null &&
+                  (double.tryParse(depositAmount) ?? 0) > 0)
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _isLoading
+                        ? null
+                        : () => _updateDepositStatus(true),
+                    icon: const Icon(Icons.payment, size: 18),
+                    label: const Text('Mark Deposit as Paid'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.success,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+              // Update Fine Status button (for borrow)
+              if (delivery.deliveryType == 'borrow' &&
+                  fineStatus != null &&
+                  fineStatus.toLowerCase() != 'paid' &&
+                  fineAmount != null &&
+                  (double.tryParse(fineAmount) ?? 0) > 0) ...[
+                if (delivery.deliveryType == 'borrow' &&
+                    depositPaid != null &&
+                    !depositPaid &&
+                    depositAmount != null &&
+                    (double.tryParse(depositAmount) ?? 0) > 0)
+                  const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _isLoading
+                        ? null
+                        : () => _updateFineStatus('paid'),
+                    icon: const Icon(Icons.check_circle, size: 18),
+                    label: const Text('Mark Fine as Paid'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.success,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+              ],
+              // Update Fine Status button (for return)
+              if (delivery.deliveryType == 'return' &&
+                  fineStatus != null &&
+                  fineStatus.toLowerCase() != 'paid' &&
+                  fineAmount != null &&
+                  (double.tryParse(fineAmount) ?? 0) > 0)
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _isLoading
+                        ? null
+                        : () => _updateFineStatusForReturn(true),
+                    icon: const Icon(Icons.check_circle, size: 18),
+                    label: const Text('Mark Fine as Paid'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.success,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatPaymentMethod(String? method) {
+    if (method == null) return 'N/A';
+    switch (method.toLowerCase()) {
+      case 'card':
+      case 'credit_card':
+      case 'debit_card':
+        return 'Card';
+      case 'cash':
+      case 'cash_on_delivery':
+      case 'cod':
+        return 'Cash on Delivery';
+      default:
+        return method;
+    }
+  }
+
+  String _formatPaymentStatus(String? status) {
+    if (status == null) return 'N/A';
+    switch (status.toLowerCase()) {
+      case 'paid':
+      case 'completed':
+        return 'Paid';
+      case 'unpaid':
+      case 'pending':
+        return 'Pending';
+      case 'failed':
+        return 'Failed';
+      default:
+        return status;
+    }
+  }
+
   Widget _buildInfoRow(String label, String value, {bool isError = false}) {
+    final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: 12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -581,14 +1122,18 @@ class _DeliveryRequestDetailScreenState
               '$label:',
               style: TextStyle(
                 fontWeight: FontWeight.w500,
-                color: Colors.grey[700],
+                color: theme.colorScheme.onSurfaceVariant,
+                fontSize: 14,
               ),
             ),
           ),
           Expanded(
             child: Text(
               value,
-              style: TextStyle(color: isError ? Colors.red : null),
+              style: TextStyle(
+                color: isError ? AppColors.error : theme.colorScheme.onSurface,
+                fontSize: 14,
+              ),
             ),
           ),
         ],
@@ -620,16 +1165,39 @@ class _DeliveryRequestDetailScreenState
       default:
         color = Colors.grey;
     }
-    return Chip(
-      label: Text(status.toUpperCase()),
-      backgroundColor: color.withValues(alpha: 0.2),
-      labelStyle: TextStyle(color: color, fontWeight: FontWeight.bold),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        status.toUpperCase(),
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.bold,
+          fontSize: 11,
+          letterSpacing: 0.5,
+        ),
+      ),
     );
   }
 
   Widget _buildActionButtons(UnifiedDelivery delivery) {
     switch (delivery.deliveryStatus) {
+      case 'pending':
+        // Pending requests cannot be accepted - they must be assigned first by admin
+        return Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Text(
+            'This delivery request is pending assignment. '
+            'Please wait for an admin to assign it to a delivery manager.',
+            style: TextStyle(color: AppColors.warning, fontSize: 14),
+            textAlign: TextAlign.center,
+          ),
+        );
       case 'assigned':
+        // Only assigned requests can be accepted
         return Column(
           children: [
             SizedBox(
@@ -639,6 +1207,9 @@ class _DeliveryRequestDetailScreenState
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.success,
                   padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
                 child: const Text('Accept'),
               ),
@@ -651,6 +1222,10 @@ class _DeliveryRequestDetailScreenState
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.error,
                   padding: const EdgeInsets.symmetric(vertical: 16),
+                  side: BorderSide(color: AppColors.error),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
                 child: const Text('Reject'),
               ),
@@ -665,6 +1240,9 @@ class _DeliveryRequestDetailScreenState
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
             child: const Text('Start Delivery'),
           ),
@@ -676,10 +1254,13 @@ class _DeliveryRequestDetailScreenState
               width: double.infinity,
               child: OutlinedButton.icon(
                 onPressed: _isLoading ? null : _handleUpdateLocation,
-                icon: const Icon(Icons.location_on),
+                icon: const Icon(Icons.location_on, size: 18),
                 label: const Text('Update Location'),
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
               ),
             ),
@@ -691,6 +1272,9 @@ class _DeliveryRequestDetailScreenState
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.success,
                   padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
                 child: const Text('Complete Delivery'),
               ),

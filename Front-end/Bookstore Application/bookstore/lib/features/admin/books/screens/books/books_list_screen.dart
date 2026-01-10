@@ -11,6 +11,7 @@ import '../../../../auth/providers/auth_provider.dart';
 import '../../../../../../routes/app_routes.dart';
 import '../../../../../../core/constants/app_colors.dart' as app_colors;
 import '../../../../../../core/localization/app_localizations.dart';
+import '../../../../../../core/services/api_config.dart';
 
 class BooksListScreen extends StatefulWidget {
   const BooksListScreen({super.key});
@@ -689,10 +690,7 @@ class _BooksListScreenState extends State<BooksListScreen> {
     return Card(
       margin: const EdgeInsets.only(bottom: 12.0),
       child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: Colors.orange.withValues(alpha: (0.1)),
-          child: const Icon(Icons.book, color: Colors.orange),
-        ),
+        leading: _buildBookImage(book),
         title: Text(
           book.title,
           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -889,5 +887,59 @@ class _BooksListScreenState extends State<BooksListScreen> {
         }
       }
     }
+  }
+
+  Widget _buildBookImage(Book book) {
+    // Try to get the primary image URL from various sources
+    final imageUrl =
+        book.primaryImageUrl ??
+        book.coverImageUrl ??
+        (book.images != null && book.images!.isNotEmpty
+            ? book.images!.first
+            : null);
+
+    final fullImageUrl = imageUrl != null && imageUrl.isNotEmpty
+        ? ApiConfig.buildImageUrl(imageUrl) ?? imageUrl
+        : null;
+
+    debugPrint(
+      'BooksListScreen: Book "${book.title}" image URL: $fullImageUrl',
+    );
+
+    if (fullImageUrl != null && fullImageUrl.isNotEmpty) {
+      return SizedBox(
+        width: 56,
+        height: 56,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.network(
+            fullImageUrl,
+            width: 56,
+            height: 56,
+            fit: BoxFit.cover,
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) return child;
+              return const Center(
+                child: CircularProgressIndicator(strokeWidth: 2),
+              );
+            },
+            errorBuilder: (context, error, stackTrace) {
+              debugPrint('BooksListScreen: Error loading book image: $error');
+              return _buildPlaceholderIcon();
+            },
+          ),
+        ),
+      );
+    }
+
+    return _buildPlaceholderIcon();
+  }
+
+  Widget _buildPlaceholderIcon() {
+    return CircleAvatar(
+      radius: 28,
+      backgroundColor: Colors.orange.withValues(alpha: (0.1)),
+      child: const Icon(Icons.book, color: Colors.orange, size: 28),
+    );
   }
 }

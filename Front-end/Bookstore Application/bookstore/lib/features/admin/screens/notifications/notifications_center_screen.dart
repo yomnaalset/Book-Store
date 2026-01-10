@@ -9,6 +9,7 @@ import '../../../admin/widgets/empty_state.dart';
 import 'package:readgo/features/auth/providers/auth_provider.dart';
 import '../../../../../core/localization/app_localizations.dart';
 import '../../../notifications/utils/notification_translator.dart';
+import '../../../../../core/utils/formatters.dart';
 
 class NotificationsCenterScreen extends StatefulWidget {
   const NotificationsCenterScreen({super.key});
@@ -650,31 +651,37 @@ class _NotificationsCenterScreenState extends State<NotificationsCenterScreen> {
                 final localizations = AppLocalizations.of(context);
                 return Row(
                   children: [
-                    Text(
-                      _formatDate(notification.createdAt, localizations),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    Flexible(
+                      child: Text(
+                        _formatDate(notification.createdAt, localizations),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _getNotificationColor(
+                    Flexible(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _getNotificationColor(
+                            notification.type,
+                          ).withValues(alpha: 26),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
                           notification.type,
-                        ).withValues(alpha: 26),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        notification.type,
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: _getNotificationColor(notification.type),
-                          fontWeight: FontWeight.bold,
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: _getNotificationColor(notification.type),
+                            fontWeight: FontWeight.bold,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ),
@@ -691,18 +698,23 @@ class _NotificationsCenterScreenState extends State<NotificationsCenterScreen> {
               Builder(
                 builder: (context) {
                   final localizations = AppLocalizations.of(context);
-                  return TextButton(
-                    onPressed: () => _markAsRead(notification),
-                    style: TextButton.styleFrom(
-                      foregroundColor: Theme.of(context).colorScheme.primary,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
+                  return Flexible(
+                    child: TextButton(
+                      onPressed: () => _markAsRead(notification),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Theme.of(context).colorScheme.primary,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 4,
+                        ),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
-                    ),
-                    child: Text(
-                      localizations.markAsRead,
-                      style: const TextStyle(fontSize: 12),
+                      child: Text(
+                        localizations.markAsRead,
+                        style: const TextStyle(fontSize: 11),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   );
                 },
@@ -802,17 +814,6 @@ class _NotificationsCenterScreenState extends State<NotificationsCenterScreen> {
   }
 
   String _formatDate(DateTime date, AppLocalizations localizations) {
-    final now = DateTime.now();
-    final difference = now.difference(date);
-
-    if (difference.inDays > 0) {
-      return '${difference.inDays} ${localizations.daysAgo}';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours} ${localizations.hoursAgo}';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes} ${localizations.minutesAgo}';
-    } else {
-      return localizations.justNow;
-    }
+    return Formatters.formatDateTime(date);
   }
 }

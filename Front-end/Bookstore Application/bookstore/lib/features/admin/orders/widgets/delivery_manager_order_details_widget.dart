@@ -482,8 +482,8 @@ class _DeliveryManagerOrderDetailsWidgetState
           }
 
           // CRITICAL: Refresh delivery manager status from server
-          // Backend sets status to 'busy' when delivery starts
-          // deliveryStatus should be 'busy' after starting delivery
+          // Note: Manager availability remains unchanged when starting delivery
+          // Only 'online' (available) managers can start deliveries, and they stay 'online'
           if (mounted) {
             try {
               final statusProvider = context.read<DeliveryStatusProvider>();
@@ -701,8 +701,9 @@ class _DeliveryManagerOrderDetailsWidgetState
     // Get manager status from provider (single source of truth)
     final statusProvider = context.watch<DeliveryStatusProvider>();
     final managerStatus = statusProvider.currentStatus.toLowerCase();
-    final isManagerOnline = managerStatus == 'online';
-    final isManagerBusy = managerStatus == 'busy';
+    // Handle legacy 'busy' status by treating it as 'online'
+    final normalizedStatus = managerStatus == 'busy' ? 'online' : managerStatus;
+    final isManagerOnline = normalizedStatus == 'online';
 
     // Button visibility logic based on order status and delivery manager status
     // Following the exact table provided:
@@ -746,18 +747,19 @@ class _DeliveryManagerOrderDetailsWidgetState
         !isCompletedStatus;
 
     // Show Complete Delivery and Update Location buttons:
-    // Table Row 5 & 6: in_delivery + (busy OR online) → Show Complete Delivery + Update Location
+    // Table Row 5 & 6: in_delivery + online → Show Complete Delivery + Update Location
     // - Order status is in_delivery
-    // - Delivery manager status can be busy or online (handle gracefully)
+    // - Delivery manager status is online (available)
     final shouldShowCompleteDelivery = isInDeliveryStatus && !isCompletedStatus;
     final shouldShowUpdateLocation = isInDeliveryStatus && !isCompletedStatus;
 
     // Table Row 7 & 8: completed/rejected → Hide all buttons (handled by conditions above)
 
     debugPrint('DeliveryManagerActions: isWaitingStatus = $isWaitingStatus');
-    debugPrint('DeliveryManagerActions: managerStatus = $managerStatus');
+    debugPrint(
+      'DeliveryManagerActions: managerStatus = $managerStatus (normalized: $normalizedStatus)',
+    );
     debugPrint('DeliveryManagerActions: isManagerOnline = $isManagerOnline');
-    debugPrint('DeliveryManagerActions: isManagerBusy = $isManagerBusy');
     debugPrint(
       'DeliveryManagerActions: shouldShowAcceptReject = $shouldShowAcceptReject',
     );
@@ -880,7 +882,7 @@ class _DeliveryManagerOrderDetailsWidgetState
               ),
             ]
             // Show Complete Delivery and Update Location buttons
-            // Table: in_delivery + (busy OR online) → Show Complete Delivery + Update Location
+            // Table: in_delivery + online → Show Complete Delivery + Update Location
             else if (shouldShowCompleteDelivery) ...[
               Builder(
                 builder: (context) {
@@ -1005,38 +1007,53 @@ class _DeliveryManagerOrderDetailsWidgetState
                     'Current Status: ',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _getStatusColor(widget.order.status),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Builder(
-                      builder: (context) {
-                        final localizations = AppLocalizations.of(context);
-                        return Text(
+                  Builder(
+                    builder: (context) {
+                      final localizations = AppLocalizations.of(context);
+                      // Get effective status - check delivery assignment if available
+                      final effectiveStatus =
+                          widget.order.deliveryAssignment != null &&
+                              widget.order.deliveryAssignment!.status
+                                      .toLowerCase() ==
+                                  'in_delivery'
+                          ? 'in_delivery'
+                          : widget.order.status;
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _getStatusColor(effectiveStatus),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
                           localizations
-                              .getOrderStatusLabel(widget.order.status)
+                              .getOrderStatusLabel(effectiveStatus)
                               .toUpperCase(),
                           style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
                             fontSize: 14,
                           ),
-                        );
-                      },
-                    ),
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),
               const SizedBox(height: 12),
-              widget.shared.buildInfoRow(
-                'Order Number',
-                '#ORD-${widget.order.id.toString().padLeft(4, '0')}',
-              ),
+              widget.shared.buildInfoRow('Order Number', () {
+                final orderNumber = widget.order.orderNumber.isNotEmpty
+                    ? widget.order.orderNumber
+                    : 'ORD-${widget.order.id.toString().padLeft(4, '0')}';
+                // Remove any existing # from start or end to avoid double #
+                final cleanOrderNumber = orderNumber.replaceFirst(
+                  RegExp(r'^#+|#+$'),
+                  '',
+                );
+                return '#$cleanOrderNumber';
+              }()),
               widget.shared.buildInfoRow(
                 'Order Date',
                 widget.shared.formatDate(widget.order.createdAt),
@@ -1117,19 +1134,31 @@ class _DeliveryManagerOrderDetailsWidgetState
           const SizedBox(height: 16),
 
           // Payment Information
-          widget.shared.buildSectionCard(
-            context: context,
-            title: 'Payment Information',
-            icon: Icons.payment,
-            children: [
-              widget.shared.buildInfoRow(
-                'Payment Method',
-                widget.shared.getPaymentMethodDisplay(
-                  widget.order.paymentMethod,
-                  context,
-                ),
-              ),
-            ],
+          Builder(
+            builder: (context) {
+              final localizations = AppLocalizations.of(context);
+              return widget.shared.buildSectionCard(
+                context: context,
+                title: localizations.paymentInformation,
+                icon: Icons.payment,
+                children: [
+                  widget.shared.buildInfoRow(
+                    localizations.paymentMethod,
+                    widget.shared.getPaymentMethodDisplay(
+                      widget.order.paymentMethod,
+                      context,
+                    ),
+                  ),
+                  widget.shared.buildInfoRow(
+                    localizations.paymentStatus,
+                    widget.shared.getPaymentStatusDisplay(
+                      widget.order.paymentStatus,
+                      context,
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 16),
 

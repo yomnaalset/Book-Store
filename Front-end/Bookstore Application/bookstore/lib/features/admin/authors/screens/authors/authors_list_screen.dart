@@ -7,6 +7,7 @@ import '../../../widgets/library_manager/admin_search_bar.dart';
 import '../../../widgets/library_manager/empty_state.dart';
 import '../../../../../../routes/app_routes.dart';
 import '../../../../../../core/localization/app_localizations.dart';
+import '../../../../../../core/services/api_config.dart';
 import '../../../../auth/providers/auth_provider.dart';
 
 class AuthorsListScreen extends StatefulWidget {
@@ -174,10 +175,7 @@ class _AuthorsListScreenState extends State<AuthorsListScreen> {
     return Card(
       margin: const EdgeInsets.only(bottom: 12.0),
       child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: Colors.purple.withValues(alpha: (0.1)),
-          child: const Icon(Icons.person, color: Colors.purple),
-        ),
+        leading: _buildAuthorAvatar(author),
         title: Text(
           author.name,
           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -374,5 +372,51 @@ class _AuthorsListScreenState extends State<AuthorsListScreen> {
 
   String _formatDate(DateTime date) {
     return '${date.day}/${date.month}/${date.year}';
+  }
+
+  Widget _buildAuthorAvatar(Author author) {
+    final photoUrl = author.photo;
+    debugPrint(
+      'AuthorsListScreen: Author "${author.name}" photo URL: $photoUrl',
+    );
+    final fullPhotoUrl = photoUrl != null && photoUrl.isNotEmpty
+        ? ApiConfig.buildImageUrl(photoUrl) ?? photoUrl
+        : null;
+    debugPrint(
+      'AuthorsListScreen: Author "${author.name}" full photo URL: $fullPhotoUrl',
+    );
+
+    if (fullPhotoUrl != null && fullPhotoUrl.isNotEmpty) {
+      return CircleAvatar(
+        radius: 24,
+        backgroundColor: Colors.purple.withValues(alpha: (0.1)),
+        child: ClipOval(
+          child: Image.network(
+            fullPhotoUrl,
+            width: 48,
+            height: 48,
+            fit: BoxFit.cover,
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) return child;
+              return const Center(
+                child: CircularProgressIndicator(strokeWidth: 2),
+              );
+            },
+            errorBuilder: (context, error, stackTrace) {
+              debugPrint(
+                'AuthorsListScreen: Error loading author photo: $error',
+              );
+              return const Icon(Icons.person, color: Colors.purple, size: 24);
+            },
+          ),
+        ),
+      );
+    }
+
+    return CircleAvatar(
+      radius: 24,
+      backgroundColor: Colors.purple.withValues(alpha: (0.1)),
+      child: const Icon(Icons.person, color: Colors.purple),
+    );
   }
 }

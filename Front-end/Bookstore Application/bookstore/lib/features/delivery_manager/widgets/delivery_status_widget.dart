@@ -62,14 +62,13 @@ class DeliveryStatusWidget extends StatelessWidget {
     IconData icon;
     Color color;
 
-    switch (status) {
+    // Handle legacy 'busy' status by treating it as 'online'
+    final normalizedStatus = status == 'busy' ? 'online' : status;
+
+    switch (normalizedStatus) {
       case 'online':
         icon = Icons.wifi;
         color = Colors.green;
-        break;
-      case 'busy':
-        icon = Icons.local_shipping;
-        color = Colors.orange;
         break;
       case 'offline':
       default:
@@ -105,11 +104,12 @@ class DeliveryStatusWidget extends StatelessWidget {
   }
 
   String _getStatusText(String status) {
-    switch (status) {
+    // Handle legacy 'busy' status by treating it as 'online'
+    final normalizedStatus = status == 'busy' ? 'online' : status;
+
+    switch (normalizedStatus) {
       case 'online':
         return 'Online';
-      case 'busy':
-        return 'Busy';
       case 'offline':
         return 'Offline';
       default:
@@ -118,11 +118,12 @@ class DeliveryStatusWidget extends StatelessWidget {
   }
 
   Color _getStatusColor(String status) {
-    switch (status) {
+    // Handle legacy 'busy' status by treating it as 'online'
+    final normalizedStatus = status == 'busy' ? 'online' : status;
+
+    switch (normalizedStatus) {
       case 'online':
         return Colors.green;
-      case 'busy':
-        return Colors.orange;
       case 'offline':
         return Colors.red;
       default:
@@ -131,8 +132,9 @@ class DeliveryStatusWidget extends StatelessWidget {
   }
 
   void _showBusyMessage(DeliveryStatusProvider statusProvider) {
-    // This would typically show a snackbar or dialog
-    debugPrint('Cannot change status while busy');
+    // This method is no longer needed as 'busy' status is removed
+    // Keeping for backward compatibility but it should not be called
+    debugPrint('Status change not allowed');
   }
 
   void _showErrorMessage(String message) {
@@ -157,14 +159,13 @@ class DeliveryStatusIndicator extends StatelessWidget {
     IconData icon;
     Color color;
 
-    switch (status) {
+    // Handle legacy 'busy' status by treating it as 'online'
+    final normalizedStatus = status == 'busy' ? 'online' : status;
+
+    switch (normalizedStatus) {
       case 'online':
         icon = Icons.wifi;
         color = Colors.green;
-        break;
-      case 'busy':
-        icon = Icons.local_shipping;
-        color = Colors.orange;
         break;
       case 'offline':
       default:

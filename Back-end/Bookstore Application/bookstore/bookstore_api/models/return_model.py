@@ -76,6 +76,13 @@ class ReturnFinePaymentMethod(models.TextChoices):
     CARD = 'card', 'Card'
 
 
+class ReturnFinePaymentStatus(models.TextChoices):
+    """Payment status for return fines"""
+    PENDING = 'pending', 'Pending'
+    PENDING_PAYMENT = 'pending_payment', 'Pending Payment'
+    COMPLETED = 'completed', 'Completed'
+
+
 class FineReason(models.TextChoices):
     """Normalized fine reason values"""
     LATE_RETURN = 'late_return', 'Late Return'
@@ -255,10 +262,18 @@ class ReturnFine(models.Model):
         super().save(*args, **kwargs)
     
     def mark_as_paid(self, paid_by, transaction_id=None):
-        """Mark the fine as paid"""
+        """Mark the fine as paid and update the associated BorrowRequest fine_status"""
         self.is_paid = True
         self.paid_at = timezone.now()
         self.paid_by = paid_by
         if transaction_id:
             self.transaction_id = transaction_id
         self.save()
+        
+        # Also update the BorrowRequest fine_status and fine_amount to keep in sync
+        # Import here to avoid circular imports
+        from .borrowing_model import FineStatusChoices
+        borrow_request = self.return_request.borrowing
+        borrow_request.fine_status = FineStatusChoices.PAID
+        borrow_request.fine_amount = self.fine_amount  # Sync the fine amount
+        borrow_request.save(update_fields=['fine_status', 'fine_amount'])

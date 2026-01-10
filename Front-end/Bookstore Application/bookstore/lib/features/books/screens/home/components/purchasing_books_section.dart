@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/localization/app_localizations.dart';
-import '../../../../cart/providers/cart_provider.dart';
 import '../../../providers/books_provider.dart';
 import '../../../models/book.dart';
 import '../../../widgets/book_price_display.dart';
@@ -21,7 +20,10 @@ class _PurchasingBooksSectionState extends State<PurchasingBooksSection> {
   @override
   void initState() {
     super.initState();
-    _loadPurchasingBooks();
+    // Defer loading until after the build is complete to avoid calling setState during build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadPurchasingBooks();
+    });
   }
 
   Future<void> _loadPurchasingBooks() async {
@@ -100,16 +102,16 @@ class _PurchasingBooksSectionState extends State<PurchasingBooksSection> {
                   builder: (context) {
                     final localizations = AppLocalizations.of(context);
                     return TextButton(
-                  onPressed: () {
-                    Navigator.pushNamed(context, '/categories');
-                  },
+                      onPressed: () {
+                        Navigator.pushNamed(context, '/categories');
+                      },
                       child: Text(
                         localizations.viewAll,
                         style: const TextStyle(
-                      color: AppColors.success,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                          color: AppColors.success,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     );
                   },
                 ),
@@ -147,8 +149,8 @@ class _PurchasingBooksSectionState extends State<PurchasingBooksSection> {
                       return Text(
                         localizations.checkBackLaterForNewBooksToBuy,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                       );
                     },
                   ),
@@ -158,9 +160,9 @@ class _PurchasingBooksSectionState extends State<PurchasingBooksSection> {
                       final localizations = AppLocalizations.of(context);
                       return Text(
                         localizations.checkBackLaterForNewBooksToBuy,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                       );
                     },
                   ),
@@ -201,9 +203,9 @@ class _PurchasingBooksSectionState extends State<PurchasingBooksSection> {
                       final localizations = AppLocalizations.of(context);
                       return Text(
                         localizations.purchasingBooks,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
                       );
                     },
                   ),
@@ -213,16 +215,16 @@ class _PurchasingBooksSectionState extends State<PurchasingBooksSection> {
                 builder: (context) {
                   final localizations = AppLocalizations.of(context);
                   return TextButton(
-                onPressed: () {
-                  Navigator.pushNamed(context, '/categories');
-                },
+                    onPressed: () {
+                      Navigator.pushNamed(context, '/categories');
+                    },
                     child: Text(
                       localizations.viewAll,
                       style: const TextStyle(
-                    color: AppColors.success,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                        color: AppColors.success,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   );
                 },
               ),
@@ -331,12 +333,14 @@ class _PurchasingBooksSectionState extends State<PurchasingBooksSection> {
                           builder: (context) {
                             final localizations = AppLocalizations.of(context);
                             return Text(
-                              localizations.discountOff(book.savingsPercentage.toInt()),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 8,
-                            fontWeight: FontWeight.bold,
-                          ),
+                              localizations.discountOff(
+                                book.savingsPercentage.toInt(),
+                              ),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 8,
+                                fontWeight: FontWeight.bold,
+                              ),
                             );
                           },
                         ),
@@ -374,37 +378,13 @@ class _PurchasingBooksSectionState extends State<PurchasingBooksSection> {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 8),
-                    // Price and Action
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        // Price display
-                        Flexible(
-                          child: BookPriceDisplay(
-                            book: book,
-                            showBorrowPrice: false,
-                            isCompact: true,
-                            fontSize: 8,
-                            smallFontSize: 7,
-                          ),
-                        ),
-                        // Action Button
-                        GestureDetector(
-                          onTap: () => _addToCart(book),
-                          child: Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: BoxDecoration(
-                              color: AppColors.success.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: const Icon(
-                              Icons.add_shopping_cart,
-                              size: 10,
-                              color: AppColors.success,
-                            ),
-                          ),
-                        ),
-                      ],
+                    // Price display
+                    BookPriceDisplay(
+                      book: book,
+                      showBorrowPrice: false,
+                      isCompact: true,
+                      fontSize: 8,
+                      smallFontSize: 7,
                     ),
                   ],
                 ),
@@ -412,23 +392,6 @@ class _PurchasingBooksSectionState extends State<PurchasingBooksSection> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  void _addToCart(Book book) {
-    final cartProvider = Provider.of<CartProvider>(context, listen: false);
-    cartProvider.addToCart(book, 1, context: context);
-    _showSnackBar('Added to cart!');
-  }
-
-  void _showSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        duration: const Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
     );
   }

@@ -549,13 +549,13 @@ class _OrderApprovalCardState extends State<OrderApprovalCard> {
   Color _getStatusColor(String? status) {
     if (status == null) return Colors.grey;
 
-    switch (status) {
+    // Handle legacy 'busy' status by treating it as 'online' (green)
+    final normalizedStatus = status.toLowerCase() == 'busy'
+        ? 'online'
+        : status.toLowerCase();
+
+    switch (normalizedStatus) {
       case 'online':
-        return Colors.green;
-      case 'available':
-        return Colors.green;
-      case 'busy':
-        return Colors.orange;
       case 'offline':
         return Colors.red;
       default:

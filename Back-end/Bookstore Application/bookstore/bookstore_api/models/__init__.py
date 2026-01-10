@@ -18,7 +18,7 @@ from .help_support_model import FAQ, UserGuide, TroubleshootingGuide, SupportCon
 from .delivery_profile_model import DeliveryProfile
 from .return_model import (
     ReturnRequest, ReturnStatus, ReturnFine, 
-    ReturnFinePaymentMethod, FineReason
+    ReturnFinePaymentMethod, ReturnFinePaymentStatus, FineReason
 )
 __all__ = [
     'User', 'UserProfile',  
@@ -37,5 +37,5 @@ __all__ = [
     'FAQ', 'UserGuide', 'TroubleshootingGuide', 'SupportContact',
     'DeliveryProfile',
     'ReturnRequest', 'ReturnStatus', 'ReturnFine',
-    'ReturnFinePaymentMethod', 'FineReason'
+    'ReturnFinePaymentMethod', 'ReturnFinePaymentStatus', 'FineReason'
 ]

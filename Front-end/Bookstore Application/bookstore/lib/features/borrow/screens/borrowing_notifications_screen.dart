@@ -42,43 +42,71 @@ class _BorrowingNotificationsScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Borrowing Notifications'),
-        backgroundColor: AppColors.primary,
-        foregroundColor: AppColors.white,
+        title: const Text(
+          'Borrowing Notifications',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+            letterSpacing: 0.5,
+          ),
+        ),
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Theme.of(context).colorScheme.onPrimary,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Theme.of(context).colorScheme.primary,
+                Theme.of(context).colorScheme.primary.withValues(alpha: 204),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
         actions: [
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              setState(() {
-                _selectedFilter = value;
-              });
-              _filterNotifications();
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'all',
-                child: Text('All Notifications'),
-              ),
-              const PopupMenuItem(
-                value: 'borrow_request',
-                child: Text('Borrow Requests'),
-              ),
-              const PopupMenuItem(
-                value: 'borrow_approved',
-                child: Text('Approvals'),
-              ),
-              const PopupMenuItem(
-                value: 'delivery_task_created',
-                child: Text('Delivery Tasks'),
-              ),
-              const PopupMenuItem(
-                value: 'return_reminder',
-                child: Text('Return Reminders'),
-              ),
-              const PopupMenuItem(
-                value: 'return_confirmed',
-                child: Text('Return Confirmations'),
-              ),
-            ],
+          Container(
+            margin: const EdgeInsets.only(right: 8, top: 8, bottom: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              shape: BoxShape.circle,
+            ),
+            child: PopupMenuButton<String>(
+              onSelected: (value) {
+                setState(() {
+                  _selectedFilter = value;
+                });
+                _filterNotifications();
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'all',
+                  child: Text('All Notifications'),
+                ),
+                const PopupMenuItem(
+                  value: 'borrow_request',
+                  child: Text('Borrow Requests'),
+                ),
+                const PopupMenuItem(
+                  value: 'borrow_approved',
+                  child: Text('Approvals'),
+                ),
+                const PopupMenuItem(
+                  value: 'delivery_task_created',
+                  child: Text('Delivery Tasks'),
+                ),
+                const PopupMenuItem(
+                  value: 'return_reminder',
+                  child: Text('Return Reminders'),
+                ),
+                const PopupMenuItem(
+                  value: 'return_confirmed',
+                  child: Text('Return Confirmations'),
+                ),
+              ],
+            ),
           ),
         ],
       ),

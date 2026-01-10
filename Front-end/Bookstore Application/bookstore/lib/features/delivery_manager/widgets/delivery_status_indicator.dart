@@ -7,43 +7,37 @@ class DeliveryStatusIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Color backgroundColor;
     Color textColor;
     IconData icon;
     String statusText;
 
-    switch (status.toLowerCase()) {
+    // Handle legacy 'busy' status by treating it as 'online'
+    final normalizedStatus = status.toLowerCase() == 'busy'
+        ? 'online'
+        : status.toLowerCase();
+
+    switch (normalizedStatus) {
       case 'online':
-        backgroundColor = Colors.green.withValues(alpha: 0.1);
         textColor = Colors.green;
         icon = Icons.wifi;
         statusText = 'Online';
         break;
-      case 'busy':
-        backgroundColor = Colors.orange.withValues(alpha: 0.1);
-        textColor = Colors.orange;
-        icon = Icons.local_shipping;
-        statusText = 'Busy';
-        break;
       case 'offline':
-        backgroundColor = Colors.red.withValues(alpha: 0.1);
         textColor = Colors.red;
         icon = Icons.wifi_off;
         statusText = 'Offline';
         break;
       default:
-        backgroundColor = Colors.grey.withValues(alpha: 0.1);
         textColor = Colors.grey;
         icon = Icons.help_outline;
         statusText = status;
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: backgroundColor,
+        color: textColor.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: textColor.withValues(alpha: 0.3)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

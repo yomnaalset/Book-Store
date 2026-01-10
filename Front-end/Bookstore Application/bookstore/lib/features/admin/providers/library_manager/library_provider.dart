@@ -59,7 +59,12 @@ class LibraryProvider extends ChangeNotifier {
   }
 
   // Update library
-  Future<bool> updateLibrary(Library library, {File? logoFile}) async {
+  Future<bool> updateLibrary(
+    Library library, {
+    File? logoFile,
+    Uint8List? logoBytes,
+    bool removeLogo = false,
+  }) async {
     _setLoading(true);
     _error = null;
 
@@ -67,6 +72,8 @@ class LibraryProvider extends ChangeNotifier {
       final updatedLibrary = await _apiService.updateLibrary(
         library,
         logoFile: logoFile,
+        logoBytes: logoBytes,
+        removeLogo: removeLogo,
       );
       _library = updatedLibrary;
       notifyListeners();
@@ -81,7 +88,11 @@ class LibraryProvider extends ChangeNotifier {
   }
 
   // Create library
-  Future<bool> createLibrary(Library library, {File? logoFile}) async {
+  Future<bool> createLibrary(
+    Library library, {
+    File? logoFile,
+    Uint8List? logoBytes,
+  }) async {
     _setLoading(true);
     _error = null;
 
@@ -89,6 +100,7 @@ class LibraryProvider extends ChangeNotifier {
       final createdLibrary = await _apiService.createLibrary(
         library,
         logoFile: logoFile,
+        logoBytes: logoBytes,
       );
       _library = createdLibrary;
       notifyListeners();

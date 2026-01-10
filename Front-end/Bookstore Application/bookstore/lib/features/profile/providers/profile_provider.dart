@@ -378,6 +378,47 @@ class ProfileProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> uploadProfilePictureBytes(
+    List<int> imageBytes, {
+    String? fileName,
+    String? token,
+  }) async {
+    _setLoading(true);
+    _clearError();
+
+    final authToken = token ?? _token;
+    if (authToken == null) {
+      _setError('Authentication token not available');
+      _setLoading(false);
+      return false;
+    }
+
+    try {
+      final success = await _profileService.uploadProfilePictureBytes(
+        authToken,
+        imageBytes,
+        fileName: fileName ?? 'profile_picture.jpg',
+      );
+
+      if (success) {
+        debugPrint('ProfileProvider: Profile picture uploaded successfully');
+        _setLoading(false);
+        return true;
+      } else {
+        _setError(
+          _profileService.errorMessage ?? 'Failed to upload profile picture',
+        );
+        _setLoading(false);
+        return false;
+      }
+    } catch (e) {
+      debugPrint('ProfileProvider: Error uploading profile picture: $e');
+      _setError('Network error: ${e.toString()}');
+      _setLoading(false);
+      return false;
+    }
+  }
+
   // Get user profile data
   Future<Map<String, dynamic>?> getUserProfile({String? token}) async {
     _setLoading(true);

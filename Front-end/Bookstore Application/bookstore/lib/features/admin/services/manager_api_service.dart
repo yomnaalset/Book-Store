@@ -529,10 +529,7 @@ class ManagerApiService {
       'POST',
       '/delivery/start-delivery/',
       headers: {'Content-Type': 'application/json'},
-      body: json.encode({
-        'delivery_type': 'order',
-        'delivery_id': orderId,
-      }),
+      body: json.encode({'delivery_type': 'order', 'delivery_id': orderId}),
     );
 
     debugPrint('DEBUG: Start delivery response status: ${response.statusCode}');
@@ -561,10 +558,7 @@ class ManagerApiService {
       'POST',
       '/delivery/complete-delivery/',
       headers: {'Content-Type': 'application/json'},
-      body: json.encode({
-        'delivery_type': 'order',
-        'delivery_id': orderId,
-      }),
+      body: json.encode({'delivery_type': 'order', 'delivery_id': orderId}),
     );
 
     debugPrint(
@@ -853,7 +847,11 @@ class ManagerApiService {
     }
   }
 
-  Future<Library> createLibrary(Library library, {File? logoFile}) async {
+  Future<Library> createLibrary(
+    Library library, {
+    File? logoFile,
+    Uint8List? logoBytes,
+  }) async {
     if (kDebugMode) {
       debugPrint(
         'ManagerApiService: Creating library with name: ${library.name}',
@@ -877,7 +875,7 @@ class ManagerApiService {
     try {
       late http.Response response;
 
-      if (logoFile != null) {
+      if (logoFile != null || logoBytes != null) {
         // Use multipart request for file upload
         var request = http.MultipartRequest(
           'POST',
@@ -891,13 +889,30 @@ class ManagerApiService {
         request.fields['name'] = library.name;
         request.fields['details'] = library.details;
 
-        // Add file
-        request.files.add(
-          await http.MultipartFile.fromPath('logo', logoFile.path),
-        );
+        // Add file - handle both File (mobile) and bytes (web)
+        if (logoFile != null) {
+          request.files.add(
+            await http.MultipartFile.fromPath('logo', logoFile.path),
+          );
+          if (kDebugMode) {
+            debugPrint('ManagerApiService: Uploading file: ${logoFile.path}');
+          }
+        } else if (logoBytes != null) {
+          request.files.add(
+            http.MultipartFile.fromBytes(
+              'logo',
+              logoBytes,
+              filename: 'logo.jpg',
+            ),
+          );
+          if (kDebugMode) {
+            debugPrint(
+              'ManagerApiService: Uploading file from bytes (${logoBytes.length} bytes)',
+            );
+          }
+        }
 
         if (kDebugMode) {
-          debugPrint('ManagerApiService: Uploading file: ${logoFile.path}');
           debugPrint('ManagerApiService: Headers: ${request.headers}');
         }
 
@@ -987,7 +1002,12 @@ class ManagerApiService {
     }
   }
 
-  Future<Library> updateLibrary(Library library, {File? logoFile}) async {
+  Future<Library> updateLibrary(
+    Library library, {
+    File? logoFile,
+    Uint8List? logoBytes,
+    bool removeLogo = false,
+  }) async {
     if (kDebugMode) {
       debugPrint(
         'ManagerApiService: Updating library with name: ${library.name}',
@@ -1024,7 +1044,7 @@ class ManagerApiService {
       request.fields['name'] = library.name;
       request.fields['details'] = library.details;
 
-      // Add file if provided
+      // Add file if provided - handle both File (mobile) and bytes (web)
       if (logoFile != null) {
         request.files.add(
           await http.MultipartFile.fromPath('logo', logoFile.path),
@@ -1032,8 +1052,24 @@ class ManagerApiService {
         if (kDebugMode) {
           debugPrint('ManagerApiService: Uploading file: ${logoFile.path}');
         }
+      } else if (logoBytes != null) {
+        request.files.add(
+          http.MultipartFile.fromBytes('logo', logoBytes, filename: 'logo.jpg'),
+        );
+        if (kDebugMode) {
+          debugPrint(
+            'ManagerApiService: Uploading file from bytes (${logoBytes.length} bytes)',
+          );
+        }
+      } else if (removeLogo) {
+        // User wants to remove the logo - send empty string or null indicator
+        // The backend will interpret this as logo deletion
+        request.fields['logo'] = ''; // Empty string to indicate removal
+        if (kDebugMode) {
+          debugPrint('ManagerApiService: Removing logo');
+        }
       } else {
-        // If no file provided, send a special value to indicate no logo change
+        // If no file provided and not removing, send a special value to indicate no logo change
         // The backend serializer should handle this as "keep existing logo"
         request.fields['logo'] = 'KEEP_EXISTING';
       }
@@ -2339,13 +2375,65 @@ class ManagerApiService {
     }
   }
 
-  Future<Author> createAuthor(Author author) async {
+  Future<Author> createAuthor(
+    Author author, {
+    File? photoFile,
+    Uint8List? photoBytes,
+  }) async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/library/authors/create/'),
-        headers: {..._getHeaders(), 'Content-Type': 'application/json'},
-        body: json.encode(author.toJson()),
-      );
+      late http.Response response;
+
+      // Use multipart request if there's an image, otherwise use JSON
+      if (photoFile != null || photoBytes != null) {
+        var request = http.MultipartRequest(
+          'POST',
+          Uri.parse('$baseUrl/library/authors/create/'),
+        );
+
+        // Add headers
+        request.headers.addAll(_getHeaders());
+
+        // Add fields
+        final authorJson = author.toJson();
+        request.fields['name'] = authorJson['name'] ?? '';
+        if (authorJson['bio'] != null) {
+          request.fields['bio'] = authorJson['bio'] ?? '';
+        }
+        if (authorJson['nationality'] != null) {
+          request.fields['nationality'] = authorJson['nationality'] ?? '';
+        }
+        if (authorJson['birth_date'] != null) {
+          request.fields['birth_date'] = authorJson['birth_date'] ?? '';
+        }
+        if (authorJson['death_date'] != null) {
+          request.fields['death_date'] = authorJson['death_date'] ?? '';
+        }
+
+        // Add photo file
+        if (photoFile != null) {
+          request.files.add(
+            await http.MultipartFile.fromPath('photo', photoFile.path),
+          );
+        } else if (photoBytes != null) {
+          request.files.add(
+            http.MultipartFile.fromBytes(
+              'photo',
+              photoBytes,
+              filename: 'author_photo.jpg',
+            ),
+          );
+        }
+
+        var streamedResponse = await request.send();
+        response = await http.Response.fromStream(streamedResponse);
+      } else {
+        // Use JSON request if no image
+        response = await http.post(
+          Uri.parse('$baseUrl/library/authors/create/'),
+          headers: {..._getHeaders(), 'Content-Type': 'application/json'},
+          body: json.encode(author.toJson()),
+        );
+      }
 
       if (response.statusCode == 201) {
         final data = json.decode(response.body);
@@ -2364,13 +2452,65 @@ class ManagerApiService {
     }
   }
 
-  Future<Author> updateAuthor(Author author) async {
+  Future<Author> updateAuthor(
+    Author author, {
+    File? photoFile,
+    Uint8List? photoBytes,
+  }) async {
     try {
-      final response = await http.put(
-        Uri.parse('$baseUrl/library/authors/${author.id}/update/'),
-        headers: {..._getHeaders(), 'Content-Type': 'application/json'},
-        body: json.encode(author.toJson()),
-      );
+      late http.Response response;
+
+      // Use multipart request if there's an image, otherwise use JSON
+      if (photoFile != null || photoBytes != null) {
+        var request = http.MultipartRequest(
+          'PUT',
+          Uri.parse('$baseUrl/library/authors/${author.id}/update/'),
+        );
+
+        // Add headers
+        request.headers.addAll(_getHeaders());
+
+        // Add fields
+        final authorJson = author.toJson();
+        request.fields['name'] = authorJson['name'] ?? '';
+        if (authorJson['bio'] != null) {
+          request.fields['bio'] = authorJson['bio'] ?? '';
+        }
+        if (authorJson['nationality'] != null) {
+          request.fields['nationality'] = authorJson['nationality'] ?? '';
+        }
+        if (authorJson['birth_date'] != null) {
+          request.fields['birth_date'] = authorJson['birth_date'] ?? '';
+        }
+        if (authorJson['death_date'] != null) {
+          request.fields['death_date'] = authorJson['death_date'] ?? '';
+        }
+
+        // Add photo file
+        if (photoFile != null) {
+          request.files.add(
+            await http.MultipartFile.fromPath('photo', photoFile.path),
+          );
+        } else if (photoBytes != null) {
+          request.files.add(
+            http.MultipartFile.fromBytes(
+              'photo',
+              photoBytes,
+              filename: 'author_photo.jpg',
+            ),
+          );
+        }
+
+        var streamedResponse = await request.send();
+        response = await http.Response.fromStream(streamedResponse);
+      } else {
+        // Use JSON request if no image
+        response = await http.put(
+          Uri.parse('$baseUrl/library/authors/${author.id}/update/'),
+          headers: {..._getHeaders(), 'Content-Type': 'application/json'},
+          body: json.encode(author.toJson()),
+        );
+      }
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -2456,12 +2596,53 @@ class ManagerApiService {
       final data = json.decode(response.body);
       debugPrint('DEBUG: getBooks response data: $data');
 
-      if (data['success'] == true) {
-        final booksData = data['data'] as List;
+      // Handle different response formats
+      // 1. Paginated: {count, next, previous, results: {success, message, data: [...]}}
+      // 2. Direct: {success, message, data: [...]}
+      // 3. Standard pagination: {count, next, previous, results: [...]}
+      List<dynamic> booksData = [];
+
+      if (data['results'] != null) {
+        // Paginated response - results can be either a Map or List
+        if (data['results'] is Map) {
+          final results = data['results'] as Map<String, dynamic>;
+          if (results['data'] != null && results['data'] is List) {
+            // Nested: {results: {success, message, data: [...]}}
+            booksData = results['data'] as List;
+          } else if (results['success'] == true && results['data'] != null) {
+            booksData = results['data'] as List;
+          }
+        } else if (data['results'] is List) {
+          // Standard pagination: {results: [...]}
+          booksData = data['results'] as List;
+        }
+      } else if (data['data'] != null) {
+        // Check if data is a List or a Map (paginated response)
+        if (data['data'] is List) {
+          // Direct format: {success: true, data: [...]}
+          booksData = data['data'] as List;
+        } else if (data['data'] is Map) {
+          // Paginated response: {data: {count, next, previous, results: [...]}}
+          final dataField = data['data'] as Map<String, dynamic>;
+          if (dataField['results'] != null && dataField['results'] is List) {
+            booksData = dataField['results'] as List;
+          }
+        }
+      }
+
+      if (booksData.isNotEmpty) {
         debugPrint('DEBUG: getBooks books count: ${booksData.length}');
         return booksData.map((item) => Book.fromJson(item)).toList();
       } else {
-        throw Exception(data['message'] ?? 'Failed to load books');
+        // If no books found but response was successful, return empty list instead of throwing
+        // Only throw if there's an actual error
+        debugPrint(
+          'DEBUG: getBooks - No books found in response, returning empty list',
+        );
+        debugPrint(
+          'DEBUG: getBooks - Response structure: ${data.keys.toList()}',
+        );
+        return [];
       }
     } else if (response.statusCode == 404) {
       final data = json.decode(response.body);
@@ -2575,9 +2756,29 @@ class ManagerApiService {
         }
       } else {
         final errorData = json.decode(response.body);
-        throw Exception(
-          'Failed to create book: ${errorData['message'] ?? 'Unknown error'}',
-        );
+        String errorMessage = errorData['message'] ?? 'Unknown error';
+
+        // Extract specific validation errors if available
+        if (errorData['errors'] != null && errorData['errors'] is Map) {
+          final errors = errorData['errors'] as Map<String, dynamic>;
+          final errorMessages = <String>[];
+
+          errors.forEach((field, messages) {
+            if (messages is List) {
+              for (var message in messages) {
+                errorMessages.add(message.toString());
+              }
+            } else {
+              errorMessages.add(messages.toString());
+            }
+          });
+
+          if (errorMessages.isNotEmpty) {
+            errorMessage = errorMessages.join('\n');
+          }
+        }
+
+        throw Exception('Failed to create book: $errorMessage');
       }
     } catch (e) {
       debugPrint('DEBUG: CreateBook error: $e');
@@ -2663,9 +2864,29 @@ class ManagerApiService {
       }
     } else {
       final errorData = json.decode(response.body);
-      throw Exception(
-        'Failed to update book: ${errorData['message'] ?? 'Unknown error'}',
-      );
+      String errorMessage = errorData['message'] ?? 'Unknown error';
+
+      // Extract specific validation errors if available
+      if (errorData['errors'] != null && errorData['errors'] is Map) {
+        final errors = errorData['errors'] as Map<String, dynamic>;
+        final errorMessages = <String>[];
+
+        errors.forEach((field, messages) {
+          if (messages is List) {
+            for (var message in messages) {
+              errorMessages.add(message.toString());
+            }
+          } else {
+            errorMessages.add(messages.toString());
+          }
+        });
+
+        if (errorMessages.isNotEmpty) {
+          errorMessage = errorMessages.join('\n');
+        }
+      }
+
+      throw Exception('Failed to update book: $errorMessage');
     }
   }
 
@@ -3375,6 +3596,10 @@ class DiscountsResponse {
       allDiscounts.addAll(json['active_codes'] as List<dynamic>);
     }
 
+    if (json['expired_codes'] != null) {
+      allDiscounts.addAll(json['expired_codes'] as List<dynamic>);
+    }
+
     if (json['inactive_codes'] != null) {
       allDiscounts.addAll(json['inactive_codes'] as List<dynamic>);
     }
@@ -3387,7 +3612,7 @@ class DiscountsResponse {
     return DiscountsResponse(
       results: allDiscounts.map((item) => Discount.fromJson(item)).toList(),
       totalPages: json['total_pages'] ?? 1,
-      totalItems: allDiscounts.length,
+      totalItems: json['total_count'] ?? allDiscounts.length,
     );
   }
 }

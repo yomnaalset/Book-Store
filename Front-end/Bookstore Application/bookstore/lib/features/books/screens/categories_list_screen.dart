@@ -37,16 +37,44 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('All Categories'),
-        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
-        foregroundColor: Theme.of(context).appBarTheme.foregroundColor,
+        title: const Text(
+          'All Categories',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+            letterSpacing: 0.5,
+          ),
+        ),
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Theme.of(context).colorScheme.onPrimary,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Theme.of(context).colorScheme.primary,
+                Theme.of(context).colorScheme.primary.withValues(alpha: 204),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
         actions: [
-          IconButton(
-            onPressed: () {
-              _loadCategories();
-            },
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh',
+          Container(
+            margin: const EdgeInsets.only(right: 8, top: 8, bottom: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              shape: BoxShape.circle,
+            ),
+            child: IconButton(
+              onPressed: () {
+                _loadCategories();
+              },
+              icon: const Icon(Icons.refresh),
+              tooltip: 'Refresh',
+            ),
           ),
         ],
       ),
@@ -146,7 +174,7 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
             ),
             const SizedBox(height: 4),
             Text(
-              '${category.booksCount ?? 0} books',
+              '${category.availableBooksCount ?? category.booksCount ?? 0} books',
               style: TextStyle(
                 fontSize: AppDimensions.fontSizeS,
                 color: Theme.of(context).textTheme.bodySmall?.color,

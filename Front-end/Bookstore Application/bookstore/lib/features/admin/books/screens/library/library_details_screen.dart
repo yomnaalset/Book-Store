@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../providers/library_manager/library_provider.dart';
 import '../../../widgets/library_manager/empty_state.dart';
 import '../../../../../core/localization/app_localizations.dart';
+import '../../../../../core/services/api_config.dart';
 
 class LibraryDetailsScreen extends StatefulWidget {
   const LibraryDetailsScreen({super.key});
@@ -123,11 +124,18 @@ class _LibraryDetailsScreenState extends State<LibraryDetailsScreen> {
                                 ClipRRect(
                                   borderRadius: BorderRadius.circular(8),
                                   child: Image.network(
-                                    library.logoUrl!,
+                                    ApiConfig.buildImageUrl(library.logoUrl!) ?? library.logoUrl!,
                                     height: 64,
                                     width: 64,
                                     fit: BoxFit.cover,
+                                    loadingBuilder: (context, child, loadingProgress) {
+                                      if (loadingProgress == null) return child;
+                                      return const Center(
+                                        child: CircularProgressIndicator(),
+                                      );
+                                    },
                                     errorBuilder: (context, error, stackTrace) {
+                                      debugPrint('LibraryDetailsScreen: Error loading logo: $error');
                                       return const Icon(
                                         Icons.library_books,
                                         size: 64,

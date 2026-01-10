@@ -573,12 +573,11 @@ class DeliveryProfileService:
             from ..models.borrowing_model import BorrowRequest, BorrowStatusChoices
             from ..models.return_model import ReturnRequest, ReturnStatus
             
-            # Check for active delivery requests (accepted, in_delivery, or other active statuses)
+            # Check for active delivery requests
+            # Availability Rule: Manager is unavailable if exists DeliveryRequest with status IN ('accepted', 'in_delivery')
             active_requests_query = DeliveryRequest.objects.filter(
                 delivery_manager=user,
-                status__in=['accepted', 'in_delivery', 'picked_up', 'in_transit', 'in_progress']
-            ).exclude(
-                status__in=['completed', 'delivered', 'cancelled', 'rejected']
+                status__in=['accepted', 'in_delivery']
             )
             
             if exclude_order_id:
@@ -592,15 +591,10 @@ class DeliveryProfileService:
                 return True
             
             # Check for active orders in delivery
-            # Only count orders that have active delivery requests (not completed ones)
+            # Availability Rule: Manager is unavailable if exists DeliveryRequest with status IN ('accepted', 'in_delivery')
             active_orders_query = Order.objects.filter(
                 delivery_requests__delivery_manager=user,
-                delivery_requests__status__in=['accepted', 'in_delivery', 'picked_up', 'in_transit', 'in_progress'],
-                status__in=['in_delivery', 'in_progress', 'delivery_in_progress']
-            ).exclude(
-                status__in=['completed', 'delivered', 'rejected_by_admin', 'rejected_by_delivery_manager', 'cancelled']
-            ).exclude(
-                delivery_requests__status__in=['completed', 'delivered', 'cancelled', 'rejected']
+                delivery_requests__status__in=['accepted', 'in_delivery']
             )
             
             # For 'delivered' orders, only count them as active if they're borrow orders
@@ -830,9 +824,9 @@ class DeliveryProfileService:
                 logger.info(f"No delivery profile exists for user {user.id}, allowing status change")
                 return True  # No profile exists, can create with any status
             
-            can_change = delivery_profile.can_change_status_manually()
-            logger.info(f"User {user.id} can change status manually: {can_change}, current status: {delivery_profile.delivery_status}")
-            return can_change
+            # Managers can always change their status manually (only online/offline available)
+            logger.info(f"User {user.id} can change status manually: True, current status: {delivery_profile.delivery_status}")
+            return True
             
         except Exception as e:
             logger.error(f"Error checking manual status change permission for user {user.id}: {str(e)}")

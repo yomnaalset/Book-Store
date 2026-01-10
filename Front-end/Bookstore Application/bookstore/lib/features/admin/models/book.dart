@@ -49,6 +49,37 @@ class Book {
     this.isNew,
   });
 
+  /// Helper method to extract image URLs from a list that may contain
+  /// either String URLs or Map objects with image_url/image fields
+  static List<String>? _extractImageUrls(dynamic imagesData) {
+    if (imagesData == null) return null;
+    if (imagesData is! List) return null;
+    if (imagesData.isEmpty) return [];
+
+    // Check if first item is a String (list of URLs)
+    if (imagesData[0] is String) {
+      return List<String>.from(imagesData);
+    }
+
+    // Check if first item is a Map (list of image objects)
+    if (imagesData[0] is Map) {
+      final List<String> result = [];
+      for (final item in imagesData) {
+        if (item is Map) {
+          final url = item['image_url']?.toString() ??
+              item['image']?.toString() ??
+              '';
+          if (url.isNotEmpty) {
+            result.add(url);
+          }
+        }
+      }
+      return result;
+    }
+
+    return null;
+  }
+
   factory Book.fromJson(Map<String, dynamic> json) {
     return Book(
       id: json['id']?.toString() ?? '',
@@ -76,11 +107,9 @@ class Book {
           json['primary_image_url'] ??
           json['coverUrl'] ??
           json['cover_url'],
-      additionalImages: json['additionalImages'] != null
-          ? List<String>.from(json['additionalImages'])
-          : json['additional_images'] != null
-          ? List<String>.from(json['additional_images'])
-          : null,
+      additionalImages: _extractImageUrls(
+        json['additionalImages'] ?? json['additional_images'],
+      ),
       price: json['price']?.toString(),
       borrowPrice:
           json['borrowPrice']?.toString() ?? json['borrow_price']?.toString(),
@@ -102,7 +131,7 @@ class Book {
           : json['updated_at'] != null
           ? DateTime.parse(json['updated_at'])
           : DateTime.now(),
-      images: json['images'] != null ? List<String>.from(json['images']) : null,
+      images: _extractImageUrls(json['images']),
       isAvailable: json['isAvailable'] ?? json['is_available'],
       isAvailableForBorrow:
           json['isAvailableForBorrow'] ?? json['is_available_for_borrow'],

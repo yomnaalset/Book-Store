@@ -55,8 +55,42 @@ class _AllOrdersScreenState extends State<AllOrdersScreen>
       List<UnifiedDelivery> all = [];
       for (var result in results) {
         if (result['success'] == true) {
-          final data = result['data'] as List;
-          all.addAll(data.map((json) => UnifiedDelivery.fromJson(json)));
+          // Handle different response formats
+          List<dynamic> dataList;
+          final data = result['data'];
+
+          if (data is List) {
+            dataList = data;
+          } else if (data is Map<String, dynamic>) {
+            // Handle paginated response or nested structure
+            final results = data['results'];
+            if (results is List) {
+              dataList = results;
+            } else if (results is Map<String, dynamic> &&
+                results['results'] is List) {
+              // Nested paginated response
+              dataList = results['results'] as List;
+            } else {
+              dataList = [];
+            }
+          } else {
+            dataList = [];
+          }
+
+          all.addAll(
+            dataList.map((json) {
+              try {
+                if (json is Map<String, dynamic>) {
+                  return UnifiedDelivery.fromJson(json);
+                } else {
+                  return null;
+                }
+              } catch (e) {
+                debugPrint('Error parsing delivery item: $e');
+                return null;
+              }
+            }).whereType<UnifiedDelivery>(),
+          );
         }
       }
 
@@ -78,11 +112,39 @@ class _AllOrdersScreenState extends State<AllOrdersScreen>
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text('All Delivery Requests'),
+        title: const Text(
+          'All Delivery Requests',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+            letterSpacing: 0.5,
+          ),
+        ),
+        backgroundColor: theme.colorScheme.primary,
+        foregroundColor: theme.colorScheme.onPrimary,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                theme.colorScheme.primary,
+                theme.colorScheme.primary.withValues(alpha: 204),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
         bottom: TabBar(
           controller: _tabController,
+          indicatorColor: Colors.white,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white.withValues(alpha: 179),
           tabs: const [
             Tab(text: 'Purchase', icon: Icon(Icons.shopping_cart)),
             Tab(text: 'Borrow', icon: Icon(Icons.library_books)),
@@ -90,9 +152,16 @@ class _AllOrdersScreenState extends State<AllOrdersScreen>
           ],
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadAllDeliveries,
+          Container(
+            margin: const EdgeInsets.only(right: 8, top: 8, bottom: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              shape: BoxShape.circle,
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _loadAllDeliveries,
+            ),
           ),
         ],
       ),
@@ -103,10 +172,33 @@ class _AllOrdersScreenState extends State<AllOrdersScreen>
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(_errorMessage!),
+                  Icon(
+                    Icons.error_outline,
+                    size: 64,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    _errorMessage!,
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
                   const SizedBox(height: 16),
                   ElevatedButton(
                     onPressed: _loadAllDeliveries,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: theme.colorScheme.primary,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
                     child: const Text('Retry'),
                   ),
                 ],
@@ -124,11 +216,27 @@ class _AllOrdersScreenState extends State<AllOrdersScreen>
   }
 
   Widget _buildDeliveryList(List<UnifiedDelivery> deliveries) {
+    final theme = Theme.of(context);
     if (deliveries.isEmpty) {
       return Center(
-        child: Text(
-          'No delivery requests',
-          style: Theme.of(context).textTheme.bodyLarge,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.inbox_outlined,
+              size: 64,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No delivery requests',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
         ),
       );
     }
@@ -140,32 +248,87 @@ class _AllOrdersScreenState extends State<AllOrdersScreen>
         itemCount: deliveries.length,
         itemBuilder: (context, index) {
           final delivery = deliveries[index];
-          return Card(
+          return Container(
             margin: const EdgeInsets.only(bottom: 16),
-            child: ListTile(
-              title: Text(
-                delivery.deliveryType == 'purchase'
-                    ? 'Order #${delivery.orderNumber ?? delivery.id}'
-                    : delivery.deliveryType == 'borrow'
-                    ? 'Borrow Request #${delivery.id}'
-                    : 'Return Request #${delivery.id}',
-              ),
-              subtitle: Text(
-                '${delivery.customerName ?? "N/A"} - ${delivery.deliveryAddress}',
-              ),
-              trailing: Chip(
-                label: Text(delivery.deliveryStatus.toUpperCase()),
-                backgroundColor: _getStatusColor(
-                  delivery.deliveryStatus,
-                ).withValues(alpha: 0.2),
-                labelStyle: TextStyle(
-                  color: _getStatusColor(delivery.deliveryStatus),
-                  fontWeight: FontWeight.bold,
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                  spreadRadius: 0,
+                ),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () {
+                  // Navigate to detail screen
+                },
+                borderRadius: BorderRadius.circular(18),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              delivery.deliveryType == 'purchase'
+                                  ? 'Order #${delivery.orderNumber ?? delivery.id}'
+                                  : delivery.deliveryType == 'borrow'
+                                  ? 'Borrow Request #${delivery.id}'
+                                  : 'Return Request #${delivery.id}',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: theme.colorScheme.onSurface,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              '${delivery.customerName ?? "N/A"} - ${delivery.deliveryAddress}',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _getStatusColor(
+                            delivery.deliveryStatus,
+                          ).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          delivery.deliveryStatus.toUpperCase(),
+                          style: TextStyle(
+                            color: _getStatusColor(delivery.deliveryStatus),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              onTap: () {
-                // Navigate to detail screen
-              },
             ),
           );
         },

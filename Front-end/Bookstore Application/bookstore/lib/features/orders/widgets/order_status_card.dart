@@ -6,8 +6,19 @@ class OrderStatusCard extends StatelessWidget {
 
   const OrderStatusCard({super.key, required this.order});
 
+  /// Get the effective status for display, checking delivery assignment if available
+  String _getEffectiveStatus() {
+    // If delivery assignment status is 'in_delivery', show that instead of order status
+    if (order.deliveryAssignment != null &&
+        order.deliveryAssignment!.status.toLowerCase() == 'in_delivery') {
+      return 'in_delivery';
+    }
+    return order.status;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final effectiveStatus = _getEffectiveStatus();
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -17,8 +28,8 @@ class OrderStatusCard extends StatelessWidget {
             Row(
               children: [
                 Icon(
-                  _getStatusIcon(order.status),
-                  color: _getStatusColor(order.status),
+                  _getStatusIcon(effectiveStatus),
+                  color: _getStatusColor(effectiveStatus),
                   size: 24,
                 ),
                 const SizedBox(width: 12),
@@ -36,17 +47,19 @@ class OrderStatusCard extends StatelessWidget {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: _getStatusColor(order.status).withValues(alpha: 0.1),
+                    color: _getStatusColor(
+                      effectiveStatus,
+                    ).withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                      color: _getStatusColor(order.status),
+                      color: _getStatusColor(effectiveStatus),
                       width: 1,
                     ),
                   ),
                   child: Text(
-                    _getStatusText(order.status),
+                    _getStatusText(effectiveStatus),
                     style: TextStyle(
-                      color: _getStatusColor(order.status),
+                      color: _getStatusColor(effectiveStatus),
                       fontWeight: FontWeight.bold,
                       fontSize: 12,
                     ),
@@ -57,18 +70,19 @@ class OrderStatusCard extends StatelessWidget {
             const SizedBox(height: 16),
 
             // Status Progress
-            _buildStatusProgress(context),
+            _buildStatusProgress(context, effectiveStatus),
 
             const SizedBox(height: 16),
 
             // Estimated Delivery
-            if (order.status != 'delivered' && order.status != 'cancelled') ...[
+            if (effectiveStatus != 'delivered' &&
+                effectiveStatus != 'cancelled') ...[
               Row(
                 children: [
                   Icon(Icons.schedule, size: 16, color: Colors.grey[600]),
                   const SizedBox(width: 8),
                   Text(
-                    'Estimated delivery: ${_getEstimatedDelivery(order.status)}',
+                    'Estimated delivery: ${_getEstimatedDelivery(effectiveStatus)}',
                     style: Theme.of(
                       context,
                     ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
@@ -82,9 +96,9 @@ class OrderStatusCard extends StatelessWidget {
     );
   }
 
-  Widget _buildStatusProgress(BuildContext context) {
+  Widget _buildStatusProgress(BuildContext context, String effectiveStatus) {
     final statuses = ['pending', 'confirmed', 'in_delivery', 'delivered'];
-    final currentIndex = statuses.indexOf(order.status);
+    final currentIndex = statuses.indexOf(effectiveStatus);
 
     return Row(
       children: statuses.asMap().entries.map((entry) {
