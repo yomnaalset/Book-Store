@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
-import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:typed_data';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 import '../../../core/widgets/common/custom_button.dart';
@@ -9,8 +10,16 @@ import '../../../core/widgets/common/custom_text_field.dart';
 import '../../../core/widgets/common/loading_indicator.dart';
 import '../../../core/utils/validators.dart';
 import '../../../core/localization/app_localizations.dart';
+import '../../../core/services/api_config.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/profile_provider.dart';
+
+// Import File only on native platforms - use conditional import
+import 'dart:io' if (dart.library.html) 'dart:html' as io;
+
+// Type alias for File - only valid on native platforms
+// On web, this will be dart:html.File but we never use it on web
+typedef PlatformFile = io.File;
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -41,7 +50,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _obscureCurrentPassword = true;
   bool _isUploadingImage = false;
   bool _isLoadingData = false;
-  File? _selectedImage;
+  List<int>? _selectedImageBytes;
+  String? _selectedImageFileName;
+  String? _selectedImagePath; // Store path separately for native upload
   final ImagePicker _imagePicker = ImagePicker();
 
   @override
@@ -279,76 +290,103 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  // Helper to get ImageProvider for selected image
+  ImageProvider? _getSelectedImageProvider() {
+    if (_selectedImageBytes != null) {
+      return MemoryImage(Uint8List.fromList(_selectedImageBytes!));
+    }
+    return null;
+  }
+
   Widget _buildProfilePictureSection() {
-    return Center(
-      child: Stack(
-        children: [
-          CircleAvatar(
-            radius: 60,
-            backgroundColor: Theme.of(
-              context,
-            ).colorScheme.primary.withValues(alpha: 26),
-            backgroundImage: _selectedImage != null
-                ? FileImage(_selectedImage!)
-                : (Provider.of<AuthProvider>(
-                            context,
-                            listen: false,
-                          ).user?.profilePicture !=
-                          null
-                      ? NetworkImage(
-                          Provider.of<AuthProvider>(
-                            context,
-                            listen: false,
-                          ).user!.profilePicture!,
-                        )
-                      : null),
-            child:
-                _selectedImage == null &&
-                    (Provider.of<AuthProvider>(
-                          context,
-                          listen: false,
-                        ).user?.profilePicture ==
-                        null)
-                ? Icon(
-                    Icons.person,
-                    size: 60,
-                    color: Theme.of(context).colorScheme.primary,
+    return Consumer<AuthProvider>(
+      builder: (context, authProvider, child) {
+        // Get profile picture URL with cache-busting
+        String? profilePictureUrl = authProvider.user?.profilePicture;
+        ImageProvider? networkImageProvider;
+        if (profilePictureUrl != null && profilePictureUrl.isNotEmpty) {
+          // Convert relative path to absolute URL
+          final fullUrl =
+              ApiConfig.buildImageUrl(profilePictureUrl) ?? profilePictureUrl;
+
+          // Add cache-busting parameter only if not already present
+          try {
+            final uri = Uri.parse(fullUrl);
+            if (!uri.queryParameters.containsKey('t')) {
+              // Use a hash of the URL as cache buster to keep it stable per URL
+              final cacheBuster = fullUrl.hashCode.abs().toString();
+              final urlWithCacheBuster = uri
+                  .replace(
+                    queryParameters: {...uri.queryParameters, 't': cacheBuster},
                   )
-                : null,
-          ),
-          if (_isEditing)
-            Positioned(
-              bottom: 0,
-              right: 0,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary,
-                  shape: BoxShape.circle,
-                ),
-                child: IconButton(
-                  icon: _isUploadingImage
-                      ? SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              Theme.of(context).colorScheme.onPrimary,
-                            ),
-                          ),
-                        )
-                      : Icon(
-                          Icons.camera_alt,
-                          color: Theme.of(context).colorScheme.onPrimary,
-                        ),
-                  onPressed: _isUploadingImage
-                      ? null
-                      : _handleProfilePictureUpdate,
-                ),
+                  .toString();
+              networkImageProvider = NetworkImage(urlWithCacheBuster);
+            } else {
+              networkImageProvider = NetworkImage(fullUrl);
+            }
+          } catch (e) {
+            // If URI parsing fails, use the URL as-is
+            debugPrint('Error parsing profile picture URL: $e');
+            networkImageProvider = NetworkImage(fullUrl);
+          }
+        }
+
+        return Center(
+          child: Stack(
+            children: [
+              CircleAvatar(
+                radius: 60,
+                backgroundColor: Theme.of(
+                  context,
+                ).colorScheme.primary.withValues(alpha: 26),
+                backgroundImage:
+                    _getSelectedImageProvider() ?? networkImageProvider,
+                child:
+                    ((kIsWeb && _selectedImageBytes == null) ||
+                            (!kIsWeb && _selectedImagePath == null)) &&
+                        (profilePictureUrl == null)
+                    ? Icon(
+                        Icons.person,
+                        size: 60,
+                        color: Theme.of(context).colorScheme.primary,
+                      )
+                    : null,
               ),
-            ),
-        ],
-      ),
+              if (_isEditing)
+                Positioned(
+                  bottom: 0,
+                  right: 0,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primary,
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      icon: _isUploadingImage
+                          ? SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Theme.of(context).colorScheme.onPrimary,
+                                ),
+                              ),
+                            )
+                          : Icon(
+                              Icons.camera_alt,
+                              color: Theme.of(context).colorScheme.onPrimary,
+                            ),
+                      onPressed: _isUploadingImage
+                          ? null
+                          : _handleProfilePictureUpdate,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -834,9 +872,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
         );
 
         if (image != null) {
-          setState(() {
-            _selectedImage = File(image.path);
-          });
+          if (kIsWeb) {
+            // For web, read bytes from XFile
+            final bytes = await image.readAsBytes();
+            setState(() {
+              _selectedImageBytes = bytes;
+              _selectedImageFileName = image.name;
+            });
+          } else {
+            // For mobile/desktop, read file as bytes too (for consistency)
+            final bytes = await image.readAsBytes();
+            setState(() {
+              _selectedImageBytes = bytes;
+              _selectedImageFileName = image.name;
+              // Store path for native upload
+              _selectedImagePath = image.path;
+              // File object not needed - we use bytes for display and path for upload
+            });
+          }
 
           // Upload the image
           await _uploadProfilePicture();
@@ -856,7 +909,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _uploadProfilePicture() async {
-    if (_selectedImage == null) return;
+    if (kIsWeb && _selectedImageBytes == null) return;
+    if (!kIsWeb && _selectedImagePath == null) return;
 
     setState(() {
       _isUploadingImage = true;
@@ -884,10 +938,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       profileProvider.setToken(token);
 
-      final success = await profileProvider.uploadProfilePicture(
-        _selectedImage!.path,
-        token: token,
-      );
+      // Use bytes method for web, path method for native
+      final success = kIsWeb && _selectedImageBytes != null
+          ? await profileProvider.uploadProfilePictureBytes(
+              _selectedImageBytes!,
+              fileName: _selectedImageFileName ?? 'profile_picture.jpg',
+              token: token,
+            )
+          : !kIsWeb && _selectedImagePath != null
+          ? await profileProvider.uploadProfilePicture(
+              _selectedImagePath!,
+              token: token,
+            )
+          : false;
 
       if (mounted) {
         if (success) {
@@ -901,9 +964,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
           // Refresh user data to get the new profile picture URL
           await authProvider.refreshUserData();
 
+          // Wait a bit to ensure the UI rebuilds with the new image
+          await Future.delayed(const Duration(milliseconds: 100));
+
           // Clear the selected image since it's now uploaded
+          // Keep it a bit longer to ensure smooth transition
           setState(() {
-            _selectedImage = null;
+            _selectedImageBytes = null;
+            _selectedImagePath = null;
+            _selectedImageFileName = null;
           });
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
